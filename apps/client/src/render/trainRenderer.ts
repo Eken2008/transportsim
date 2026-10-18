@@ -3,15 +3,15 @@ import {
   HEIGHT_SCALE,
   KMH_PER_TILE_PER_S,
   UNIT_GAP,
-  edgeHeight,
+  isSpanTd,
   pieceLength,
   railVehicle,
+  segHeights,
   segLength,
   segPoint,
   segTd,
   segTile,
-  tdEntry,
-  tdExit,
+  spanOver,
   tdPiece,
   type GameMap,
   type UnitModel,
@@ -38,31 +38,37 @@ const UP = new THREE.Vector3(0, 1, 0);
 function segWorld(map: GameMap, s: number, d: number, out: THREE.Vector3): void {
   const tile = segTile(s);
   const td = segTd(s);
-  const x = tile % map.width;
-  const corners = map.tileCorners(x, (tile - x) / map.width);
-  const ha = Math.max(0, edgeHeight(corners, tdEntry(td)));
-  const hb = Math.max(0, edgeHeight(corners, tdExit(td)));
+  const [ha, hb] = segHeights(map, tile, td);
   const t = d / pieceLength(tdPiece(td));
   const p = segPoint(map, s, d);
   out.set(p.x, (ha + (hb - ha) * t) * HEIGHT_SCALE + RAIL_TOP, p.y);
 }
 
-/** Point `back` tiles behind the head (segs head-first, head at `pos`). False if inside a depot. */
-function pointBehind(map: GameMap, segs: readonly number[], pos: number, back: number, out: THREE.Vector3): boolean {
+/**
+ * Point `back` tiles behind the head (segs head-first, head at `pos`). Returns the segment it
+ * lies on, or -1 if that part of the train is still inside a depot.
+ */
+function pointBehind(map: GameMap, segs: readonly number[], pos: number, back: number, out: THREE.Vector3): number {
   if (back <= pos) {
     segWorld(map, segs[0]!, pos - back, out);
-    return true;
+    return segs[0]!;
   }
   let rest = back - pos;
   for (let i = 1; i < segs.length; i++) {
     const len = segLength(segs[i]!);
     if (rest <= len) {
       segWorld(map, segs[i]!, len - rest, out);
-      return true;
+      return segs[i]!;
     }
     rest -= len;
   }
-  return false;
+  return -1;
+}
+
+/** Units inside a tunnel aren't drawn. */
+function inTunnel(map: GameMap, s: number): boolean {
+  const td = segTd(s);
+  return isSpanTd(td) && spanOver(map, segTile(s), td < 14 ? 0 : 1)?.kind === 'tunnel';
 }
 
 interface ModelMeshes {
@@ -140,10 +146,11 @@ export class TrainRenderer {
         const v = railVehicle(unit.type);
         if (!v) continue;
         const len = v.length / 16;
-        const okF = pointBehind(map, segs, pos, offset, _f);
-        const okB = pointBehind(map, segs, pos, offset + len, _b);
+        const sf = pointBehind(map, segs, pos, offset, _f);
+        const sb = pointBehind(map, segs, pos, offset + len, _b);
         offset += len + UNIT_GAP;
-        if (!okF || !okB) continue;
+        if (sf < 0 || sb < 0) continue;
+        if (inTunnel(map, sf) && inTunnel(map, sb)) continue;
         const mm = this.meshesFor(v.model, 1);
         const k = mm.count;
         if (k >= mm.body.instanceMatrix.count) continue; // grows next frame

@@ -190,6 +190,48 @@ try {
   await a.waitForTimeout(2500);
   await a.screenshot({ path: `${outDir}/03b-track.png` });
 
+  // On a fresh levelled area: dig a valley and bridge it, raise a hill and tunnel through it.
+  const terra = (x0: number, y0: number, x1: number, y1: number, mode: string, lv?: number) =>
+    hook((h, c: object) => h.command(c), { type: 'terraform', x0, y0, x1, y1, mode, level: lv });
+  const bx = sx;
+  let by = sy + 20;
+  for (const oy of [20, -20, 32, -32]) {
+    by = sy + oy;
+    if ((await terra(bx - 14, by - 6, bx + 14, by + 6, 'level', 4)).ok) break;
+  }
+  check((await terra(bx - 3, by - 3, bx + 3, by + 3, 'level', 2)).ok, 'dug a valley');
+  await terra(bx + 8, by - 3, bx + 12, by + 3, 'raise');
+  await terra(bx + 8, by - 3, bx + 12, by + 3, 'raise');
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x + 4, y: s.y, yaw: 0.25, pitch: 0.95, distance: 30 }), { x: bx, y: by });
+  await a.waitForTimeout(2000);
+  // Close the train/depot windows so drags start on the map, not on a window.
+  while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
+  await a.keyboard.press('KeyB');
+  {
+    const p0 = await hook((h, t: number[]) => h.tileToScreen(t[0]!, t[1]!), [bx - 5, by]);
+    const p1 = await hook((h, t: number[]) => h.tileToScreen(t[0]!, t[1]!), [bx + 4, by]);
+    await a.mouse.move(p0.x, p0.y);
+    await a.mouse.down();
+    await a.mouse.move(p1.x, p1.y, { steps: 10 });
+    await a.waitForTimeout(500);
+    await a.mouse.up();
+    await a.waitForTimeout(1500);
+  }
+  await a.keyboard.press('KeyN');
+  await clickTile(bx + 6, by);
+  await a.keyboard.press('Escape');
+  await a.waitForTimeout(1200);
+  const tileData = (x: number, y: number) =>
+    hook((h, t: number[]) => (h as unknown as { tile(x: number, y: number): { type: number; data: number } }).tile(t[0]!, t[1]!), [x, y]);
+  const head = await tileData(bx - 5, by);
+  const portal = await tileData(bx + 6, by);
+  check(head.type === 2 && (head.data & 0x200) !== 0, 'built a bridge with the bridge tool');
+  check(portal.type === 2 && (portal.data & 0x400) !== 0, 'built a tunnel with the tunnel tool');
+  if (!(head.data & 0x200) || !(portal.data & 0x400)) console.log('  toasts:', await a.locator('.toast').allInnerTexts());
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x + 3, y: s.y, yaw: 0.55, pitch: 0.6, distance: 20 }), { x: bx, y: by });
+  await a.waitForTimeout(2500);
+  await a.screenshot({ path: `${outDir}/03d-structures.png` });
+
   // Second player joins by code
   const code = (await a.getByTitle('Copy game code').innerText()).trim();
   await b.goto(`http://localhost:${PORT}/`);

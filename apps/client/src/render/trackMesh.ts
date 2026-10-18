@@ -8,13 +8,16 @@ import {
   PIECE_EDGES,
   TileType,
   depotExit,
-  edgeHeight,
   hasPiece,
+  headInfo,
+  segHeights,
+  trackdir,
   type GameMap,
 } from '@transportsim/shared';
 import * as THREE from 'three';
 import { GeoBuilder, lin } from './geoBuilder.ts';
 import { SIGNAL_POST_HEIGHT, signalPlacement } from './signalGeometry.ts';
+import { addBridge, addHeadFoundation, addTunnelPortal } from './structureMesh.ts';
 import type { Lod } from './terrainMesh.ts';
 
 const BALLAST = lin('#8f877c');
@@ -44,10 +47,9 @@ const _side = new THREE.Vector3();
 
 /** World-space endpoints of a piece on a tile (centre line at ballast level). */
 export function pieceEndpoints(map: GameMap, x: number, y: number, piece: number, a: THREE.Vector3, b: THREE.Vector3): void {
-  const corners = map.tileCorners(x, y);
   const [e1, e2] = PIECE_EDGES[piece]!;
-  const h1 = Math.max(0, edgeHeight(corners, e1));
-  const h2 = Math.max(0, edgeHeight(corners, e2));
+  // Heights account for bridge-end foundations and level tunnel portals.
+  const [h1, h2] = segHeights(map, map.tileIndex(x, y), trackdir(piece, 0));
   a.set(x + EDGE_MID_X[e1], h1 * HEIGHT_SCALE + LIFT, y + EDGE_MID_Y[e1]);
   b.set(x + EDGE_MID_X[e2], h2 * HEIGHT_SCALE + LIFT, y + EDGE_MID_Y[e2]);
 }
@@ -100,6 +102,15 @@ export function addTrack(
         g.color(ROAD).box(_a.setY(_a.y - 0.005), _b.setY(_b.y - 0.005), 0.7, 0.035, false);
       }
       const type = map.layers.type[i];
+      const head = type === TileType.Rail ? headInfo(map, i) : null;
+      if (head) {
+        if (head.kind === 'bridge') {
+          addHeadFoundation(g, map, i, head);
+          addBridge(g, map, i, head, lod);
+        } else {
+          addTunnelPortal(g, map, i, head);
+        }
+      }
       if (type === TileType.Station) addPlatform(g, map, x, y, bits, lod);
       else if (type === TileType.Depot) {
         addDepot(g, map, x, y, depotExit(map.layers.data[i]!), companyColor(map.layers.owner[i]!));

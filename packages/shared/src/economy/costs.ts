@@ -10,4 +10,6 @@ export const COSTS = {
   depot: 1800,
   depotRemove: 300,
   signal: 350,
+  tunnelPerTile: 1_600,
+  structureRemove: 400,
 } as const;

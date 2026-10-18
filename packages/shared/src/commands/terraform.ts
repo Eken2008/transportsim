@@ -1,6 +1,7 @@
 import { COSTS } from '../economy/costs.ts';
 import { MAX_HEIGHT, TileType } from '../world/constants.ts';
 import { reclassifyTile } from '../world/terrain.ts';
+import { structuresAt } from '../rail/structures.ts';
 import { fail, isInt, type CommandHandler } from './types.ts';
 
 export type TerraformMode = 'raise' | 'lower' | 'level';
@@ -91,6 +92,19 @@ export const terraformHandler: CommandHandler<TerraformCommand> = {
           if (t !== TileType.Clear && t !== TileType.Water) return fail(`Object in the way at ${tx},${ty}`);
           tiles.add(ty * map.width + tx);
         }
+      }
+    }
+
+    // Keep clear of bridge decks above and tunnels below.
+    for (const t of tiles) {
+      const structures = structuresAt(map, t);
+      if (structures.length === 0) continue;
+      const tx = t % map.width;
+      const ty = (t - tx) / map.width;
+      const hs = [get(ty * cw + tx), get(ty * cw + tx + 1), get((ty + 1) * cw + tx), get((ty + 1) * cw + tx + 1)];
+      for (const s of structures) {
+        if (s.kind === 'bridge' && Math.max(...hs) > s.level - 1) return fail(`The bridge above ${tx},${ty} is in the way`);
+        if (s.kind === 'tunnel' && Math.min(...hs) < s.level + 1) return fail(`That would cut into the tunnel under ${tx},${ty}`);
       }
     }
 

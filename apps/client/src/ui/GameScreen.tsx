@@ -1,4 +1,5 @@
 import {
+  BRIDGE_TYPES,
   COMPANY_COLORS,
   GAME_SPEEDS,
   MAX_PLATFORMS,
@@ -9,6 +10,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
 import { installDebugHook } from '../render/debugHook.ts';
+import { availableBridges } from '../tools/structureTools.ts';
 import { WindowLayer } from './windows.tsx';
 import { GameRenderer } from '../render/gameRenderer.ts';
 import { openWindow, useApp, type ToolId } from '../store.ts';
@@ -37,7 +39,7 @@ export function GameScreen() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
-      const tools: Record<string, ToolId> = Object.fromEntries(TOOLS.map((t) => ['Digit' + t.key, t.id]));
+      const tools: Record<string, ToolId> = Object.fromEntries(TOOLS.map((t) => [/\d/.test(t.key) ? 'Digit' + t.key : 'Key' + t.key, t.id]));
       if (tools[e.code]) {
         const t = tools[e.code]!;
         useApp.setState((s) => ({ tool: s.tool === t ? null : t }));
@@ -64,6 +66,7 @@ export function GameScreen() {
       {showHelp && <Help onClose={() => setShowHelp(false)} />}
       <WindowLayer />
       <StationOptions />
+      <BridgeOptions />
       <Toolbar />
       <Chat />
       <StatusBar fps={stats.fps} chunks={stats.chunks} />
@@ -182,6 +185,8 @@ const TOOLS: { id: ToolId; icon: string; label: string; key: string; group: numb
   { id: 'rail', icon: '🛤', label: 'Build railway (drag; Ctrl removes)', key: '4', group: 1 },
   { id: 'removeRail', icon: '✂', label: 'Remove railway', key: '5', group: 1 },
   { id: 'signal', icon: '🚦', label: 'Signals (click cycles; Ctrl removes)', key: '9', group: 1 },
+  { id: 'bridge', icon: '🌉', label: 'Bridge (drag end to end)', key: 'B', group: 1 },
+  { id: 'tunnel', icon: '⛰️', label: 'Tunnel (click a slope into a hill)', key: 'N', group: 1 },
   { id: 'station', icon: '🚉', label: 'Build station (R rotates)', key: '6', group: 1 },
   { id: 'depot', icon: '🏚', label: 'Build train depot', key: '7', group: 1 },
   { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', group: 2 },
@@ -315,7 +320,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>4</kbd> railway (drag; hold <kbd>Ctrl</kbd> to remove) · <kbd>5</kbd> remove railway
       </div>
       <div>
-        <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>9</kbd> signals · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
+        <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>9</kbd> signals · <kbd>B</kbd> bridge · <kbd>N</kbd> tunnel · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
       </div>
       <div>
         Click a depot, station or train to open it · <kbd>T</kbd> train list · <kbd>Space</kbd> pause (host)
@@ -378,6 +383,26 @@ function StationOptions() {
       <button onClick={() => set({ axis: opts.axis === 0 ? 1 : 0 })} title="Rotate (R)">
         ⟲ {opts.axis === 0 ? 'East–west' : 'North–south'}
       </button>
+    </div>
+  );
+}
+
+function BridgeOptions() {
+  const tool = useApp((s) => s.tool);
+  const chosen = useApp((s) => s.bridgeType);
+  useApp((s) => s.global?.date);
+  if (tool !== 'bridge') return null;
+  return (
+    <div className="panel tool-options">
+      <span className="muted">Bridge</span>
+      <select value={chosen ?? ''} onChange={(e) => useApp.setState({ bridgeType: e.target.value === '' ? null : Number(e.target.value) })}>
+        <option value="">Automatic (cheapest that fits)</option>
+        {availableBridges().map((i) => (
+          <option key={i} value={i}>
+            {BRIDGE_TYPES[i]!.name} — up to {BRIDGE_TYPES[i]!.maxSpan} tiles, {BRIDGE_TYPES[i]!.maxSpeed} km/h
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

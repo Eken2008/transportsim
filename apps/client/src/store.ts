@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
 
-export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders' | 'signal';
+export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders' | 'signal' | 'bridge' | 'tunnel';
 
 export interface StationOptions {
   axis: 0 | 1;
@@ -58,6 +58,8 @@ export interface AppState {
   saves: SaveRecord[];
   busy: string | null;
   stationOpts: StationOptions;
+  /** Bridge type for the bridge tool; null picks the cheapest that fits. */
+  bridgeType: number | null;
   /** Bumped when train details change, so windows re-render. */
   trainsRev: number;
   /** Train whose orders the orders tool is editing. */
@@ -102,6 +104,7 @@ export const useApp = create<AppState>(() => ({
   saves: [],
   busy: null,
   stationOpts: { axis: 0, platforms: 2, length: 5 },
+  bridgeType: null,
   trainsRev: 0,
   ordersFor: null,
   focus: null,

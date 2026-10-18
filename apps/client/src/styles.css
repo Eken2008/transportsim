@@ -684,3 +684,14 @@ ul.plain {
 .floater.cost {
   color: #ff7b72;
 }
+
+/* Game chrome shouldn't select text while dragging on the map. */
+.game {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.game input,
+.game textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}

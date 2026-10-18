@@ -7,7 +7,8 @@ import {
   stationName,
   type Station,
 } from '../rail/station.ts';
-import { Piece, hasPiece } from '../rail/track.ts';
+import { headInfo, otherHead, structuresAt } from '../rail/structures.ts';
+import { EDGE_DX, EDGE_DY, Piece, hasPiece } from '../rail/track.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { CROSSING_FLAG } from './track.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
@@ -63,6 +64,8 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
         const i = map.tileIndex(tx, ty);
         const type = map.layers.type[i];
         if (!map.isFlat(tx, ty) || map.cornerHeight(tx, ty) !== height) return fail(`Stations need flat, level ground (${tx},${ty})`);
+        if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail(`Stations can't go under a bridge (${tx},${ty})`);
+        if (type === TileType.Rail && map.layers.data[i]! & 0x600) return fail(`Object in the way (${tx},${ty})`);
         if (type === TileType.Clear) {
           cost += map.treeCount(tx, ty) * COSTS.clearTree;
         } else if (type === TileType.Rail) {
@@ -149,6 +152,7 @@ export const buildDepotHandler: CommandHandler<BuildDepotCommand> = {
     const i = map.tileIndex(x, y);
     if (map.layers.type[i] !== TileType.Clear) return fail('Object in the way');
     if (!map.isFlat(x, y)) return fail('Depots need flat ground');
+    if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail("Depots can't go under a bridge");
     const cost = COSTS.depot + map.treeCount(x, y) * COSTS.clearTree;
     return {
       ok: true,
@@ -179,7 +183,8 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
     if (!map.inBounds(ax, ay) || !map.inBounds(bx, by)) return fail('Out of bounds');
     if (bx - ax >= MAX_CLEAR || by - ay >= MAX_CLEAR) return fail('Area too large');
     const company = ctx.companyId!;
-    const jobs: { i: number; kind: 'trees' | 'rail' | 'station' | 'depot' }[] = [];
+    const jobs: { i: number; kind: 'trees' | 'rail' | 'station' | 'depot' | 'structure' }[] = [];
+    const queued = new Set<number>();
     let cost = 0;
     let blocked: string | null = null;
     for (let y = ay; y <= by; y++) {
@@ -190,6 +195,26 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
         if (type === TileType.Clear && map.treeCount(x, y) > 0) {
           jobs.push({ i, kind: 'trees' });
           cost += map.treeCount(x, y) * COSTS.clearTree;
+        } else if (type === TileType.Rail && own && headInfo(map, i)) {
+          if (queued.has(i)) continue;
+          const info = headInfo(map, i)!;
+          const far = otherHead(map, i, info);
+          // Both heads and every span piece must be free of trains.
+          let busy = false;
+          const spanPiece = info.dir === 1 || info.dir === 3 ? 6 : 7;
+          const step = EDGE_DX[info.dir] + EDGE_DY[info.dir] * map.width;
+          for (let t = i + step; far >= 0 && t !== far; t += step) if (state.isPieceOccupied(t, spanPiece)) busy = true;
+          for (const h of [i, far]) if (h >= 0 && state.isPieceOccupied(h, map.layers.track[h] === 1 ? 0 : 1)) busy = true;
+          if (busy) {
+            blocked = `A train is on the ${info.kind} (${x},${y})`;
+            continue;
+          }
+          for (const h of [i, far]) {
+            if (h < 0) continue;
+            queued.add(h);
+            jobs.push({ i: h, kind: 'structure' });
+          }
+          cost += COSTS.structureRemove;
         } else if (type === TileType.Rail && own) {
           const bits = map.layers.track[i]!;
           let busy = false;
@@ -233,6 +258,19 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
           if (kind === 'trees') {
             const ground = (map.layers.data[i]! >> 3) & 7;
             map.setClear(i, ground as Ground, 0);
+          } else if (kind === 'structure') {
+            // Touch the span so chunks under/over it rebuild too.
+            const info = headInfo(map, i);
+            if (info) {
+              const far = otherHead(map, i, info);
+              const step = EDGE_DX[info.dir] + EDGE_DY[info.dir] * map.width;
+              for (let t = i + step; far >= 0 && t !== far; t += step) {
+                const tx = t % map.width;
+                map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
+              }
+            }
+            map.setClear(i, Ground.Rough, 0);
+            track = true;
           } else if (kind === 'rail') {
             state.removeSignalsOn(i, map.layers.track[i]!);
             const data = map.layers.data[i]!;

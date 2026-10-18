@@ -12,16 +12,14 @@ import {
   segmentsConnect,
 } from '../rail/network.ts';
 import { depotGoal, extendThroughPlatform, findPath, stationGoal, type PathGoal } from '../rail/pathfinder.ts';
+import { headInfo, otherHead, segHeights } from '../rail/structures.ts';
 import {
   EDGE_DX,
   EDGE_DY,
   OPPOSITE_EDGE,
   PIECE_EDGES,
-  edgeHeight,
   hasPiece,
   pieceLength,
-  tdEntry,
-  tdExit,
   tdPiece,
 } from '../rail/track.ts';
 import { TICKS_PER_DAY, TICKS_PER_SECOND } from '../sim/date.ts';
@@ -215,6 +213,7 @@ export class RailSystem {
           const k = stack.pop()!;
           const ct = Math.floor(k / 8);
           const cp = k % 8;
+          if (cp >= 6) continue; // span pieces only carry the block id; heads link them
           const visit = (key: number) => {
             if (this.blockOf.has(key)) return;
             this.blockOf.set(key, id);
@@ -223,7 +222,21 @@ export class RailSystem {
           for (let q = 0; q < 6; q++) if (q !== cp && q !== PARALLEL[cp] && hasPiece(track[ct]!, q)) visit(ct * 8 + q);
           const x = ct % w;
           const y = (ct - x) / w;
+          const head = headInfo(map, ct);
           for (const e of PIECE_EDGES[cp]!) {
+            if (head && e === head.dir) {
+              // Across a bridge/tunnel: the span pieces and the far head share this block.
+              const far = otherHead(map, ct, head);
+              if (far < 0) continue;
+              const spanPiece = e === 1 || e === 3 ? 6 : 7;
+              for (let k = 1; ; k++) {
+                const mt = ct + (EDGE_DX[e] + EDGE_DY[e] * w) * k;
+                if (mt === far) break;
+                visit(mt * 8 + spanPiece);
+              }
+              visit(far * 8 + (hasPiece(track[far]!, 0) ? 0 : 1));
+              continue;
+            }
             const nx = x + EDGE_DX[e];
             const ny = y + EDGE_DY[e];
             if (nx < 0 || ny < 0 || nx >= w || ny >= map.height) continue;
@@ -232,6 +245,8 @@ export class RailSystem {
             // Depot doors behave like signals: a depot is always its own block.
             if (type[nt] === TileType.Depot || type[ct] === TileType.Depot) continue;
             const entry = OPPOSITE_EDGE[e];
+            const nHead = headInfo(map, nt);
+            if (nHead && nHead.dir === entry) continue; // bridge head seen from below
             for (let q = 0; q < 6; q++) {
               if (!hasPiece(track[nt]!, q)) continue;
               const [q0, q1] = PIECE_EDGES[q]!;
@@ -424,13 +439,10 @@ export class RailSystem {
     let sum = 0;
     let len = 0;
     for (const s of t.path.slice(0, 6)) {
-      const tile = segTile(s);
-      const x = tile % map.width;
-      const corners = map.tileCorners(x, (tile - x) / map.width);
       const td = segTd(s);
-      const l = pieceLength(tdPiece(td));
-      sum += edgeHeight(corners, tdExit(td)) - edgeHeight(corners, tdEntry(td));
-      len += l;
+      const [h0, h1] = segHeights(map, segTile(s), td);
+      sum += h1 - h0;
+      len += pieceLength(tdPiece(td));
     }
     return len > 0 ? sum / len : 0;
   }

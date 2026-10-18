@@ -23,6 +23,7 @@ import {
   type TrainActionCommand,
 } from './trains.ts';
 import { setSignalHandler, type SetSignalCommand } from './signals.ts';
+import { buildBridgeHandler, buildTunnelHandler, type BuildBridgeCommand, type BuildTunnelCommand } from './structures.ts';
 import type { CommandContext, CommandHandler, CommandEffects } from './types.ts';
 
 export * from './types.ts';
@@ -31,6 +32,7 @@ export * from './track.ts';
 export * from './station.ts';
 export * from './trains.ts';
 export * from './signals.ts';
+export * from './structures.ts';
 
 export type Command =
   | TerraformCommand
@@ -42,7 +44,9 @@ export type Command =
   | BuyTrainCommand
   | TrainActionCommand
   | SetOrdersCommand
-  | SetSignalCommand;
+  | SetSignalCommand
+  | BuildBridgeCommand
+  | BuildTunnelCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -56,6 +60,8 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   trainAction: trainActionHandler,
   setOrders: setOrdersHandler,
   setSignal: setSignalHandler,
+  buildBridge: buildBridgeHandler,
+  buildTunnel: buildTunnelHandler,
 };
 
 export type CommandResult =

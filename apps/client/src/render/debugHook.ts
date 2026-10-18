@@ -41,6 +41,12 @@ export function installDebugHook(r: GameRenderer): () => void {
       const rect = r.renderer.domElement.getBoundingClientRect();
       return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
     },
+    /** Raw tile data for inspection. */
+    tile(x: number, y: number) {
+      const map = client.world!.map;
+      const i = map.tileIndex(x, y);
+      return { type: map.layers.type[i], data: map.layers.data[i], track: map.layers.track[i], corners: map.tileCorners(x, y) };
+    },
     command(cmd: Command) {
       return client.command(cmd);
     },

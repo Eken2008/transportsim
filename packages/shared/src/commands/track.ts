@@ -1,6 +1,7 @@
 import { COSTS } from '../economy/costs.ts';
 import { PIECE_COUNT, Piece, hasPiece, isDiagonal, pieceFitsSlope } from '../rail/track.ts';
 import type { GameState } from '../sim/state.ts';
+import { HEAD_BRIDGE, HEAD_TUNNEL, structuresAt } from '../rail/structures.ts';
 import { ROAD_E, ROAD_N, ROAD_S, ROAD_W } from '../town/road.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { fail, isInt, type CommandHandler, type CommandContext, type PlanResult } from './types.ts';
@@ -59,6 +60,10 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
       const type = map.layers.type[i];
       const corners = map.tileCorners(x, y);
       if (!pieceFitsSlope(corners, p)) return fail(`Track can't go on that slope ${at(x, y)}`);
+      if (type === TileType.Rail && map.layers.data[i]! & (HEAD_BRIDGE | HEAD_TUNNEL)) return fail(`Object in the way ${at(x, y)}`);
+      for (const s of structuresAt(map, i)) {
+        if (s.kind === 'bridge' && map.tileMaxHeight(x, y) > s.level - 2) return fail(`Not enough clearance under the bridge ${at(x, y)}`);
+      }
       const existing = type === TileType.Rail ? map.layers.track[i]! : 0;
       const pending = add.get(i) ?? 0;
       if (hasPiece(existing | pending, p)) continue; // already built: skip silently
@@ -123,6 +128,7 @@ export const removeTrackHandler: CommandHandler<RemoveTrackCommand> = {
       const i = map.tileIndex(x, y);
       if (map.layers.type[i] !== TileType.Rail || !hasPiece(map.layers.track[i]!, p)) continue;
       if (!canModify(state, ctx, i)) return fail(`Track belongs to another company ${at(x, y)}`);
+      if (map.layers.data[i]! & (HEAD_BRIDGE | HEAD_TUNNEL)) return fail('Use the bulldozer to remove bridges and tunnels');
       if (state.isPieceOccupied(i, p)) return fail(`A train is in the way ${at(x, y)}`);
       remove.set(i, (remove.get(i) ?? 0) | (1 << p));
       cost += COSTS.railRemove;

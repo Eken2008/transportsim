@@ -1,6 +1,7 @@
 import { TileType } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
 import { depotExit } from './station.ts';
+import { headInfo, spanOver } from './structures.ts';
 import {
   EDGE_DX,
   EDGE_DY,
@@ -8,7 +9,9 @@ import {
   PIECE_EDGES,
   TD_HEADING,
   hasPiece,
+  isSpanTd,
   pieceLength,
+  spanTdForExit,
   tdEntry,
   tdExit,
   tdPiece,
@@ -50,9 +53,31 @@ export function nextSegments(map: GameMap, s: number, owner: number, out: number
   const ny = y + EDGE_DY[exit];
   if (nx < 0 || ny < 0 || nx >= w || ny >= map.height) return out;
   const n = ny * w + nx;
+  const entry = OPPOSITE_EDGE[exit];
+
+  // Bridges and tunnels: a head's span edge leads onto span segments, which run across the
+  // middle tiles (whatever is on the ground there) until the far head.
+  if (isSpanTd(td)) {
+    const far = headInfo(map, n);
+    if (far && far.dir === entry) {
+      if (map.layers.owner[n] !== owner) return out;
+      const p = hasPiece(map.layers.track[n]!, 0) ? 0 : 1;
+      out.push(n * 16 + trackdir(p, PIECE_EDGES[p]![0] === entry ? 0 : 1));
+    } else {
+      out.push(n * 16 + td);
+    }
+    return out;
+  }
+  const here = headInfo(map, tile);
+  if (here && here.dir === exit) {
+    out.push(n * 16 + spanTdForExit(exit));
+    return out;
+  }
+  const there = headInfo(map, n);
+  if (there && there.dir === entry) return out; // can't climb onto a bridge from below
+
   const type = map.layers.type[n]!;
   if (!isTrackTile(type) || map.layers.owner[n] !== owner) return out;
-  const entry = OPPOSITE_EDGE[exit];
   if (type === TileType.Depot && entry !== depotExit(map.layers.data[n]!)) return out;
   // Heights must match at the shared edge (they do by construction, since corners are shared).
   const bits = map.layers.track[n]!;
@@ -79,6 +104,7 @@ export function segmentsConnect(map: GameMap, a: number, b: number, owner: numbe
 export function segmentExists(map: GameMap, s: number): boolean {
   const tile = segTile(s);
   if (tile < 0 || tile >= map.layers.type.length) return false;
+  if (isSpanTd(segTd(s))) return spanOver(map, tile, segTd(s) < 14 ? 0 : 1) !== null;
   return isTrackTile(map.layers.type[tile]!) && hasPiece(map.layers.track[tile]!, segPiece(s));
 }
 

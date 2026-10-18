@@ -45,14 +45,27 @@ export const EDGE_CORNERS: readonly (readonly [number, number])[] = [
   [0, 3], // W: NW, SW
 ];
 
-export const isDiagonal = (p: number) => p >= 2;
-export const pieceLength = (p: number) => (p >= 2 ? Math.SQRT1_2 : 1);
+export const isDiagonal = (p: number) => p >= 2 && p <= 5;
+export const pieceLength = (p: number) => (p >= 2 && p <= 5 ? Math.SQRT1_2 : 1);
 
 export const trackdir = (piece: number, reverse: number) => piece * 2 + reverse;
 export const tdPiece = (td: number) => td >> 1;
 export const tdReverse = (td: number) => td ^ 1;
-export const tdEntry = (td: number): Edge => PIECE_EDGES[td >> 1]![td & 1]!;
-export const tdExit = (td: number): Edge => PIECE_EDGES[td >> 1]![(td & 1) ^ 1]!;
+/**
+ * Trackdirs 12-15 are *span* trackdirs: travelling over a bridge or through a tunnel across
+ * a middle tile (12 east, 13 west, 14 south, 15 north). Their pieces (6 = X span, 7 = Y span)
+ * have their own occupancy slots, independent of any ground track on that tile.
+ */
+export const SPAN_TD = { E: 12, W: 13, S: 14, N: 15 } as const;
+const SPAN_EXIT: readonly Edge[] = [Edge.E, Edge.W, Edge.S, Edge.N];
+const SPAN_ENTRY: readonly Edge[] = [Edge.W, Edge.E, Edge.N, Edge.S];
+export const isSpanTd = (td: number) => td >= 12;
+/** Span trackdir that leaves a tile through edge `e`. */
+export const spanTdForExit = (e: Edge) => [SPAN_TD.N, SPAN_TD.E, SPAN_TD.S, SPAN_TD.W][e]!;
+
+export const tdEntry = (td: number): Edge => (td >= 12 ? SPAN_ENTRY[td - 12]! : PIECE_EDGES[td >> 1]![td & 1]!);
+export const tdExit = (td: number): Edge => (td >= 12 ? SPAN_EXIT[td - 12]! : PIECE_EDGES[td >> 1]![(td & 1) ^ 1]!);
+/** Ground trackdirs (0-11). */
 export const TRACKDIR_COUNT = 12;
 
 /**
@@ -61,7 +74,7 @@ export const TRACKDIR_COUNT = 12;
  */
 export const TD_HEADING: readonly number[] = (() => {
   const out: number[] = [];
-  for (let td = 0; td < TRACKDIR_COUNT; td++) {
+  for (let td = 0; td < 16; td++) {
     const a = tdEntry(td);
     const b = tdExit(td);
     const dx = EDGE_MID_X[b] - EDGE_MID_X[a];

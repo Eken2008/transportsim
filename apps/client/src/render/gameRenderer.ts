@@ -17,6 +17,7 @@ import { TrainRenderer } from './trainRenderer.ts';
 import { SignalLights } from './signalLights.ts';
 import { FloatingText } from './floatingText.ts';
 import { SignalTool } from '../tools/signalTool.ts';
+import { BridgeTool, TunnelTool } from '../tools/structureTools.ts';
 import { TileType } from '@transportsim/shared';
 import { openWindow } from '../store.ts';
 import { OrdersTool } from '../tools/ordersTool.ts';
@@ -131,7 +132,7 @@ export class GameRenderer {
       useApp.subscribe((s, prev) => {
         if (s.focus && s.focus !== prev.focus) this.lookAt(s.focus.x + 0.5, s.focus.y + 0.5);
         if (s.tool !== prev.tool) this.setTool(s.tool);
-        else if (s.stationOpts !== prev.stationOpts) {
+        else if (s.stationOpts !== prev.stationOpts || s.bridgeType !== prev.bridgeType) {
           this.tool?.invalidate?.();
           this.hoverDirty = true;
         }
@@ -179,6 +180,12 @@ export class GameRenderer {
         break;
       case 'signal':
         this.tool = new SignalTool(this.ghost);
+        break;
+      case 'bridge':
+        this.tool = new BridgeTool(this.area);
+        break;
+      case 'tunnel':
+        this.tool = new TunnelTool(this.area);
         break;
       default:
         this.tool = new TerraformTool(id, this.cursor);
