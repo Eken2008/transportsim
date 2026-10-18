@@ -74,8 +74,8 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   const w = map.width;
   // Search state: tile, trackdir, and whether every piece so far is existing track (riding
   // along existing track from the start of the drag).
-  // ...and, on a corner piece, the heading before it (8 = none), so the route never bends 90°
-  // through a single corner piece (track doesn't connect that way).
+  // ...and the heading of the piece before (8 = none), so the route never bends more than 45°
+  // across a single piece (track doesn't connect that way).
   const key = (x: number, y: number, td: number, riding: boolean, prev: number) =>
     (((y * w + x) * 16 + td) * 2 + (riding ? 1 : 0)) * 9 + prev;
   const decode = (k: number) => {
@@ -157,7 +157,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       const ntd = trackdir(p, e0 === entry ? 0 : 1);
       const turn = turnSteps(TD_HEADING[td]!, TD_HEADING[ntd]!);
       if (turn > 1) continue;
-      if (prev !== 8 && turnSteps(prev, TD_HEADING[ntd]!) > 1) continue; // 90° through a corner
+      if (prev !== 8 && turnSteps(prev, TD_HEADING[ntd]!) > 1) continue; // 90° across one piece
       const status = pieceStatus(map, nx, ny, p, opts.owner);
       if (!status) continue;
       const atEnd = nx === x1 && ny === y1;
@@ -166,8 +166,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       if (!atEnd && status === 'existing' && !riding) continue;
       let cost = gc + pieceCost(status, p) + turn * TURN_COST;
       if (status === 'new' && !atEnd && map.layers.track[map.tileIndex(nx, ny)]) cost += DIAMOND_COST;
-      const corner = p >= 2;
-      const k = key(nx, ny, ntd, riding && status === 'existing', corner ? TD_HEADING[td]! : 8);
+      const k = key(nx, ny, ntd, riding && status === 'existing', TD_HEADING[td]!);
       const old = g.get(k);
       if (old !== undefined && old <= cost) continue;
       g.set(k, cost);
