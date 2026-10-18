@@ -1,0 +1,185 @@
+import { ymdFromDays } from '../sim/date.ts';
+import { TileType } from '../world/constants.ts';
+import { isAvailable, railVehicle } from '../vehicles/catalog.ts';
+import { trainStats, type Order, type Train } from '../vehicles/train.ts';
+import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
+
+export const MAX_UNITS = 24;
+export const MAX_TRAIN_LENGTH = 16; // tiles
+export const MAX_ORDERS = 32;
+
+/** Buy a train in a depot: `units` lists vehicle type ids front to back (first is the engine). */
+export interface BuyTrainCommand {
+  type: 'buyTrain';
+  depot: number;
+  units: string[];
+}
+
+export type TrainActionKind = 'start' | 'stop' | 'toDepot' | 'reverse' | 'sell' | 'skip';
+
+export interface TrainActionCommand {
+  type: 'trainAction';
+  id: number;
+  action: TrainActionKind;
+}
+
+export interface SetOrdersCommand {
+  type: 'setOrders';
+  id: number;
+  orders: Order[];
+}
+
+const noEffects = () => ({ dirtyChunks: new Set<number>() });
+
+export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
+  needsCompany: true,
+  plan(state, ctx, cmd): PlanResult {
+    const { depot, units } = cmd;
+    const map = state.map;
+    if (!isInt(depot) || depot < 0 || depot >= map.layers.type.length) return fail('Invalid depot');
+    if (map.layers.type[depot] !== TileType.Depot || map.layers.owner[depot] !== ctx.companyId) return fail('Not your depot');
+    if (!Array.isArray(units) || units.length === 0 || units.length > MAX_UNITS) return fail(`A train has 1–${MAX_UNITS} vehicles`);
+    const year = ymdFromDays(state.date).year;
+    let cost = 0;
+    for (const [k, id] of units.entries()) {
+      const v = typeof id === 'string' ? railVehicle(id) : undefined;
+      if (!v) return fail('Unknown vehicle');
+      if (!isAvailable(v, year, state.settings.timeline)) return fail(`${v.name} is not available in ${year}`);
+      if (k === 0 && v.kind !== 'loco') return fail('A train needs an engine at the front');
+      cost += v.cost;
+    }
+    const stats = trainStats(units.map((type) => ({ type })));
+    if (stats.length > MAX_TRAIN_LENGTH) return fail(`Trains can be at most ${MAX_TRAIN_LENGTH} tiles long`);
+    const total = state.cost(cost);
+    return {
+      ok: true,
+      cost: total,
+      commit() {
+        const n = [...state.trains.values()].filter((t) => t.owner === ctx.companyId).length + 1;
+        const t: Train = {
+          id: state.nextTrainId++,
+          owner: ctx.companyId!,
+          name: `Train ${n}`,
+          units: units.map((type) => ({ type })),
+          status: 'depot',
+          depot,
+          path: [],
+          pos: 0,
+          speed: 0,
+          orders: [],
+          orderIndex: 0,
+          toDepot: false,
+          route: [],
+          routeFor: '',
+          replanAt: 0,
+          loadTicks: 0,
+          cargo: [],
+          builtDays: state.date,
+          value: total,
+          profitThisYear: 0,
+          profitLastYear: 0,
+          lastStation: -1,
+        };
+        state.trains.set(t.id, t);
+        state.dirtyTrains.add(t.id);
+        return noEffects();
+      },
+    };
+  },
+};
+
+export const trainActionHandler: CommandHandler<TrainActionCommand> = {
+  needsCompany: true,
+  plan(state, ctx, cmd): PlanResult {
+    const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
+    if (!t || t.owner !== ctx.companyId) return fail('Not your train');
+    const rail = state.rail;
+    switch (cmd.action) {
+      case 'start': {
+        const err = rail.canStart(t);
+        if (err) return fail(err);
+        return { ok: true, cost: 0, commit: () => (rail.start(t), done(), noEffects()) };
+      }
+      case 'stop':
+        if (t.status === 'depot' || t.status === 'stopped') return fail('Already stopped');
+        return { ok: true, cost: 0, commit: () => (rail.stop(t), done(), noEffects()) };
+      case 'toDepot':
+        if (t.status === 'depot') return fail('Already in a depot');
+        return { ok: true, cost: 0, commit: () => (rail.sendToDepot(t), done(), noEffects()) };
+      case 'reverse':
+        if (t.status === 'depot') return fail('The train is in a depot');
+        if (t.speed > 0.5) return fail('Stop the train first');
+        return { ok: true, cost: 0, commit: () => (rail.reverse(t), done(), noEffects()) };
+      case 'skip':
+        if (t.orders.length < 2) return fail('Nothing to skip to');
+        return {
+          ok: true,
+          cost: 0,
+          commit() {
+            t.orderIndex = (t.orderIndex + 1) % t.orders.length;
+            t.routeFor = '';
+            if (t.status === 'loading') t.loadTicks = 0;
+            done();
+            return noEffects();
+          },
+        };
+      case 'sell': {
+        if (t.status !== 'depot') return fail('Trains can only be sold inside a depot');
+        const age = (state.date - t.builtDays) / 365;
+        const refund = Math.round(t.value * Math.max(0.2, 0.85 - age * 0.04));
+        return {
+          ok: true,
+          cost: -refund,
+          commit() {
+            rail.removeFromWorld(t);
+            state.trains.delete(t.id);
+            state.dirtyTrains.delete(t.id);
+            state.removedTrains.add(t.id);
+            return noEffects();
+          },
+        };
+      }
+      default:
+        return fail('Unknown action');
+    }
+    function done() {
+      state.dirtyTrains.add(t!.id);
+    }
+  },
+};
+
+export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
+  needsCompany: true,
+  plan(state, ctx, cmd): PlanResult {
+    const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
+    if (!t || t.owner !== ctx.companyId) return fail('Not your train');
+    if (!Array.isArray(cmd.orders) || cmd.orders.length > MAX_ORDERS) return fail(`At most ${MAX_ORDERS} orders`);
+    const orders: Order[] = [];
+    for (const o of cmd.orders) {
+      if (o?.kind === 'station') {
+        const st = isInt(o.station) ? state.stations.get(o.station) : undefined;
+        if (!st) return fail('Unknown station');
+        if (st.owner !== ctx.companyId) return fail(`${st.name} belongs to another company`);
+        orders.push({ kind: 'station', station: st.id, fullLoad: o.fullLoad === true || undefined });
+      } else if (o?.kind === 'depot') {
+        orders.push({ kind: 'depot' });
+      } else {
+        return fail('Invalid order');
+      }
+    }
+    return {
+      ok: true,
+      cost: 0,
+      commit() {
+        const current = t.orders[t.orderIndex];
+        t.orders = orders;
+        // Keep heading to the same station if it's still in the list.
+        const same = current?.kind === 'station' ? orders.findIndex((o) => o.kind === 'station' && o.station === current.station) : -1;
+        t.orderIndex = same >= 0 ? same : 0;
+        t.routeFor = '';
+        state.dirtyTrains.add(t.id);
+        return noEffects();
+      },
+    };
+  },
+};

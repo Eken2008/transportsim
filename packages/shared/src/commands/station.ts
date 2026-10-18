@@ -158,6 +158,7 @@ export const buildDepotHandler: CommandHandler<BuildDepotCommand> = {
         map.layers.owner[i] = ctx.companyId!;
         map.layers.data[i] = exit;
         map.layers.track[i] = 1 << (exit === 1 || exit === 3 ? Piece.X : Piece.Y);
+        state.depots.add(i);
         const dirtyChunks = new Set<number>();
         map.touchTile(x, y, dirtyChunks);
         state.onTrackChanged();
@@ -246,6 +247,7 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
             track = true;
           } else {
             if (kind === 'station') stations.add(map.layers.data[i]!);
+            if (kind === 'depot') state.depots.delete(i);
             map.setClear(i, Ground.Rough, 0);
             track = true;
           }

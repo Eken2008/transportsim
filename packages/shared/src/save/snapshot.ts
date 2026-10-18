@@ -1,5 +1,8 @@
 import type { Company } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
+import { railVehicle } from '../vehicles/catalog.ts';
+import type { Train } from '../vehicles/train.ts';
+import { TileType } from '../world/constants.ts';
 import { recountTowns, type Town } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
@@ -24,6 +27,8 @@ export interface Snapshot {
   towns: Town[];
   stations?: Station[];
   nextStationId?: number;
+  trains?: Train[];
+  nextTrainId?: number;
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -43,6 +48,8 @@ export function takeSnapshot(state: GameState): Snapshot {
     towns: [...state.towns.values()],
     stations: [...state.stations.values()],
     nextStationId: state.nextStationId,
+    trains: [...state.trains.values()],
+    nextTrainId: state.nextTrainId,
   };
 }
 
@@ -128,8 +135,52 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       rating: num(s.rating, 175),
     });
   }
+  for (let i = 0; i < map.layers.type.length; i++) if (map.layers.type[i] === TileType.Depot) state.depots.add(i);
+  for (const t of Array.isArray(snap.trains) ? snap.trains : []) {
+    const train = sanitizeTrain(t, state);
+    if (train) state.trains.set(train.id, train);
+  }
+  state.nextTrainId = Math.max(num(snap.nextTrainId, 0), ...[...state.trains.keys()].map((k) => k + 1));
+  state.rail.rebuildOccupancy();
   state.nextStationId = Math.max(num(snap.nextStationId, 0), ...[...state.stations.keys()].map((k) => k + 1));
   return state;
 }
 
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+
+const STATUSES = ['depot', 'running', 'stopped', 'loading'] as const;
+
+function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): Train | null {
+  if (!t || typeof t.id !== 'number' || !Array.isArray(t.units)) return null;
+  const units = t.units.filter((u) => u && typeof u.type === 'string' && railVehicle(u.type)).map((u) => ({ type: u.type }));
+  if (units.length === 0) return null;
+  const ints = (a: unknown) => (Array.isArray(a) ? a.filter((n): n is number => Number.isInteger(n) && n >= 0) : []);
+  const status = STATUSES.includes(t.status as never) ? t.status! : 'stopped';
+  const path = status === 'depot' ? [] : ints(t.path);
+  return {
+    id: t.id,
+    owner: num(t.owner, 0),
+    name: String(t.name ?? 'Train').slice(0, 40),
+    units,
+    status: path.length === 0 && status !== 'depot' ? 'stopped' : status,
+    depot: num(t.depot, -1),
+    path,
+    pos: num(t.pos, 0),
+    speed: num(t.speed, 0),
+    orders: (Array.isArray(t.orders) ? t.orders : []).filter(
+      (o) => o && (o.kind === 'depot' || (o.kind === 'station' && typeof o.station === 'number')),
+    ),
+    orderIndex: num(t.orderIndex, 0),
+    toDepot: t.toDepot === true,
+    route: [],
+    routeFor: '',
+    replanAt: 0,
+    loadTicks: num(t.loadTicks, 0),
+    cargo: (Array.isArray(t.cargo) ? t.cargo : []).filter((p) => p && num(p.n, 0) > 0),
+    builtDays: num(t.builtDays, state.date),
+    value: num(t.value, 0),
+    profitThisYear: num(t.profitThisYear, 0),
+    profitLastYear: num(t.profitLastYear, 0),
+    lastStation: num(t.lastStation, -1),
+  };
+}

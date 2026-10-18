@@ -14,12 +14,21 @@ import {
   type BuildStationCommand,
   type ClearAreaCommand,
 } from './station.ts';
+import {
+  buyTrainHandler,
+  setOrdersHandler,
+  trainActionHandler,
+  type BuyTrainCommand,
+  type SetOrdersCommand,
+  type TrainActionCommand,
+} from './trains.ts';
 import type { CommandContext, CommandHandler, CommandEffects } from './types.ts';
 
 export * from './types.ts';
 export * from './terraform.ts';
 export * from './track.ts';
 export * from './station.ts';
+export * from './trains.ts';
 
 export type Command =
   | TerraformCommand
@@ -27,7 +36,10 @@ export type Command =
   | RemoveTrackCommand
   | BuildStationCommand
   | BuildDepotCommand
-  | ClearAreaCommand;
+  | ClearAreaCommand
+  | BuyTrainCommand
+  | TrainActionCommand
+  | SetOrdersCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -37,6 +49,9 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   buildStation: buildStationHandler,
   buildDepot: buildDepotHandler,
   clearArea: clearAreaHandler,
+  buyTrain: buyTrainHandler,
+  trainAction: trainActionHandler,
+  setOrders: setOrdersHandler,
 };
 
 export type CommandResult =

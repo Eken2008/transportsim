@@ -1,6 +1,8 @@
 import { COMPANY_COLORS, MAX_COMPANIES, type Company } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
+import { RailSystem } from '../vehicles/railSystem.ts';
+import type { Train } from '../vehicles/train.ts';
 import { GameMap } from '../world/map.ts';
 import { generateTerrain } from '../world/terrain.ts';
 import { TICKS_PER_DAY, daysFromYmd, ymdFromDays } from './date.ts';
@@ -37,6 +39,13 @@ export class GameState {
   /** Stations changed/removed since the last sync flush (server broadcasts these). */
   readonly dirtyStations = new Set<number>();
   readonly removedStations = new Set<number>();
+  readonly trains = new Map<number, Train>();
+  nextTrainId = 0;
+  readonly dirtyTrains = new Set<number>();
+  readonly removedTrains = new Set<number>();
+  /** Tile indices of all depots. */
+  readonly depots = new Set<number>();
+  readonly rail: RailSystem;
   private nextPlayerId = 1;
   /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
   trackVersion = 0;
@@ -45,6 +54,7 @@ export class GameState {
     this.settings = settings;
     this.map = map;
     this.date = date ?? daysFromYmd(settings.startYear, 0, 1);
+    this.rail = new RailSystem(this);
   }
 
   static create(settings: GameSettings): GameState {
@@ -63,6 +73,7 @@ export class GameState {
   /** Advance the simulation by one tick. */
   step(): TickEvents {
     this.tick++;
+    this.rail.step();
     const ev: TickEvents = { newDay: false, newMonth: false, newYear: false };
     if (++this.dayTick >= TICKS_PER_DAY) {
       this.dayTick = 0;
@@ -72,9 +83,30 @@ export class GameState {
       ev.newDay = true;
       ev.newMonth = after.month !== before.month;
       ev.newYear = after.year !== before.year;
+      this.onNewDay();
       if (ev.newMonth) this.onNewMonth();
+      if (ev.newYear) this.onNewYear();
     }
     return ev;
+  }
+
+  private onNewDay(): void {
+    // Running costs for vehicles out of the depot, charged daily.
+    for (const t of this.trains.values()) {
+      if (t.status === 'depot') continue;
+      const daily = this.cost(this.rail.statsOf(t).runningCost) / 365;
+      t.profitThisYear -= daily;
+      const c = this.companies.get(t.owner);
+      if (c) c.money -= daily;
+    }
+  }
+
+  private onNewYear(): void {
+    for (const t of this.trains.values()) {
+      t.profitLastYear = t.profitThisYear;
+      t.profitThisYear = 0;
+      this.dirtyTrains.add(t.id);
+    }
   }
 
   private onNewMonth(): void {
@@ -91,16 +123,16 @@ export class GameState {
   }
 
   /** Whether any train currently occupies this track piece. */
-  isPieceOccupied(_tile: number, _piece: number): boolean {
-    return false;
+  isPieceOccupied(tile: number, piece: number): boolean {
+    return this.rail.isOccupied(tile, piece);
   }
 
   /** Remove signals on the given pieces of a tile (track is being removed). */
   removeSignalsOn(_tile: number, _pieceBits: number): void {}
 
   /** Whether any vehicle is parked in (or heading into) the depot on this tile. */
-  depotHasVehicles(_tile: number): boolean {
-    return false;
+  depotHasVehicles(tile: number): boolean {
+    return this.rail.depotHasVehicles(tile);
   }
 
   markStationDirty(id: number): void {

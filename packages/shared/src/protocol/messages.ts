@@ -4,6 +4,7 @@ import type { GameSettings, ServerLimits } from '../sim/settings.ts';
 import type { Player } from '../sim/state.ts';
 import type { Town } from '../town/towns.ts';
 import type { Station } from '../rail/station.ts';
+import type { TrainInfo, TrainMotion } from '../vehicles/train.ts';
 import type { ChunkData } from '../world/chunks.ts';
 
 export const PROTOCOL_VERSION = 1;
@@ -73,6 +74,10 @@ export type ServerMessage =
   | { t: 'towns'; towns: Town[]; full: boolean }
   /** Station list; `full` replaces the client's list. `removed` lists deleted ids. */
   | { t: 'stations'; stations: Station[]; removed: number[]; full: boolean }
+  /** Train details (all trains; changes only unless `full`). */
+  | { t: 'trains'; trains: TrainInfo[]; removed: number[]; full: boolean }
+  /** Positions of trains near the client's subscribed chunks (~10 Hz). */
+  | { t: 'trainPos'; trains: TrainMotion[] }
   | { t: 'global'; global: GlobalState }
   | { t: 'commandResult'; seq: number; ok: boolean; error?: string; cost?: number }
   /** Host connectivity; when disconnected the room closes at `closesAt` (epoch ms). */

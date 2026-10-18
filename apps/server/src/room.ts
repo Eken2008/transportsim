@@ -6,6 +6,9 @@ import {
   executeCommand,
   extractChunk,
   findLandNear,
+  segTile,
+  trainInfo,
+  CHUNK_SIZE,
   ymdFromDays,
   type ClientMessage,
   type GameSpeed,
@@ -41,6 +44,7 @@ export interface Session {
 const MAX_CHUNKS_PER_FLUSH = 12;
 const MAX_COMMANDS_PER_SECOND = 40;
 const MAX_CATCHUP_STEPS = 60;
+const POS_INTERVAL_MS = 100;
 
 export class Room {
   readonly id: string;
@@ -62,6 +66,7 @@ export class Room {
   private globalDirty = true;
   private lastAutosaveAt = 0;
   private hostClosesAt: number | null = null;
+  private lastPosAt = 0;
 
   constructor(
     id: string,
@@ -146,6 +151,7 @@ export class Room {
     });
     this.send(session, { t: 'towns', towns: [...this.state.towns.values()], full: true });
     this.send(session, { t: 'stations', stations: [...this.state.stations.values()], removed: [], full: true });
+    this.send(session, { t: 'trains', trains: [...this.state.trains.values()].map(trainInfo), removed: [], full: true });
 
     if (isHost && this.hostCloseTimer) {
       clearTimeout(this.hostCloseTimer);
@@ -315,6 +321,17 @@ export class Room {
       st.dirtyStations.clear();
       st.removedStations.clear();
     }
+    if (st.dirtyTrains.size > 0 || st.removedTrains.size > 0) {
+      const trains = [...st.dirtyTrains].map((id) => st.trains.get(id)).filter((t) => t !== undefined).map(trainInfo);
+      this.broadcast({ t: 'trains', trains, removed: [...st.removedTrains], full: false });
+      st.dirtyTrains.clear();
+      st.removedTrains.clear();
+    }
+    const now = performance.now();
+    if (now - this.lastPosAt >= POS_INTERVAL_MS) {
+      this.lastPosAt = now;
+      this.sendPositions();
+    }
     const versions = this.state.map.chunkVersions;
     for (const s of this.sessions) {
       let budget = MAX_CHUNKS_PER_FLUSH;
@@ -325,6 +342,26 @@ export class Room {
         s.sentVersions.set(c, v);
         if (--budget === 0) break;
       }
+    }
+  }
+
+  /** Stream positions of trains touching each client's subscribed chunks. */
+  private sendPositions(): void {
+    const map = this.state.map;
+    const running = [...this.state.trains.values()].filter((t) => t.path.length > 0);
+    if (running.length === 0 || this.sessions.size === 0) return;
+    const chunksOf = running.map((t) => {
+      const set = new Set<number>();
+      for (const s of [t.path[0]!, t.path[t.path.length - 1]!]) {
+        const tile = segTile(s);
+        const x = tile % map.width;
+        set.add(Math.floor((tile - x) / map.width / CHUNK_SIZE) * map.chunksX + Math.floor(x / CHUNK_SIZE));
+      }
+      return set;
+    });
+    for (const s of this.sessions) {
+      const trains = running.filter((_, i) => [...chunksOf[i]!].some((c) => s.subscribed.has(c)));
+      if (trains.length) this.send(s, { t: 'trainPos', trains: trains.map((t) => this.state.rail.motion(t)) });
     }
   }
 
