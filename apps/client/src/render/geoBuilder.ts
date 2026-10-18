@@ -90,6 +90,45 @@ export class GeoBuilder {
     tri(v(a, y, n), v(a, y, s), v(a, top, zm)); // west gable
   }
 
+  /** Closed prism (low-poly cylinder) along X from x0 to x1, centred at (cy, cz). */
+  cylinderX(x0: number, x1: number, cy: number, cz: number, r: number, sides = 8): void {
+    const ring = (x: number) =>
+      Array.from({ length: sides }, (_, i) => {
+        const a = (i / sides) * Math.PI * 2 + Math.PI / sides;
+        return new THREE.Vector3(x, cy + Math.cos(a) * r, cz + Math.sin(a) * r);
+      });
+    const a = ring(x0);
+    const b = ring(x1);
+    for (let i = 0; i < sides; i++) {
+      const j = (i + 1) % sides;
+      this.quad(a[i]!, a[j]!, b[j]!, b[i]!);
+    }
+    const ca = new THREE.Vector3(x0, cy, cz);
+    const cb = new THREE.Vector3(x1, cy, cz);
+    for (let i = 0; i < sides; i++) {
+      const j = (i + 1) % sides;
+      this.tri(ca, a[j]!, a[i]!);
+      this.tri(cb, b[i]!, b[j]!);
+    }
+  }
+
+  /** Vertical cylinder (chimney, dome) from y0 to y1 at (cx, cz). */
+  cylinderY(cx: number, cz: number, y0: number, y1: number, r: number, sides = 8): void {
+    const ring = (y: number) =>
+      Array.from({ length: sides }, (_, i) => {
+        const a = (i / sides) * Math.PI * 2;
+        return new THREE.Vector3(cx + Math.cos(a) * r, y, cz + Math.sin(a) * r);
+      });
+    const a = ring(y0);
+    const b = ring(y1);
+    for (let i = 0; i < sides; i++) {
+      const j = (i + 1) % sides;
+      this.quad(a[j]!, a[i]!, b[i]!, b[j]!);
+    }
+    const top = new THREE.Vector3(cx, y1, cz);
+    for (let i = 0; i < sides; i++) this.tri(top, b[(i + 1) % sides]!, b[i]!);
+  }
+
   /** Four-sided pyramid (spire) over a square base. */
   pyramid(cx: number, cz: number, half: number, y: number, rise: number): void {
     const v = (x: number, yy: number, z: number) => new THREE.Vector3(x, yy, z);

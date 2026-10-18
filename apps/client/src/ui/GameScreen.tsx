@@ -9,8 +9,9 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
 import { installDebugHook } from '../render/debugHook.ts';
+import { WindowLayer } from './windows.tsx';
 import { GameRenderer } from '../render/gameRenderer.ts';
-import { useApp, type ToolId } from '../store.ts';
+import { openWindow, useApp, type ToolId } from '../store.ts';
 import { formatMoney } from './format.ts';
 
 export function GameScreen() {
@@ -42,6 +43,8 @@ export function GameScreen() {
         useApp.setState((s) => ({ tool: s.tool === t ? null : t }));
       } else if (e.code === 'KeyR' && useApp.getState().tool === 'station') {
         useApp.setState((s) => ({ stationOpts: { ...s.stationOpts, axis: s.stationOpts.axis === 0 ? 1 : 0 } }));
+      } else if (e.code === 'KeyT') {
+        openWindow({ kind: 'trains', id: 0 });
       } else if (e.code === 'Slash' || e.key === '?') setShowHelp((v) => !v);
       else if (e.code === 'Space' && useApp.getState().room?.isHost) {
         e.preventDefault();
@@ -59,6 +62,7 @@ export function GameScreen() {
       <TopBar onHelp={() => setShowHelp((v) => !v)} />
       <HostBanner />
       {showHelp && <Help onClose={() => setShowHelp(false)} />}
+      <WindowLayer />
       <StationOptions />
       <Toolbar />
       <Chat />
@@ -134,6 +138,9 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
             </label>
           </>
         )}
+        <button title="Your trains (T)" onClick={() => openWindow({ kind: 'trains', id: 0 })}>
+          🚆 Trains
+        </button>
         <button className="ghost" title="Controls (?)" onClick={onHelp}>
           ?
         </button>
@@ -310,7 +317,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
       </div>
       <div>
-        <kbd>Space</kbd> pause (host)
+        Click a depot, station or train to open it · <kbd>T</kbd> train list · <kbd>Space</kbd> pause (host)
       </div>
     </div>
   );

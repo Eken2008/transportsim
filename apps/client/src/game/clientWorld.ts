@@ -7,6 +7,8 @@ import {
   type GlobalState,
   type Station,
   type Town,
+  type TrainInfo,
+  type TrainMotion,
 } from '@transportsim/shared';
 
 /**
@@ -21,6 +23,10 @@ export class ClientWorld {
   townsRev = 0;
   /** Bumped when stations change. */
   stationsRev = 0;
+  /** All trains (details), and the latest motion sample for trains near our view. */
+  readonly trains = new Map<number, TrainInfo>();
+  trainsRev = 0;
+  readonly motions = new Map<number, { m: TrainMotion; at: number }>();
 
   constructor(settings: GameSettings) {
     this.state = new GameState(settings, new GameMap(settings.mapWidth, settings.mapHeight));
@@ -64,6 +70,29 @@ export class ClientWorld {
     for (const st of stations) s.set(st.id, st);
     for (const id of removed) s.delete(id);
     this.stationsRev++;
+  }
+
+  applyTrains(trains: TrainInfo[], removed: number[], full: boolean): void {
+    if (full) this.trains.clear();
+    for (const t of trains) this.trains.set(t.id, t);
+    for (const id of removed) {
+      this.trains.delete(id);
+      this.motions.delete(id);
+    }
+    // Trains parked in a depot are no longer on the map.
+    for (const t of trains) if (t.status === 'depot') this.motions.delete(t.id);
+    this.trainsRev++;
+  }
+
+  applyTrainPositions(motions: TrainMotion[]): void {
+    const now = performance.now();
+    const seen = new Set<number>();
+    for (const m of motions) {
+      this.motions.set(m.id, { m, at: now });
+      seen.add(m.id);
+    }
+    // Drop trains that left our view (no update for a while).
+    for (const [id, v] of this.motions) if (!seen.has(id) && now - v.at > 1500) this.motions.delete(id);
   }
 
   onChunk(fn: (cx: number, cy: number) => void): () => void {

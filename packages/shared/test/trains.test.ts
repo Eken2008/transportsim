@@ -90,7 +90,7 @@ describe('trains', () => {
   });
 
   test('stops at the far end of the platform', () => {
-    const { state, map, run, stations, buy, ticks } = line({ stationsAt: [[20, 5]] });
+    const { state, map, run, stations, buy } = line({ stationsAt: [[20, 5]] });
     const t = buy();
     run({ type: 'setOrders', id: t.id, orders: [{ kind: 'station', station: stations[0]! }] });
     run({ type: 'trainAction', id: t.id, action: 'start' });

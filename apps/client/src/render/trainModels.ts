@@ -1,0 +1,127 @@
+import type { UnitModel } from '@transportsim/shared';
+import * as THREE from 'three';
+import { GeoBuilder, lin } from './geoBuilder.ts';
+
+/**
+ * Low-poly train units, built for a length of 1 along +X (front) and scaled per unit.
+ * `body` is tinted with the owner's colour per instance; `detail` keeps its own colours.
+ */
+export interface UnitGeo {
+  body: THREE.BufferGeometry;
+  detail: THREE.BufferGeometry;
+}
+
+const WHITE = lin('#ffffff');
+const DARK = lin('#26292d');
+const STEEL = lin('#5d636b');
+const ROOF = lin('#8a9097');
+const GLASS = lin('#2c3a48');
+const RED = lin('#8e2b22');
+const CREAM = lin('#efe6cf');
+const BRASS = lin('#c9a24a');
+
+const W = 0.135; // half width
+const FLOOR = 0.035;
+
+function bogies(g: GeoBuilder, positions: number[]): void {
+  g.color(DARK);
+  for (const x of positions) g.aabb(x - 0.09, 0, -W * 0.8, x + 0.09, FLOOR + 0.02, W * 0.8);
+}
+
+function windowsBand(g: GeoBuilder, x0: number, x1: number, y0: number, y1: number, count: number): void {
+  g.color(GLASS);
+  const step = (x1 - x0) / count;
+  for (let i = 0; i < count; i++) {
+    const a = x0 + step * (i + 0.18);
+    const b = x0 + step * (i + 0.82);
+    g.aabb(a, y0, -W - 0.004, b, y1, W + 0.004);
+  }
+}
+
+function build(model: UnitModel): UnitGeo {
+  const body = new GeoBuilder().color(WHITE);
+  const d = new GeoBuilder();
+  switch (model) {
+    case 'steam': {
+      d.color(DARK).aabb(-0.5, 0, -W * 0.9, 0.5, FLOOR + 0.02, W * 0.9); // frame
+      d.color(RED);
+      for (const x of [-0.05, 0.15, 0.35]) {
+        d.aabb(x - 0.07, 0.005, -W * 0.92, x + 0.07, 0.145, -W * 0.72);
+        d.aabb(x - 0.07, 0.005, W * 0.72, x + 0.07, 0.145, W * 0.92);
+      }
+      d.color(DARK).cylinderX(-0.18, 0.46, 0.2, 0, 0.1, 10); // boiler
+      d.color(STEEL).cylinderX(0.4, 0.5, 0.2, 0, 0.105, 10); // smokebox
+      d.color(DARK).cylinderY(0.4, 0, 0.28, 0.4, 0.03, 8); // chimney
+      d.color(BRASS).cylinderY(0.12, 0, 0.28, 0.34, 0.04, 8); // dome
+      body.aabb(-0.5, FLOOR, -W, -0.18, 0.36, W); // cab
+      body.aabb(-0.18, FLOOR + 0.02, -W, 0.5, FLOOR + 0.06, W); // running board
+      d.color(DARK).aabb(-0.52, 0.36, -W - 0.01, -0.16, 0.38, W + 0.01); // cab roof
+      d.color(GLASS).aabb(-0.3, 0.24, -W - 0.004, -0.22, 0.32, W + 0.004);
+      break;
+    }
+    case 'diesel':
+    case 'electric': {
+      bogies(d, [-0.3, 0.3]);
+      body.aabb(-0.48, FLOOR, -W, 0.48, 0.32, W);
+      d.color(ROOF).aabb(-0.46, 0.32, -W * 0.92, 0.46, 0.35, W * 0.92);
+      d.color(GLASS).aabb(0.46, 0.22, -W * 0.8, 0.485, 0.3, W * 0.8);
+      d.color(GLASS).aabb(-0.485, 0.22, -W * 0.8, -0.46, 0.3, W * 0.8);
+      d.color(CREAM).aabb(-0.48, 0.12, -W - 0.003, 0.48, 0.14, W + 0.003); // stripe
+      if (model === 'electric') {
+        d.color(DARK);
+        d.aabb(-0.2, 0.35, -0.01, -0.18, 0.46, 0.01);
+        d.aabb(-0.26, 0.46, -0.08, -0.1, 0.47, 0.08);
+      }
+      break;
+    }
+    case 'highspeed': {
+      bogies(d, [-0.32, 0.25]);
+      d.color(WHITE).aabb(-0.5, FLOOR, -W, 0.25, 0.3, W);
+      // Wedge nose
+      const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+      const f = 0.5;
+      d.color(WHITE);
+      d.quad(v(0.25, 0.3, -W), v(0.25, 0.3, W), v(f, 0.1, W * 0.6), v(f, 0.1, -W * 0.6));
+      d.quad(v(0.25, FLOOR, W), v(f, FLOOR, W * 0.6), v(f, 0.1, W * 0.6), v(0.25, 0.3, W));
+      d.quad(v(f, FLOOR, -W * 0.6), v(0.25, FLOOR, -W), v(0.25, 0.3, -W), v(f, 0.1, -W * 0.6));
+      d.quad(v(f, FLOOR, W * 0.6), v(f, FLOOR, -W * 0.6), v(f, 0.1, -W * 0.6), v(f, 0.1, W * 0.6));
+      d.color(GLASS).quad(v(0.27, 0.285, -W * 0.7), v(0.27, 0.285, W * 0.7), v(0.38, 0.21, W * 0.62), v(0.38, 0.21, -W * 0.62));
+      body.aabb(-0.5, 0.12, -W - 0.004, 0.3, 0.16, W + 0.004); // livery stripe
+      windowsBand(d, -0.46, 0.2, 0.2, 0.26, 5);
+      break;
+    }
+    case 'coach':
+    case 'coachModern': {
+      bogies(d, [-0.32, 0.32]);
+      body.aabb(-0.5, FLOOR, -W, 0.5, 0.3, W);
+      windowsBand(d, -0.44, 0.44, 0.17, 0.25, model === 'coach' ? 6 : 8);
+      if (model === 'coach') {
+        d.color(ROOF);
+        const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+        d.quad(v(-0.5, 0.3, W), v(0.5, 0.3, W), v(0.5, 0.35, 0), v(-0.5, 0.35, 0));
+        d.quad(v(0.5, 0.3, -W), v(-0.5, 0.3, -W), v(-0.5, 0.35, 0), v(0.5, 0.35, 0));
+      } else {
+        d.color(ROOF).aabb(-0.49, 0.3, -W * 0.95, 0.49, 0.33, W * 0.95);
+      }
+      break;
+    }
+    case 'mailvan': {
+      bogies(d, [-0.3, 0.3]);
+      body.aabb(-0.5, FLOOR, -W, 0.5, 0.29, W);
+      d.color(ROOF).aabb(-0.49, 0.29, -W * 0.95, 0.49, 0.32, W * 0.95);
+      d.color(DARK).aabb(-0.08, 0.06, -W - 0.004, 0.08, 0.26, W + 0.004); // doors
+      break;
+    }
+  }
+  return { body: body.build() ?? new THREE.BufferGeometry(), detail: d.build() ?? new THREE.BufferGeometry() };
+}
+
+export const UNIT_MODELS: Record<UnitModel, UnitGeo> = {
+  steam: build('steam'),
+  diesel: build('diesel'),
+  electric: build('electric'),
+  highspeed: build('highspeed'),
+  coach: build('coach'),
+  coachModern: build('coachModern'),
+  mailvan: build('mailvan'),
+};

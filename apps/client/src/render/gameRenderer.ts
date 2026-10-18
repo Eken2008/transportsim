@@ -13,6 +13,10 @@ import { Cursor } from './cursor.ts';
 import { LabelLayer } from './labels.ts';
 import { pickTerrain, type TerrainHit } from './picking.ts';
 import { TrackGhost } from './trackGhost.ts';
+import { TrainRenderer } from './trainRenderer.ts';
+import { TileType } from '@transportsim/shared';
+import { openWindow } from '../store.ts';
+import { OrdersTool } from '../tools/ordersTool.ts';
 
 const SKY = new THREE.Color('#a8c8e6');
 
@@ -27,6 +31,8 @@ export class GameRenderer {
   readonly ghost: TrackGhost;
   readonly labels: LabelLayer;
   readonly area: AreaGhost;
+  readonly trains: TrainRenderer;
+  private downAt: { x: number; y: number } | null = null;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly world: ClientWorld;
@@ -64,6 +70,8 @@ export class GameRenderer {
     this.ghost = new TrackGhost(world.map);
     this.area = new AreaGhost(world.map);
     this.scene.add(this.area.mesh);
+    this.trains = new TrainRenderer(world);
+    this.scene.add(this.trains.root);
     this.labels = new LabelLayer(canvas.parentElement!, world);
     this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
     client.resubscribe = () => this.chunks.resubscribe();
@@ -84,6 +92,7 @@ export class GameRenderer {
       this.hoverDirty = true;
     });
     this.listen(canvas, 'pointerdown', ((e: PointerEvent) => {
+      if (e.button === 0) this.downAt = { x: e.clientX, y: e.clientY };
       if (e.button !== 0 || !this.tool) return;
       const hit = this.pick(e.clientX, e.clientY);
       if (!hit) return;
@@ -93,13 +102,15 @@ export class GameRenderer {
       this.tool.onDown(hit, this.mods);
     }) as EventListener);
     this.listen(canvas, 'pointerup', ((e: PointerEvent) => {
+      const click = e.button === 0 && this.downAt && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) < 5;
+      if (click && !this.tool) this.select(e.clientX, e.clientY);
       if (e.button !== 0 || !this.toolDown) return;
       this.toolDown = false;
       this.setMods(e);
       this.tool?.onUp(this.pick(e.clientX, e.clientY), this.mods);
     }) as EventListener);
     this.listen(window, 'keydown', ((e: KeyboardEvent) => {
-      if (e.code === 'Escape') useApp.setState({ tool: null });
+      if (e.code === 'Escape') useApp.setState({ tool: null, ordersFor: null });
       this.setMods(e);
     }) as EventListener);
     this.listen(window, 'keyup', ((e: KeyboardEvent) => this.setMods(e)) as EventListener);
@@ -109,6 +120,7 @@ export class GameRenderer {
     this.disposers.push(() => ro.disconnect());
     this.disposers.push(
       useApp.subscribe((s, prev) => {
+        if (s.focus && s.focus !== prev.focus) this.lookAt(s.focus.x + 0.5, s.focus.y + 0.5);
         if (s.tool !== prev.tool) this.setTool(s.tool);
         else if (s.stationOpts !== prev.stationOpts) {
           this.tool?.invalidate?.();
@@ -153,6 +165,9 @@ export class GameRenderer {
       case 'bulldoze':
         this.tool = new BulldozeTool(this.area);
         break;
+      case 'orders':
+        this.tool = new OrdersTool(this.area);
+        break;
       default:
         this.tool = new TerraformTool(id, this.cursor);
     }
@@ -166,6 +181,31 @@ export class GameRenderer {
       this.mods = { ctrl, shift: e.shiftKey };
       this.hoverDirty = true;
     }
+  }
+
+  /** Click with no tool: open the train, depot or station under the cursor. */
+  private select(clientX: number, clientY: number): void {
+    const rect = this.canvas.getBoundingClientRect();
+    let best: number | null = null;
+    let bestD = 22;
+    const v = new THREE.Vector3();
+    for (const p of this.trains.picks) {
+      v.copy(p.pos).project(this.camera);
+      if (v.z > 1) continue;
+      const d = Math.hypot(rect.left + ((v.x + 1) / 2) * rect.width - clientX, rect.top + ((1 - v.y) / 2) * rect.height - clientY);
+      if (d < bestD) {
+        bestD = d;
+        best = p.trainId;
+      }
+    }
+    if (best !== null) return openWindow({ kind: 'train', id: best });
+    const hit = this.pick(clientX, clientY);
+    if (!hit) return;
+    const map = this.world.map;
+    const i = map.tileIndex(hit.tileX, hit.tileY);
+    const type = map.layers.type[i];
+    if (type === TileType.Depot) openWindow({ kind: 'depot', id: i });
+    else if (type === TileType.Station) openWindow({ kind: 'station', id: map.layers.data[i]! });
   }
 
   private pick(clientX: number, clientY: number): TerrainHit | null {
@@ -188,6 +228,7 @@ export class GameRenderer {
     this.lastTime = now;
 
     this.controller.update(dt);
+    this.trains.update(now, useApp.getState().global?.speed ?? 1);
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;
     fog.far = this.controller.distance * 9 + 300;
@@ -221,6 +262,7 @@ export class GameRenderer {
     this.ghost.dispose();
     this.labels.dispose();
     this.area.dispose();
+    this.trains.dispose();
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();
   }

@@ -1,0 +1,183 @@
+import {
+  COMPANY_COLORS,
+  HEIGHT_SCALE,
+  KMH_PER_TILE_PER_S,
+  UNIT_GAP,
+  edgeHeight,
+  pieceLength,
+  railVehicle,
+  segLength,
+  segPoint,
+  segTd,
+  segTile,
+  tdEntry,
+  tdExit,
+  tdPiece,
+  type GameMap,
+  type UnitModel,
+} from '@transportsim/shared';
+import * as THREE from 'three';
+import type { ClientWorld } from '../game/clientWorld.ts';
+import { UNIT_MODELS } from './trainModels.ts';
+
+/** Height of the rail head above the terrain surface. */
+const RAIL_TOP = 0.088;
+/** Don't extrapolate further than this past the last update (seconds). */
+const MAX_EXTRAPOLATION = 0.6;
+
+const _f = new THREE.Vector3();
+const _b = new THREE.Vector3();
+const _x = new THREE.Vector3();
+const _y = new THREE.Vector3();
+const _z = new THREE.Vector3();
+const _m = new THREE.Matrix4();
+const _s = new THREE.Matrix4();
+const UP = new THREE.Vector3(0, 1, 0);
+
+/** World position at distance `d` along a segment (tiles), on top of the rails. */
+function segWorld(map: GameMap, s: number, d: number, out: THREE.Vector3): void {
+  const tile = segTile(s);
+  const td = segTd(s);
+  const x = tile % map.width;
+  const corners = map.tileCorners(x, (tile - x) / map.width);
+  const ha = Math.max(0, edgeHeight(corners, tdEntry(td)));
+  const hb = Math.max(0, edgeHeight(corners, tdExit(td)));
+  const t = d / pieceLength(tdPiece(td));
+  const p = segPoint(map, s, d);
+  out.set(p.x, (ha + (hb - ha) * t) * HEIGHT_SCALE + RAIL_TOP, p.y);
+}
+
+/** Point `back` tiles behind the head (segs head-first, head at `pos`). False if inside a depot. */
+function pointBehind(map: GameMap, segs: readonly number[], pos: number, back: number, out: THREE.Vector3): boolean {
+  if (back <= pos) {
+    segWorld(map, segs[0]!, pos - back, out);
+    return true;
+  }
+  let rest = back - pos;
+  for (let i = 1; i < segs.length; i++) {
+    const len = segLength(segs[i]!);
+    if (rest <= len) {
+      segWorld(map, segs[i]!, len - rest, out);
+      return true;
+    }
+    rest -= len;
+  }
+  return false;
+}
+
+interface ModelMeshes {
+  body: THREE.InstancedMesh;
+  detail: THREE.InstancedMesh;
+  count: number;
+}
+
+export interface UnitPick {
+  trainId: number;
+  pos: THREE.Vector3;
+}
+
+/** Draws every visible train unit with instancing, extrapolating motion between updates. */
+export class TrainRenderer {
+  readonly root = new THREE.Group();
+  /** Unit centres from the last frame, for click picking. */
+  readonly picks: UnitPick[] = [];
+  private meshes = new Map<UnitModel, ModelMeshes>();
+  private readonly bodyMat = new THREE.MeshLambertMaterial({ flatShading: true });
+  private readonly detailMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+  private readonly colors = COMPANY_COLORS.map((c) => new THREE.Color(c));
+  private segs: number[] = [];
+
+  constructor(private readonly world: ClientWorld) {}
+
+  private meshesFor(model: UnitModel, need: number): ModelMeshes {
+    let m = this.meshes.get(model);
+    if (!m || m.body.instanceMatrix.count < need) {
+      const cap = Math.max(16, need * 2);
+      if (m) {
+        this.root.remove(m.body, m.detail);
+        m.body.dispose();
+        m.detail.dispose();
+      }
+      const geo = UNIT_MODELS[model];
+      const body = new THREE.InstancedMesh(geo.body, this.bodyMat, cap);
+      const detail = new THREE.InstancedMesh(geo.detail, this.detailMat, cap);
+      body.setColorAt(0, new THREE.Color());
+      for (const mesh of [body, detail]) {
+        mesh.frustumCulled = false;
+        mesh.count = 0;
+        this.root.add(mesh);
+      }
+      m = { body, detail, count: 0 };
+      this.meshes.set(model, m);
+    }
+    return m;
+  }
+
+  update(now: number, speedMultiplier: number): void {
+    const map = this.world.map;
+    for (const m of this.meshes.values()) m.count = 0;
+    this.picks.length = 0;
+
+    for (const [id, { m, at }] of this.world.motions) {
+      const info = this.world.trains.get(id);
+      if (!info || m.path.length === 0) continue;
+      const dt = Math.min(MAX_EXTRAPOLATION, (now - at) / 1000);
+      let pos = m.pos + (m.speed / KMH_PER_TILE_PER_S) * speedMultiplier * dt;
+      const segs = this.segs;
+      segs.length = 0;
+      segs.push(...m.path);
+      let ai = 0;
+      while (pos > segLength(segs[0]!) && ai < m.ahead.length) {
+        pos -= segLength(segs[0]!);
+        segs.unshift(m.ahead[ai++]!);
+      }
+      pos = Math.min(pos, segLength(segs[0]!));
+
+      const company = this.world.state.companies.get(info.owner);
+      const color = this.colors[(company?.color ?? 0) % this.colors.length]!;
+      let offset = 0;
+      for (const unit of info.units) {
+        const v = railVehicle(unit.type);
+        if (!v) continue;
+        const len = v.length / 16;
+        const okF = pointBehind(map, segs, pos, offset, _f);
+        const okB = pointBehind(map, segs, pos, offset + len, _b);
+        offset += len + UNIT_GAP;
+        if (!okF || !okB) continue;
+        const mm = this.meshesFor(v.model, 1);
+        const k = mm.count;
+        if (k >= mm.body.instanceMatrix.count) continue; // grows next frame
+        _x.subVectors(_f, _b).normalize();
+        _z.crossVectors(_x, UP).normalize();
+        _y.crossVectors(_z, _x);
+        _m.makeBasis(_x, _y, _z);
+        _m.multiply(_s.makeScale(len, 1, 1));
+        _m.setPosition((_f.x + _b.x) / 2, (_f.y + _b.y) / 2, (_f.z + _b.z) / 2);
+        mm.body.setMatrixAt(k, _m);
+        mm.detail.setMatrixAt(k, _m);
+        mm.body.setColorAt(k, color);
+        mm.count++;
+        this.picks.push({ trainId: id, pos: new THREE.Vector3((_f.x + _b.x) / 2, (_f.y + _b.y) / 2 + 0.15, (_f.z + _b.z) / 2) });
+      }
+    }
+
+    for (const [model, mm] of this.meshes) {
+      // Grow if we ran out of instances this frame.
+      if (mm.count >= mm.body.instanceMatrix.count) this.meshesFor(model, mm.count + 1);
+      mm.body.count = mm.count;
+      mm.detail.count = mm.count;
+      mm.body.instanceMatrix.needsUpdate = true;
+      mm.detail.instanceMatrix.needsUpdate = true;
+      if (mm.body.instanceColor) mm.body.instanceColor.needsUpdate = true;
+    }
+  }
+
+  dispose(): void {
+    for (const m of this.meshes.values()) {
+      m.body.dispose();
+      m.detail.dispose();
+    }
+    this.bodyMat.dispose();
+    this.detailMat.dispose();
+  }
+}

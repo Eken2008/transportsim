@@ -154,8 +154,32 @@ try {
   check(beforeStation !== afterStation, `building a station and depot cost money (${beforeStation} → ${afterStation})`);
   check((await a.locator('.label.station').count()) >= 1, 'station label shown');
   if (beforeStation === afterStation) console.log('  toasts:', await a.locator('.toast').allInnerTexts());
+  // Second station further east, then buy a train in the depot and give it orders — all via the UI.
+  await a.keyboard.press('Digit6');
+  await clickTile(sx + 5, sy - 4);
   await a.keyboard.press('Escape');
-  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 4, y: s.y - 3, yaw: 0.7, pitch: 0.7, distance: 16 }), { x: sx, y: sy });
+  await clickTile(sx - 11, sy - 4);
+  const depotWin = a.locator('.window', { hasText: 'Train depot' });
+  await depotWin.waitFor({ timeout: 5000 });
+  await depotWin.getByRole('button', { name: /^Buy for/ }).click();
+  await depotWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
+  const trainWin = a.locator('.window', { hasText: 'Orders' });
+  await trainWin.getByRole('button', { name: /Add stations/ }).click();
+  await clickTile(sx - 2, sy - 4);
+  await clickTile(sx + 7, sy - 4);
+  await a.waitForTimeout(600);
+  check((await trainWin.locator('ol.orders li').count()) === 2, 'train got two orders by clicking stations');
+  await trainWin.getByRole('button', { name: 'Done adding stations' }).click();
+  await trainWin.getByRole('button', { name: /Start/ }).click();
+  await a.getByRole('button', { name: '4×' }).click();
+  await a.waitForTimeout(6000);
+  const status = await trainWin.locator('.kv b').first().innerText();
+  check(/Heading to|Loading at/.test(status), `train is running (${status})`);
+  await trainWin.getByRole('button', { name: /Locate/ }).click();
+  await hook((h) => h.view({ distance: 7, pitch: 0.55, yaw: 2.2 }));
+  await a.waitForTimeout(1500);
+  await a.screenshot({ path: `${outDir}/03c-train.png` });
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 1, y: s.y - 4, yaw: 0.7, pitch: 0.75, distance: 18 }), { x: sx, y: sy });
   await a.waitForTimeout(2500);
   await a.screenshot({ path: `${outDir}/03b-track.png` });
 
@@ -204,7 +228,9 @@ try {
   await a2.locator('canvas').waitFor({ timeout: 15_000 });
   await a2.waitForTimeout(2500);
   const resumedMoney = await a2.locator('.money').innerText();
-  check(resumedMoney === savedMoney, `resumed game keeps company money (${resumedMoney})`);
+  // Running costs keep ticking, so allow a small drift between saving and reading the value.
+  const money = (s: string) => Number(s.replace(/[^0-9-]/g, ''));
+  check(Math.abs(money(resumedMoney) - money(savedMoney)) < money(savedMoney) * 0.01, `resumed game keeps company money (${savedMoney} → ${resumedMoney})`);
   await a2.screenshot({ path: `${outDir}/06-resumed.png` });
 } catch (e) {
   failed = true;

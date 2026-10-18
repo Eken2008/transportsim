@@ -106,7 +106,7 @@ export function trainStats(units: readonly TrainUnit[]): TrainStats {
   };
 }
 
-export const cargoCount = (t: Train) => t.cargo.reduce((s, p) => s + p.n, 0);
+export const cargoCount = (t: { cargo: readonly CargoPacket[] }) => t.cargo.reduce((s, p) => s + p.n, 0);
 
 /** The client-visible part of a train (no route internals). */
 export type TrainInfo = Omit<Train, 'route' | 'routeFor' | 'replanAt' | 'path' | 'pos'>;

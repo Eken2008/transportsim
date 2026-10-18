@@ -104,6 +104,13 @@ class AppClient {
       case 'stations':
         this.world?.applyStations(m.stations, m.removed, m.full);
         return;
+      case 'trains':
+        this.world?.applyTrains(m.trains, m.removed, m.full);
+        useApp.setState((s) => ({ trainsRev: s.trainsRev + 1 }));
+        return;
+      case 'trainPos':
+        this.world?.applyTrainPositions(m.trains);
+        return;
       case 'global':
         this.world?.applyGlobal(m.global);
         useApp.setState({ global: m.global });
@@ -139,7 +146,7 @@ class AppClient {
     this.setWorld(null);
     for (const p of this.pending.values()) p({ ok: false, error: 'Left game' });
     this.pending.clear();
-    useApp.setState({ room: null, global: null, closedReason: reason, tool: null, hover: null, autosavePrompt: false });
+    useApp.setState({ room: null, global: null, closedReason: reason, tool: null, hover: null, autosavePrompt: false, windows: [], ordersFor: null });
     this.conn.send({ t: 'listRooms' });
   }
 

@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
 
-export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze';
+export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders';
 
 export interface StationOptions {
   axis: 0 | 1;
@@ -58,6 +58,31 @@ export interface AppState {
   saves: SaveRecord[];
   busy: string | null;
   stationOpts: StationOptions;
+  /** Bumped when train details change, so windows re-render. */
+  trainsRev: number;
+  /** Train whose orders the orders tool is editing. */
+  ordersFor: number | null;
+  /** Camera focus request (renderer watches `seq`). */
+  focus: { x: number; y: number; seq: number } | null;
+  windows: GameWindow[];
+}
+
+export type GameWindow =
+  | { kind: 'train'; id: number }
+  | { kind: 'depot'; id: number }
+  | { kind: 'station'; id: number }
+  | { kind: 'trains'; id: 0 };
+
+export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
+
+export function openWindow(w: GameWindow): void {
+  useApp.setState((s) => ({
+    windows: [...s.windows.filter((o) => windowKey(o) !== windowKey(w)), w],
+  }));
+}
+
+export function closeWindow(w: GameWindow): void {
+  useApp.setState((s) => ({ windows: s.windows.filter((o) => windowKey(o) !== windowKey(w)) }));
 }
 
 export const useApp = create<AppState>(() => ({
@@ -77,6 +102,10 @@ export const useApp = create<AppState>(() => ({
   saves: [],
   busy: null,
   stationOpts: { axis: 0, platforms: 2, length: 5 },
+  trainsRev: 0,
+  ordersFor: null,
+  focus: null,
+  windows: [],
 }));
 
 let toastId = 0;
