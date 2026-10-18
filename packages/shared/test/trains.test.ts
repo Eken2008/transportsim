@@ -70,7 +70,7 @@ describe('trains', () => {
   });
 
   test('a train shuttles between two stations, reversing at the termini', () => {
-    const { state, run, stations, buy, ticks } = line();
+    const { run, stations, buy, ticks } = line();
     const t = buy();
     run({ type: 'setOrders', id: t.id, orders: stations.map((s) => ({ kind: 'station' as const, station: s })) });
     run({ type: 'trainAction', id: t.id, action: 'start' });
@@ -103,7 +103,7 @@ describe('trains', () => {
   });
 
   test('a train never overlaps another train', () => {
-    const { state, run, stations, buy, ticks } = line();
+    const { run, stations, buy, ticks } = line();
     const a = buy();
     const b = buy();
     for (const t of [a, b]) run({ type: 'setOrders', id: t.id, orders: stations.map((s) => ({ kind: 'station' as const, station: s })) });
