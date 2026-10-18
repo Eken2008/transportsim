@@ -1,4 +1,4 @@
-import { autorailPath, nearestPiece, type Command, type PlacedPiece, type Piece } from '@transportsim/shared';
+import { autorailPath, nearestPiece, planTrack, type Command, type PlacedPiece, type Piece } from '@transportsim/shared';
 import { client } from '../net/client.ts';
 import type { TerrainHit } from '../render/picking.ts';
 import type { TrackGhost } from '../render/trackGhost.ts';
@@ -10,13 +10,17 @@ const REMOVE_OK = '#ffa657';
 const BAD = '#ff5a5f';
 
 /**
- * Click to place the piece nearest the cursor, drag to lay a straight or diagonal line
- * (autorail). Hold Ctrl — or use the remove tool — to remove track instead.
+ * Click to place the piece nearest the cursor. Drag to lay a route from the start tile to the
+ * cursor: it continues existing track, curves through 45° steps and joins track at the end.
+ * Hold Ctrl — or use the remove tool — to remove a straight or diagonal line instead.
  */
 export class RailTool implements Tool {
   private start: PlacedPiece | null = null;
   private lastKey = '';
   private lastHit: TerrainHit | null = null;
+  /** Memoised route for the current drag target. */
+  private planKey = '';
+  private planned: PlacedPiece[] | null = null;
 
   constructor(
     private readonly ghost: TrackGhost,
@@ -29,9 +33,21 @@ export class RailTool implements Tool {
     return { x: hit.tileX, y: hit.tileY, piece: nearestPiece(fx, fy) as Piece };
   }
 
-  private pieces(hit: TerrainHit): PlacedPiece[] {
+  private pieces(hit: TerrainHit, remove: boolean): PlacedPiece[] {
     if (!this.start) return [this.pieceUnder(hit)];
-    return autorailPath(this.start.x, this.start.y, this.start.piece, hit.tileX, hit.tileY);
+    const { x, y, piece } = this.start;
+    if (x === hit.tileX && y === hit.tileY) return [this.start];
+    const memo = `${x},${y},${piece}>${hit.tileX},${hit.tileY}`;
+    if (!remove && memo === this.planKey) return this.planned!;
+    if (!remove) {
+      const map = client.world?.map;
+      const owner = client.world?.state.players.get(useApp.getState().room?.playerId ?? -1)?.companyId;
+      const plan = map && owner != null ? planTrack(map, x, y, hit.tileX, hit.tileY, { owner }) : null;
+      this.planKey = memo;
+      this.planned = plan ?? autorailPath(x, y, piece, hit.tileX, hit.tileY);
+      return this.planned;
+    }
+    return autorailPath(x, y, piece, hit.tileX, hit.tileY);
   }
 
   private command(pieces: PlacedPiece[], remove: boolean): Command {
@@ -47,7 +63,7 @@ export class RailTool implements Tool {
       return;
     }
     const remove = this.removeMode || mods.ctrl;
-    const pieces = this.pieces(hit);
+    const pieces = this.pieces(hit, remove);
     const key = `${remove}|${pieces.map((p) => `${p.x},${p.y},${p.piece}`).join(';')}`;
     if (key === this.lastKey) return;
     this.lastKey = key;
@@ -69,7 +85,8 @@ export class RailTool implements Tool {
     if (!this.start) return;
     const target = hit ?? this.lastHit;
     if (target) {
-      const cmd = this.command(this.pieces(target), this.removeMode || mods.ctrl);
+      const remove = this.removeMode || mods.ctrl;
+      const cmd = this.command(this.pieces(target, remove), remove);
       void client.command(cmd).then((r) => {
         if (!r.ok && r.error && r.error !== 'Already built') toast(r.error, 'error', 2500);
       });
@@ -81,6 +98,7 @@ export class RailTool implements Tool {
 
   invalidate(): void {
     this.lastKey = '';
+    this.planKey = '';
   }
 
   cancel(): void {

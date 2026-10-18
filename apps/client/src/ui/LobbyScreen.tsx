@@ -327,8 +327,8 @@ function SavesCard({ disabled, onBeforeHost }: { disabled: boolean; onBeforeHost
             <button className="primary" disabled={disabled} onClick={() => void host(rec)}>
               Host
             </button>
-            <button className="ghost" title="Download .tsave" onClick={() => exportSave(rec)}>
-              ⤓
+            <button className="ghost" title="Download as a .tsave file" onClick={() => exportSave(rec)}>
+              ⤓ Export
             </button>
             <button
               className="ghost danger"

@@ -8,14 +8,13 @@ const LIFT = 0.06;
 /** Translucent tile highlights following the terrain, with an optional exit arrow. */
 export class AreaGhost {
   readonly mesh: THREE.Mesh;
-  private readonly material = new THREE.MeshBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.45,
-    depthWrite: false,
-  });
+  private readonly material: THREE.MeshBasicMaterial;
 
-  constructor(private readonly map: GameMap) {
+  constructor(
+    private readonly map: GameMap,
+    opacity = 0.45,
+  ) {
+    this.material = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity, depthWrite: false });
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.mesh.renderOrder = 5;
     this.mesh.frustumCulled = false;

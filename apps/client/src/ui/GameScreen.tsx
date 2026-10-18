@@ -66,6 +66,7 @@ export function GameScreen() {
       {showHelp && <Help onClose={() => setShowHelp(false)} />}
       <WindowLayer />
       <StationOptions />
+      <SignalOptions />
       <BridgeOptions />
       <Toolbar />
       <Chat />
@@ -141,6 +142,9 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
             </label>
           </>
         )}
+        <button title="Download this game as a .tsave file" onClick={() => client.exportGame()}>
+          ⤓ Export
+        </button>
         <button title="Your trains (T)" onClick={() => openWindow({ kind: 'trains', id: 0 })}>
           🚆 Trains
         </button>
@@ -178,47 +182,100 @@ function HostBanner() {
   );
 }
 
-const TOOLS: { id: ToolId; icon: string; label: string; key: string; group: number }[] = [
-  { id: 'raise', icon: '⛰', label: 'Raise land (drag for area)', key: '1', group: 0 },
-  { id: 'lower', icon: '⛏', label: 'Lower land (drag for area)', key: '2', group: 0 },
-  { id: 'level', icon: '▭', label: 'Level land (drag an area)', key: '3', group: 0 },
-  { id: 'rail', icon: '🛤', label: 'Build railway (drag; Ctrl removes)', key: '4', group: 1 },
-  { id: 'removeRail', icon: '✂', label: 'Remove railway', key: '5', group: 1 },
-  { id: 'signal', icon: '🚦', label: 'Signals (click cycles; Ctrl removes)', key: '9', group: 1 },
-  { id: 'bridge', icon: '🌉', label: 'Bridge (drag end to end)', key: 'B', group: 1 },
-  { id: 'tunnel', icon: '⛰️', label: 'Tunnel (click a slope into a hill)', key: 'N', group: 1 },
-  { id: 'station', icon: '🚉', label: 'Build station (R rotates)', key: '6', group: 1 },
-  { id: 'depot', icon: '🏚', label: 'Build train depot', key: '7', group: 1 },
-  { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', group: 2 },
+type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | 'rail' };
+
+const TOOLS: ToolDef[] = [
+  { id: 'raise', icon: '⛰', label: 'Raise land (drag for area)', key: '1', menu: 'main' },
+  { id: 'lower', icon: '⛏', label: 'Lower land (drag for area)', key: '2', menu: 'main' },
+  { id: 'level', icon: '▭', label: 'Level land (drag an area)', key: '3', menu: 'main' },
+  { id: 'rail', icon: '🛤', label: 'Build railway (drag a route; Ctrl removes)', key: '4', menu: 'rail' },
+  { id: 'removeRail', icon: '✂', label: 'Remove railway', key: '5', menu: 'rail' },
+  { id: 'signal', icon: '🚦', label: 'Signals (click: place, turn round, remove)', key: '9', menu: 'rail' },
+  { id: 'station', icon: '🚉', label: 'Station (R rotates)', key: '6', menu: 'rail' },
+  { id: 'depot', icon: '🏚', label: 'Train depot', key: '7', menu: 'rail' },
+  { id: 'bridge', icon: '🌉', label: 'Bridge (drag end to end)', key: 'B', menu: 'rail' },
+  { id: 'tunnel', icon: '⛰️', label: 'Tunnel (click a slope into a hill)', key: 'N', menu: 'rail' },
+  { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', menu: 'main' },
 ];
+
+function ToolButton({ t }: { t: ToolDef }) {
+  const tool = useApp((s) => s.tool);
+  return (
+    <button
+      className={`tool-btn ${tool === t.id ? 'active' : ''}`}
+      data-tip={t.label}
+      aria-label={t.label}
+      aria-pressed={tool === t.id}
+      onClick={() => useApp.setState({ tool: tool === t.id ? null : t.id })}
+    >
+      <span style={{ fontSize: 20 }}>{t.icon}</span>
+      <span className="key">{t.key}</span>
+    </button>
+  );
+}
 
 function Toolbar() {
   const tool = useApp((s) => s.tool);
+  const [railOpen, setRailOpen] = useState(false);
+  const railTool = TOOLS.some((t) => t.menu === 'rail' && t.id === tool);
+  const open = railOpen || railTool;
   return (
-    <div className="panel toolbar" role="toolbar" aria-label="Build tools">
-      {TOOLS.map((t, i) => [
-        i > 0 && TOOLS[i - 1]!.group !== t.group ? <div className="sep" key={'sep' + i} /> : null,
+    <>
+      {open && (
+        <div className="panel toolbar submenu" role="toolbar" aria-label="Rail tools">
+          {TOOLS.filter((t) => t.menu === 'rail').map((t) => (
+            <ToolButton key={t.id} t={t} />
+          ))}
+        </div>
+      )}
+      <div className="panel toolbar" role="toolbar" aria-label="Build tools">
+        {TOOLS.filter((t) => t.menu === 'main' && t.id !== 'bulldoze').map((t) => (
+          <ToolButton key={t.id} t={t} />
+        ))}
+        <div className="sep" />
         <button
-          key={t.id}
-          className={`tool-btn ${tool === t.id ? 'active' : ''}`}
-          data-tip={t.label}
-          aria-label={t.label}
-          aria-pressed={tool === t.id}
-          onClick={() => useApp.setState({ tool: tool === t.id ? null : t.id })}
+          className={`tool-btn menu-btn ${open ? 'active' : ''}`}
+          data-tip="Railways"
+          aria-label="Railway tools"
+          aria-expanded={open}
+          onClick={() => {
+            if (open) {
+              setRailOpen(false);
+              if (railTool) useApp.setState({ tool: null });
+            } else setRailOpen(true);
+          }}
         >
-          <span style={{ fontSize: 20 }}>{t.icon}</span>
-          <span className="key">{t.key}</span>
-        </button>,
-      ])}
-      <div className="sep" />
-      <button className="tool-btn" disabled data-tip="Roads — planned" aria-label="Roads (planned)">
-        <span style={{ fontSize: 20 }}>🛣</span>
+          <span style={{ fontSize: 20 }}>🚆</span>
+          <span className="key">▴</span>
+        </button>
+        <button className="tool-btn" disabled data-tip="Roads — planned" aria-label="Roads (planned)">
+          <span style={{ fontSize: 20 }}>🛣</span>
+        </button>
+        <button className="tool-btn" disabled data-tip="Airports — planned" aria-label="Airports (planned)">
+          <span style={{ fontSize: 20 }}>✈</span>
+        </button>
+        <button className="tool-btn" disabled data-tip="Docks — planned" aria-label="Docks (planned)">
+          <span style={{ fontSize: 20 }}>⚓</span>
+        </button>
+        <div className="sep" />
+        <ToolButton t={TOOLS.find((t) => t.id === 'bulldoze')!} />
+      </div>
+    </>
+  );
+}
+
+function SignalOptions() {
+  const tool = useApp((s) => s.tool);
+  const oneWay = useApp((s) => s.signalOneWay);
+  if (tool !== 'signal') return null;
+  return (
+    <div className="panel tool-options" role="radiogroup" aria-label="Signal type">
+      <span className="muted">Signal</span>
+      <button className={!oneWay ? 'primary' : ''} aria-pressed={!oneWay} onClick={() => useApp.setState({ signalOneWay: false })} title="Controls trains travelling its way; trains from behind pass freely">
+        Normal
       </button>
-      <button className="tool-btn" disabled data-tip="Airports — planned" aria-label="Airports (planned)">
-        <span style={{ fontSize: 20 }}>✈</span>
-      </button>
-      <button className="tool-btn" disabled data-tip="Docks — planned" aria-label="Docks (planned)">
-        <span style={{ fontSize: 20 }}>⚓</span>
+      <button className={oneWay ? 'primary' : ''} aria-pressed={oneWay} onClick={() => useApp.setState({ signalOneWay: true })} title="Like a normal signal, but trains may not pass it from behind">
+        One-way
       </button>
     </div>
   );
@@ -282,6 +339,7 @@ function StatusBar({ fps, chunks }: { fps: number; chunks: number }) {
           </span>
           {hover.cost !== undefined && <span className="cost mono">Cost {formatMoney(hover.cost)}</span>}
           {hover.error && <span className="err">{hover.error}</span>}
+          {hover.info && <span className="info">{hover.info}</span>}
         </>
       ) : (
         <span>Right-drag to pan · middle-drag to rotate · scroll to zoom · press ? for help</span>
@@ -323,7 +381,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>9</kbd> signals · <kbd>B</kbd> bridge · <kbd>N</kbd> tunnel · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
       </div>
       <div>
-        Click a depot, station or train to open it · <kbd>T</kbd> train list · <kbd>Space</kbd> pause (host)
+        Click a depot, station or train to open it · <kbd>T</kbd> train list · <kbd>Space</kbd> pause (host) · ⤓ Export downloads the game
       </div>
     </div>
   );

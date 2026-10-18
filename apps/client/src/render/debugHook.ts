@@ -1,4 +1,4 @@
-import { HEIGHT_SCALE, type Command } from '@transportsim/shared';
+import { HEIGHT_SCALE, TileType, type Command } from '@transportsim/shared';
 import * as THREE from 'three';
 import { client } from '../net/client.ts';
 import { useApp } from '../store.ts';
@@ -45,7 +45,24 @@ export function installDebugHook(r: GameRenderer): () => void {
     tile(x: number, y: number) {
       const map = client.world!.map;
       const i = map.tileIndex(x, y);
-      return { type: map.layers.type[i], data: map.layers.data[i], track: map.layers.track[i], corners: map.tileCorners(x, y) };
+      return { type: map.layers.type[i], data: map.layers.data[i], track: map.layers.track[i], signals: map.layers.signals[i], corners: map.tileCorners(x, y) };
+    },
+    /** A straight town road tile near (x, y) where a level crossing could go. */
+    findCrossingSpot(x: number, y: number) {
+      const map = client.world!.map;
+      for (let r = 0; r < 40; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== r || !map.inBounds(x + dx, y + dy)) continue;
+            const i = map.tileIndex(x + dx, y + dy);
+            const road = map.layers.data[i]! & 0xf;
+            if (map.layers.type[i] === TileType.Road && map.isFlat(x + dx, y + dy) && (road === 5 || road === 10)) {
+              return { x: x + dx, y: y + dy, piece: road === 5 ? 0 : 1 };
+            }
+          }
+        }
+      }
+      return null;
     },
     command(cmd: Command) {
       return client.command(cmd);

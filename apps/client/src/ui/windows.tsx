@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { client } from '../net/client.ts';
 import { closeWindow, openWindow, toast, useApp, windowKey, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
+import { catchmentRect, residentsIn } from '../game/catchment.ts';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
 function useTick(ms: number): void {
@@ -205,6 +206,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
           )}
         </div>
       )}
+      <ConsistEditor t={t} mine={mine} />
       <h4>Orders</h4>
       {t.orders.length === 0 && <p className="muted">No orders yet. Add the stations this train should serve.</p>}
       <ol className="orders">
@@ -361,7 +363,10 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
         <b className="mono">{Math.round((st.rating / 255) * 100)}%</b>
         <span>Waiting</span>
         <b className="mono">{st.waitingTotal} passengers</b>
+        <span>Catchment</span>
+        <b className="mono">{client.world ? residentsIn(client.world.map, catchmentRect(client.world.map, st)).toLocaleString('en-GB') : 0} residents</b>
       </div>
+      <CatchmentToggle id={st.id} />
       {waiting.length > 0 && (
         <ul className="plain small">
           {waiting.slice(0, 8).map((x) => (
@@ -403,5 +408,119 @@ function TrainListWindow({ w }: { w: GameWindow & { kind: 'trains' } }) {
         </div>
       ))}
     </Win>
+  );
+}
+
+function CatchmentToggle({ id }: { id: number }) {
+  const shown = useApp((s) => s.catchmentFor === id);
+  return (
+    <button style={{ marginTop: 10, width: '100%' }} className={shown ? 'primary' : ''} aria-pressed={shown} onClick={() => useApp.setState({ catchmentFor: shown ? null : id })}>
+      {shown ? 'Hide catchment area' : 'Show catchment area'}
+    </button>
+  );
+}
+
+/** Vehicles of a train; editable (reorder, add, remove) while it's parked in a depot. */
+function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
+  const current = t.units.map((u) => u.type);
+  const currentKey = current.join(',');
+  const [draft, setDraft] = useState<string[]>(current);
+  const [dragFrom, setDragFrom] = useState<number | null>(null);
+  const global = useApp((st) => st.global);
+  const timeline = useApp((st) => st.room?.settings.timeline ?? 'era');
+  const year = global ? ymdFromDays(global.date).year : 1900;
+  const available = RAIL_VEHICLES.filter((v) => isAvailable(v, year, timeline));
+  const [toAdd, setToAdd] = useState(available.find((v) => v.kind === 'wagon')?.id ?? available[0]?.id ?? '');
+  useEffect(() => setDraft(currentKey ? currentKey.split(',') : []), [currentKey]);
+
+  const editable = mine && t.status === 'depot';
+  const changed = draft.join(',') !== currentKey;
+  const preview = changed ? client.preview({ type: 'editConsist', id: t.id, units: draft }) : null;
+  const stats = trainStats(draft.map((type) => ({ type })));
+  const move = (from: number, to: number) => {
+    if (to < 0 || to >= draft.length || from === to) return;
+    const next = draft.slice();
+    const [u] = next.splice(from, 1);
+    next.splice(to, 0, u!);
+    setDraft(next);
+  };
+
+  return (
+    <>
+      <h4>Vehicles</h4>
+      {!editable && mine && <p className="muted small" style={{ margin: '0 0 6px' }}>Send the train to a depot to rearrange or change its vehicles.</p>}
+      <ol className="consist">
+        {draft.map((id, i) => {
+          const v = railVehicle(id);
+          return (
+            <li
+              key={i + id}
+              draggable={editable}
+              className={dragFrom === i ? 'dragging' : ''}
+              onDragStart={(e) => {
+                setDragFrom(i);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
+              onDragOver={(e) => editable && e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragFrom !== null) move(dragFrom, i);
+                setDragFrom(null);
+              }}
+              onDragEnd={() => setDragFrom(null)}
+            >
+              {editable && <span className="grip" aria-hidden>⋮⋮</span>}
+              <span className={`unit-kind ${v?.kind ?? ''}`}>{v?.kind === 'loco' ? 'Engine' : v?.cargo === 'mail' ? 'Mail' : 'Coach'}</span>
+              <span className="order-name">{v?.name ?? id}</span>
+              {editable && (
+                <>
+                  <button className="ghost small" disabled={i === 0} aria-label="Move forward" onClick={() => move(i, i - 1)}>
+                    ↑
+                  </button>
+                  <button className="ghost small" disabled={i === draft.length - 1} aria-label="Move back" onClick={() => move(i, i + 1)}>
+                    ↓
+                  </button>
+                  <button className="ghost small" aria-label="Remove vehicle" onClick={() => setDraft(draft.filter((_, k) => k !== i))}>
+                    ✕
+                  </button>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {editable && (
+        <>
+          <div className="row" style={{ marginBottom: 8 }}>
+            <select value={toAdd} onChange={(e) => setToAdd(e.target.value)} style={{ flex: 1, minWidth: 0 }} aria-label="Vehicle to add">
+              {available.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name} — {formatMoney(v.cost)}
+                </option>
+              ))}
+            </select>
+            <button onClick={() => toAdd && setDraft([...draft, toAdd])}>+ Add</button>
+            <button className="ghost" title="Reverse the order of all vehicles" onClick={() => setDraft(draft.slice().reverse())}>
+              ⇄
+            </button>
+          </div>
+          {changed && (
+            <div className="row wrap">
+              <span className={`small ${preview && !preview.ok ? 'neg' : 'muted'}`} style={{ flex: 1 }}>
+                {preview && !preview.ok
+                  ? preview.error
+                  : `${stats.capacity} seats · ${stats.maxSpeed} km/h · ${stats.length.toFixed(1)} tiles · ${preview && preview.ok ? (preview.cost >= 0 ? 'costs ' + formatMoney(preview.cost) : 'refund ' + formatMoney(-preview.cost)) : ''}`}
+              </span>
+              <button className="ghost" onClick={() => setDraft(current)}>
+                Reset
+              </button>
+              <button className="primary" disabled={!preview?.ok} onClick={() => act({ type: 'editConsist', id: t.id, units: draft })}>
+                Apply
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </>
   );
 }

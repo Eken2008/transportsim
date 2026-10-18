@@ -7,6 +7,7 @@ import {
   PIECE_COUNT,
   PIECE_EDGES,
   TileType,
+  SIGNAL_ONE_WAY,
   depotExit,
   hasPiece,
   headInfo,
@@ -18,6 +19,7 @@ import * as THREE from 'three';
 import { GeoBuilder, lin } from './geoBuilder.ts';
 import { SIGNAL_POST_HEIGHT, signalPlacement } from './signalGeometry.ts';
 import { addBridge, addHeadFoundation, addTunnelPortal } from './structureMesh.ts';
+import { addCrossingFurniture } from './crossings.ts';
 import type { Lod } from './terrainMesh.ts';
 
 const BALLAST = lin('#8f877c');
@@ -33,10 +35,14 @@ const DEPOT_WALL = lin('#a59c8e');
 const DEPOT_DOOR = lin('#2a2d31');
 const SIGNAL_POST = lin('#30343a');
 const SIGNAL_HEAD = lin('#16181b');
+const ONE_WAY_PLATE = lin('#f2f2f2');
 const _foot = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
 const LIFT = 0.012;
+const JOINT_OVERLAP = 0.06;
+const _ea = new THREE.Vector3();
+const _eb = new THREE.Vector3();
 const GAUGE = 0.15;
 
 const _a = new THREE.Vector3();
@@ -55,17 +61,21 @@ export function pieceEndpoints(map: GameMap, x: number, y: number, piece: number
 }
 
 /** Append one track piece (ballast, sleepers, rails) to a builder. */
-export function addPiece(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, lod: Lod): void {
+export function addPiece(g: GeoBuilder, a0: THREE.Vector3, b0: THREE.Vector3, lod: Lod): void {
+  // Overlap neighbouring pieces slightly so 45° joints close up without gaps.
+  _dir.subVectors(b0, a0).normalize().multiplyScalar(JOINT_OVERLAP);
+  const a = _ea.copy(a0).sub(_dir);
+  const b = _eb.copy(b0).add(_dir);
   g.color(lod >= 2 ? BALLAST_FAR : BALLAST).box(a, b, 0.42, 0.03, false);
   if (lod >= 2) return;
-  const len = a.distanceTo(b);
+  const len = a0.distanceTo(b0);
   _side.set(-(b.z - a.z), 0, b.x - a.x).normalize();
   if (lod === 0) {
     const n = Math.max(3, Math.round(len / 0.14));
     g.color(SLEEPER);
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n;
-      _p.lerpVectors(a, b, t).setY(_p.y + 0.03);
+      _p.lerpVectors(a0, b0, t).setY(_p.y + 0.03);
       const half = _q.copy(_side).multiplyScalar(0.16);
       g.box(_a2.copy(_p).sub(half), _b2.copy(_p).add(half), 0.05, 0.02, false);
     }
@@ -100,6 +110,7 @@ export function addTrack(
         const roadPiece = hasPiece(bits, 0) ? 1 : 0;
         pieceEndpoints(map, x, y, roadPiece, _a, _b);
         g.color(ROAD).box(_a.setY(_a.y - 0.005), _b.setY(_b.y - 0.005), 0.7, 0.035, false);
+        if (lod <= 1) addCrossingFurniture(g, map, x, y, roadPiece === 1);
       }
       const type = map.layers.type[i];
       const head = type === TileType.Rail ? headInfo(map, i) : null;
@@ -129,6 +140,10 @@ export function addTrack(
           const f = _foot;
           g.color(SIGNAL_POST).aabb(f.x - 0.018, f.y, f.z - 0.018, f.x + 0.018, f.y + SIGNAL_POST_HEIGHT, f.z + 0.018);
           g.color(SIGNAL_HEAD).aabb(f.x - 0.045, f.y + SIGNAL_POST_HEIGHT - 0.04, f.z - 0.045, f.x + 0.045, f.y + SIGNAL_POST_HEIGHT + 0.12, f.z + 0.045);
+          if (sig & SIGNAL_ONE_WAY) {
+            // One-way: white plate below the head.
+            g.color(ONE_WAY_PLATE).aabb(f.x - 0.055, f.y + SIGNAL_POST_HEIGHT - 0.17, f.z - 0.055, f.x + 0.055, f.y + SIGNAL_POST_HEIGHT - 0.08, f.z + 0.055);
+          }
         }
       }
     }

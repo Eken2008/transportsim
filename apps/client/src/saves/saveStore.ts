@@ -83,11 +83,16 @@ export async function loadSaveBytes(id: string): Promise<Uint8Array> {
 }
 
 export function exportSave(rec: SaveRecord): void {
-  const url = URL.createObjectURL(rec.data);
+  downloadSave(rec.name, rec.data, rec.createdAt);
+}
+
+/** Offer gzipped save data as a .tsave download. */
+export function downloadSave(name: string, data: Blob, at = Date.now()): void {
+  const url = URL.createObjectURL(data);
   const a = document.createElement('a');
-  const date = new Date(rec.createdAt).toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const date = new Date(at).toISOString().slice(0, 16).replace(/[:T]/g, '-');
   a.href = url;
-  a.download = `${rec.name.replace(/[^\w-]+/g, '_')}-${date}.tsave`;
+  a.download = `${name.replace(/[^\w-]+/g, '_')}-${date}.tsave`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

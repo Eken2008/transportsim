@@ -65,12 +65,13 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `Q` / `E`                                        | Rotate               |
 | `PgUp` / `PgDn`                                  | Tilt                 |
 | `1` / `2` / `3`                                  | Raise / lower / level land (click a corner, or drag an area) |
-| `4` / `5`                                        | Build / remove railway (drag; Ctrl removes)                  |
+| 🚆 menu                                          | Railway tools: track, signals, stations, depots, bridges, tunnels |
+| `4` / `5`                                        | Build / remove railway (drag a route from A to B; it joins existing track; Ctrl removes) |
 | `6` / `7`                                        | Station (`R` rotates) / depot                                 |
-| `9`                                              | Signals (click cycles one way → other way → both → none)     |
+| `9`                                              | Signals: click places, turns round, removes; choose normal or one-way (no passing from behind) |
 | `B` / `N`                                        | Bridge (drag end to end) / tunnel (click a slope into a hill) |
 | `8`                                              | Bulldoze an area                                             |
-| Click                                            | Open a depot, station or train                               |
+| Click                                            | Open a depot, station (show its catchment) or train (rearrange vehicles in a depot) |
 | `T`                                              | Train list                                                   |
 | `Esc`                                            | Deselect tool        |
 | `Space`                                          | Pause (host only)    |

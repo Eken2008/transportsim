@@ -1,4 +1,7 @@
 import {
+  CHUNK_SIZE,
+  CROSSING_FLAG,
+  TileType,
   GameMap,
   GameState,
   applyChunk,
@@ -30,6 +33,9 @@ export class ClientWorld {
   /** Signal tile → mask of trackdirs showing red (only for tiles near our view). */
   readonly signalRed = new Map<number, number>();
   signalsRev = 0;
+  /** Level crossing tiles in received chunks (for barrier animation). */
+  readonly crossings = new Set<number>();
+  private chunkCrossings = new Map<number, number[]>();
   /** Hook for transient effects (income labels); set by the renderer. */
   onIncome: ((tile: number, amount: number) => void) | null = null;
 
@@ -48,8 +54,24 @@ export class ClientWorld {
 
   applyChunk(data: ChunkData): void {
     applyChunk(this.state.map, data);
+    this.indexCrossings(data.cx, data.cy);
     this.loaded[data.cy * this.state.map.chunksX + data.cx] = 1;
     for (const l of this.chunkListeners) l(data.cx, data.cy);
+  }
+
+  private indexCrossings(cx: number, cy: number): void {
+    const map = this.state.map;
+    const id = cy * map.chunksX + cx;
+    for (const t of this.chunkCrossings.get(id) ?? []) this.crossings.delete(t);
+    const found: number[] = [];
+    for (let y = cy * CHUNK_SIZE; y < (cy + 1) * CHUNK_SIZE; y++) {
+      for (let x = cx * CHUNK_SIZE; x < (cx + 1) * CHUNK_SIZE; x++) {
+        const i = y * map.width + x;
+        if (map.layers.type[i] === TileType.Rail && map.layers.data[i]! & CROSSING_FLAG) found.push(i);
+      }
+    }
+    for (const t of found) this.crossings.add(t);
+    this.chunkCrossings.set(id, found);
   }
 
   applyGlobal(g: GlobalState): void {
@@ -78,10 +100,19 @@ export class ClientWorld {
   }
 
   applyTrains(trains: TrainInfo[], removed: number[], full: boolean): void {
-    if (full) this.trains.clear();
-    for (const t of trains) this.trains.set(t.id, t);
+    if (full) {
+      this.trains.clear();
+      this.state.trains.clear();
+    }
+    for (const t of trains) {
+      this.trains.set(t.id, t);
+      // Mirror into the game state so command previews (e.g. editing a consist) can validate.
+      this.state.trains.set(t.id, { ...t, path: [], pos: 0, route: [], routeFor: '', replanAt: 0 });
+      this.state.rail.invalidateStats(this.state.trains.get(t.id)!);
+    }
     for (const id of removed) {
       this.trains.delete(id);
+      this.state.trains.delete(id);
       this.motions.delete(id);
     }
     // Trains parked in a depot are no longer on the map.

@@ -8,7 +8,7 @@ import {
   type ServerMessage,
 } from '@transportsim/shared';
 import { ClientWorld } from '../game/clientWorld.ts';
-import { listSaves, putSave, requestPersistentStorage } from '../saves/saveStore.ts';
+import { downloadSave, gzip, listSaves, putSave, requestPersistentStorage } from '../saves/saveStore.ts';
 import { toast, useApp } from '../store.ts';
 import { storageGet, storageSet, getClientId, getPlayerName } from './identity.ts';
 import { Connection, serverUrl } from './connection.ts';
@@ -176,6 +176,15 @@ class AppClient {
   private async storeSave(m: Extract<ServerMessage, { t: 'saveData' }>): Promise<void> {
     const room = useApp.getState().room;
     if (!room) return;
+    if (m.export) {
+      try {
+        downloadSave(m.name, await gzip(m.snapshot));
+        toast('Save file downloaded', 'success', 2500);
+      } catch (e) {
+        toast(`Export failed: ${(e as Error).message}`, 'error');
+      }
+      return;
+    }
     if (m.kind === 'auto' && !useApp.getState().autosave) return; // consent revoked meanwhile
     try {
       const s = room.settings;
@@ -230,6 +239,12 @@ class AppClient {
 
   requestSave(): void {
     this.conn.send({ t: 'requestSave' });
+  }
+
+  /** Download the current game as a .tsave file (any player). */
+  exportGame(): void {
+    toast('Preparing save file…', 'info', 1500);
+    this.conn.send({ t: 'requestSave', export: true });
   }
 
   chat(text: string): void {

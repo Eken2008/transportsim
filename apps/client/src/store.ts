@@ -39,6 +39,8 @@ export interface HoverInfo {
   height: number;
   cost?: number;
   error?: string;
+  /** Neutral extra information (e.g. catchment residents). */
+  info?: string;
 }
 
 export interface AppState {
@@ -60,6 +62,10 @@ export interface AppState {
   stationOpts: StationOptions;
   /** Bridge type for the bridge tool; null picks the cheapest that fits. */
   bridgeType: number | null;
+  /** Signal tool places one-way signals (no passing from behind). */
+  signalOneWay: boolean;
+  /** Station whose catchment area is shown (toggled from its window). */
+  catchmentFor: number | null;
   /** Bumped when train details change, so windows re-render. */
   trainsRev: number;
   /** Train whose orders the orders tool is editing. */
@@ -105,6 +111,8 @@ export const useApp = create<AppState>(() => ({
   busy: null,
   stationOpts: { axis: 0, platforms: 2, length: 5 },
   bridgeType: null,
+  signalOneWay: false,
+  catchmentFor: null,
   trainsRev: 0,
   ordersFor: null,
   focus: null,

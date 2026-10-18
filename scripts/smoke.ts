@@ -232,6 +232,66 @@ try {
   await a.waitForTimeout(2500);
   await a.screenshot({ path: `${outDir}/03d-structures.png` });
 
+  // --- Feedback round: route joining, one-way signals, crossing, catchment, consist, export ---
+  type TileInfo = { type: number; data: number; track: number; signals: number };
+  const tileAt = (x: number, y: number) =>
+    hook((h, t: number[]) => (h as unknown as { tile(x: number, y: number): TileInfo }).tile(t[0]!, t[1]!), [x, y]);
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y, yaw: 0.35, pitch: 1.05, distance: 34 }), { x: sx, y: sy });
+  await a.waitForTimeout(1500);
+  // Rail tools live in the rail menu, which opens when a rail tool is picked.
+  await a.keyboard.press('Digit4');
+  check(await a.getByRole('toolbar', { name: 'Rail tools' }).isVisible(), 'rail tools are in the rail menu');
+  // A curve off the end of the east-west line joins it.
+  await dragTiles(sx + 11, sy - 4, sx + 13, sy + 3);
+  await a.waitForTimeout(800);
+  const joint = await tileAt(sx + 11, sy - 4);
+  check(joint.track !== 0, 'dragged route continues the existing line');
+  await a.screenshot({ path: `${outDir}/04a-curve.png` });
+  // One-way signal
+  await a.keyboard.press('Digit9');
+  await a.getByRole('button', { name: 'One-way' }).click();
+  await clickTile(sx - 8, sy - 4);
+  check(((await tileAt(sx - 8, sy - 4)).signals & 0x1000) !== 0, 'placed a one-way signal');
+  await a.keyboard.press('Escape');
+  // Level crossing over a town road
+  const spot = await hook((h, s: { x: number; y: number }) => (h as unknown as { findCrossingSpot(x: number, y: number): { x: number; y: number; piece: number } | null }).findCrossingSpot(s.x, s.y), spawn);
+  if (spot) {
+    const r = await hook((h, c: object) => h.command(c), { type: 'buildTrack', pieces: [spot.x, spot.y, spot.piece] });
+    check(r.ok, `built a level crossing${r.ok ? '' : `: ${r.error}`}`);
+    await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y, yaw: 0.8, pitch: 0.65, distance: 6 }), spot);
+    await a.waitForTimeout(2000);
+    await a.screenshot({ path: `${outDir}/04b-crossing.png` });
+  }
+  // Catchment from the station window
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y - 4, yaw: 0.35, pitch: 1.0, distance: 30 }), { x: sx, y: sy });
+  await a.waitForTimeout(1500);
+  await clickTile(sx, sy - 4);
+  const stationWin = a.locator('.window', { hasText: 'Catchment' });
+  await stationWin.getByRole('button', { name: 'Show catchment area' }).click();
+  await a.waitForTimeout(800);
+  check((await stationWin.innerText()).includes('residents'), 'station window shows catchment residents');
+  await a.screenshot({ path: `${outDir}/04c-catchment.png` });
+  await stationWin.getByRole('button', { name: 'Hide catchment area' }).click();
+  // Rearrange a parked train's vehicles
+  while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
+  await clickTile(sx - 11, sy - 4);
+  const depot2 = a.locator('.window', { hasText: 'Train depot' });
+  await depot2.getByRole('button', { name: /^Buy for/ }).click();
+  await a.waitForTimeout(600);
+  await depot2.getByRole('button', { name: 'Open' }).first().click();
+  const parked = a.locator('.window', { hasText: 'Vehicles' }).last();
+  const firstBefore = await parked.locator('ol.consist li').nth(0).innerText();
+  await parked.locator('ol.consist li').nth(1).getByRole('button', { name: 'Move forward' }).click();
+  await parked.getByRole('button', { name: 'Apply' }).click();
+  await a.waitForTimeout(800);
+  const firstAfter = await parked.locator('ol.consist li').nth(0).innerText();
+  check(firstBefore !== firstAfter, `rearranged the train (${firstBefore.split('\n').join(' ')} → ${firstAfter.split('\n').join(' ')})`);
+  await a.screenshot({ path: `${outDir}/04d-consist.png` });
+  while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
+  // Export the game as a file
+  const [download] = await Promise.all([a.waitForEvent('download', { timeout: 15_000 }), a.getByRole('button', { name: /Export/ }).click()]);
+  check(download.suggestedFilename().endsWith('.tsave'), `exported ${download.suggestedFilename()}`);
+
   // Second player joins by code
   const code = (await a.getByTitle('Copy game code').innerText()).trim();
   await b.goto(`http://localhost:${PORT}/`);

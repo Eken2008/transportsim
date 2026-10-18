@@ -16,11 +16,13 @@ import { TrackGhost } from './trackGhost.ts';
 import { TrainRenderer } from './trainRenderer.ts';
 import { SignalLights } from './signalLights.ts';
 import { FloatingText } from './floatingText.ts';
+import { CrossingBooms } from './crossings.ts';
 import { SignalTool } from '../tools/signalTool.ts';
 import { BridgeTool, TunnelTool } from '../tools/structureTools.ts';
 import { TileType } from '@transportsim/shared';
 import { openWindow } from '../store.ts';
 import { OrdersTool } from '../tools/ordersTool.ts';
+import { catchmentRect, rectTiles } from '../game/catchment.ts';
 
 const SKY = new THREE.Color('#a8c8e6');
 
@@ -35,9 +37,12 @@ export class GameRenderer {
   readonly ghost: TrackGhost;
   readonly labels: LabelLayer;
   readonly area: AreaGhost;
+  /** Station catchment overlay (station tool preview or a station window toggle). */
+  readonly catchment: AreaGhost;
   readonly trains: TrainRenderer;
   readonly signalLights: SignalLights;
   readonly floaters: FloatingText;
+  readonly crossings: CrossingBooms;
   private downAt: { x: number; y: number } | null = null;
 
   private readonly canvas: HTMLCanvasElement;
@@ -76,11 +81,16 @@ export class GameRenderer {
     this.ghost = new TrackGhost(world.map);
     this.area = new AreaGhost(world.map);
     this.scene.add(this.area.mesh);
+    this.catchment = new AreaGhost(world.map, 0.2);
+    this.catchment.mesh.renderOrder = 4;
+    this.scene.add(this.catchment.mesh);
     this.trains = new TrainRenderer(world);
     this.scene.add(this.trains.root);
     this.signalLights = new SignalLights(world);
     this.scene.add(this.signalLights.mesh);
     this.floaters = new FloatingText(canvas.parentElement!, world);
+    this.crossings = new CrossingBooms(world);
+    this.scene.add(this.crossings.root);
     world.onIncome = (tile, amount) => this.floaters.add(tile, '+£' + Math.round(amount).toLocaleString('en-GB'));
     this.labels = new LabelLayer(canvas.parentElement!, world);
     this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
@@ -132,7 +142,8 @@ export class GameRenderer {
       useApp.subscribe((s, prev) => {
         if (s.focus && s.focus !== prev.focus) this.lookAt(s.focus.x + 0.5, s.focus.y + 0.5);
         if (s.tool !== prev.tool) this.setTool(s.tool);
-        else if (s.stationOpts !== prev.stationOpts || s.bridgeType !== prev.bridgeType) {
+        if (s.catchmentFor !== prev.catchmentFor || s.tool !== prev.tool) this.showStationCatchment();
+        else if (s.stationOpts !== prev.stationOpts || s.bridgeType !== prev.bridgeType || s.signalOneWay !== prev.signalOneWay) {
           this.tool?.invalidate?.();
           this.hoverDirty = true;
         }
@@ -167,7 +178,7 @@ export class GameRenderer {
         this.tool = new RailTool(this.ghost, id === 'removeRail');
         break;
       case 'station':
-        this.tool = new StationTool(this.area);
+        this.tool = new StationTool(this.area, this.catchment);
         break;
       case 'depot':
         this.tool = new DepotTool(this.area);
@@ -200,6 +211,15 @@ export class GameRenderer {
       this.mods = { ctrl, shift: e.shiftKey };
       this.hoverDirty = true;
     }
+  }
+
+  /** Show the catchment of the station picked in its window (unless the station tool is using the overlay). */
+  private showStationCatchment(): void {
+    const s = useApp.getState();
+    if (s.tool === 'station') return;
+    const st = s.catchmentFor !== null ? this.world.state.stations.get(s.catchmentFor) : undefined;
+    if (!st) return this.catchment.hide();
+    this.catchment.show(rectTiles(catchmentRect(this.world.map, st)), '#58a6ff');
   }
 
   /** Click with no tool: open the train, depot or station under the cursor. */
@@ -249,6 +269,7 @@ export class GameRenderer {
     this.controller.update(dt);
     this.trains.update(now, useApp.getState().global?.speed ?? 1);
     this.signalLights.update();
+    this.crossings.update(dt, now, this.controller.target);
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;
     fog.far = this.controller.distance * 9 + 300;
@@ -283,9 +304,11 @@ export class GameRenderer {
     this.ghost.dispose();
     this.labels.dispose();
     this.area.dispose();
+    this.catchment.dispose();
     this.trains.dispose();
     this.signalLights.dispose();
     this.floaters.dispose();
+    this.crossings.dispose();
     this.world.onIncome = null;
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();
