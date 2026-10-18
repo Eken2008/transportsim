@@ -15,6 +15,7 @@ import { pickTerrain, type TerrainHit } from './picking.ts';
 import { TrackGhost } from './trackGhost.ts';
 import { TrainRenderer } from './trainRenderer.ts';
 import { SignalLights } from './signalLights.ts';
+import { FloatingText } from './floatingText.ts';
 import { SignalTool } from '../tools/signalTool.ts';
 import { TileType } from '@transportsim/shared';
 import { openWindow } from '../store.ts';
@@ -35,6 +36,7 @@ export class GameRenderer {
   readonly area: AreaGhost;
   readonly trains: TrainRenderer;
   readonly signalLights: SignalLights;
+  readonly floaters: FloatingText;
   private downAt: { x: number; y: number } | null = null;
 
   private readonly canvas: HTMLCanvasElement;
@@ -77,6 +79,8 @@ export class GameRenderer {
     this.scene.add(this.trains.root);
     this.signalLights = new SignalLights(world);
     this.scene.add(this.signalLights.mesh);
+    this.floaters = new FloatingText(canvas.parentElement!, world);
+    world.onIncome = (tile, amount) => this.floaters.add(tile, '+£' + Math.round(amount).toLocaleString('en-GB'));
     this.labels = new LabelLayer(canvas.parentElement!, world);
     this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
     client.resubscribe = () => this.chunks.resubscribe();
@@ -253,6 +257,7 @@ export class GameRenderer {
 
     this.renderer.render(this.scene, this.camera);
     this.labels.update(this.camera, this.canvas.clientWidth, this.canvas.clientHeight, this.controller.distance);
+    this.floaters.update(this.camera, this.canvas.clientWidth, this.canvas.clientHeight);
 
     this.fpsFrames++;
     if (now - this.fpsTime > 1000) {
@@ -273,6 +278,8 @@ export class GameRenderer {
     this.area.dispose();
     this.trains.dispose();
     this.signalLights.dispose();
+    this.floaters.dispose();
+    this.world.onIncome = null;
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();
   }

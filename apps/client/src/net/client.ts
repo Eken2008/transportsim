@@ -114,6 +114,9 @@ class AppClient {
       case 'signals':
         this.world?.applySignals(m.tiles, m.red);
         return;
+      case 'income':
+        this.world?.onIncome?.(m.tile, m.amount);
+        return;
       case 'global':
         this.world?.applyGlobal(m.global);
         useApp.setState({ global: m.global });

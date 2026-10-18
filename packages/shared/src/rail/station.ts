@@ -23,6 +23,8 @@ export interface Station {
   waitingTotal: number;
   /** 0..255 like OpenTTD; affects how much cargo the station receives. */
   rating: number;
+  /** Day a train last picked up passengers here. */
+  lastPickup?: number;
 }
 
 /** Catchment radius around rail station tiles. */

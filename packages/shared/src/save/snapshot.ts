@@ -133,6 +133,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       waiting,
       waitingTotal: total,
       rating: num(s.rating, 175),
+      lastPickup: typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
     });
   }
   for (let i = 0; i < map.layers.type.length; i++) {

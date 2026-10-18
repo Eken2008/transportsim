@@ -1,6 +1,7 @@
 import { COMPANY_COLORS, MAX_COMPANIES, type Company } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
+import { PassengerSystem } from '../economy/passengers.ts';
 import { RailSystem } from '../vehicles/railSystem.ts';
 import type { Train } from '../vehicles/train.ts';
 import { GameMap } from '../world/map.ts';
@@ -48,6 +49,7 @@ export class GameState {
   /** Tile indices that carry at least one signal. */
   readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
+  readonly passengers: PassengerSystem;
   private nextPlayerId = 1;
   /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
   trackVersion = 0;
@@ -57,6 +59,9 @@ export class GameState {
     this.map = map;
     this.date = date ?? daysFromYmd(settings.startYear, 0, 1);
     this.rail = new RailSystem(this);
+    this.passengers = new PassengerSystem(this);
+    this.rail.onArrive = (t, s) => this.passengers.arrive(t, s);
+    this.rail.onLoading = (t, s) => this.passengers.loading(t, s);
   }
 
   static create(settings: GameSettings): GameState {
@@ -93,6 +98,7 @@ export class GameState {
   }
 
   private onNewDay(): void {
+    this.passengers.daily();
     // Running costs for vehicles out of the depot, charged daily.
     for (const t of this.trains.values()) {
       if (t.status === 'depot') continue;

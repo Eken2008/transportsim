@@ -30,6 +30,8 @@ export class ClientWorld {
   /** Signal tile → mask of trackdirs showing red (only for tiles near our view). */
   readonly signalRed = new Map<number, number>();
   signalsRev = 0;
+  /** Hook for transient effects (income labels); set by the renderer. */
+  onIncome: ((tile: number, amount: number) => void) | null = null;
 
   constructor(settings: GameSettings) {
     this.state = new GameState(settings, new GameMap(settings.mapWidth, settings.mapHeight));

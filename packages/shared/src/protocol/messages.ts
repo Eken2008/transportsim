@@ -80,6 +80,8 @@ export type ServerMessage =
   | { t: 'trainPos'; trains: TrainMotion[] }
   /** Aspects of signals in subscribed chunks: `red[i]` is the red-trackdir mask of `tiles[i]`. */
   | { t: 'signals'; tiles: number[]; red: number[] }
+  /** A train was paid at a station (floating "+£" label). */
+  | { t: 'income'; tile: number; amount: number }
   | { t: 'global'; global: GlobalState }
   | { t: 'commandResult'; seq: number; ok: boolean; error?: string; cost?: number }
   /** Host connectivity; when disconnected the room closes at `closesAt` (epoch ms). */

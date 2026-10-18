@@ -317,6 +317,7 @@ export class Room {
       this.broadcast({ t: 'global', global: this.globalState() });
     }
     const st = this.state;
+    const map = st.map;
     if (st.dirtyStations.size > 0 || st.removedStations.size > 0) {
       const stations = [...st.dirtyStations].map((id) => st.stations.get(id)).filter((s) => s !== undefined);
       this.broadcast({ t: 'stations', stations, removed: [...st.removedStations], full: false });
@@ -328,6 +329,16 @@ export class Room {
       this.broadcast({ t: 'trains', trains, removed: [...st.removedTrains], full: false });
       st.dirtyTrains.clear();
       st.removedTrains.clear();
+    }
+    const events = this.state.passengers.events;
+    if (events.length > 0) {
+      for (const ev of events) {
+        const x = ev.tile % map.width;
+        const chunk = Math.floor((ev.tile - x) / map.width / CHUNK_SIZE) * map.chunksX + Math.floor(x / CHUNK_SIZE);
+        for (const s of this.sessions) if (s.subscribed.has(chunk)) this.send(s, { t: 'income', tile: ev.tile, amount: ev.amount });
+      }
+      events.length = 0;
+      this.globalDirty = true;
     }
     const now = performance.now();
     if (now - this.lastPosAt >= POS_INTERVAL_MS) {
