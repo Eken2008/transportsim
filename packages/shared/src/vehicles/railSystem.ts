@@ -8,11 +8,13 @@ import {
   segReverse,
   segTd,
   segTile,
+  segPiece,
   segmentExists,
   segmentsConnect,
 } from '../rail/network.ts';
 import { depotGoal, extendThroughPlatform, findPath, stationGoal, type PathGoal } from '../rail/pathfinder.ts';
 import { headInfo, otherHead, segHeights } from '../rail/structures.ts';
+import { EDGE_PIECES, isLinked } from '../rail/links.ts';
 import {
   EDGE_DX,
   EDGE_DY,
@@ -44,6 +46,8 @@ const REPLAN_DELAY = 45;
 const CREEP_KMH = 4;
 
 const DT = 1 / TICKS_PER_SECOND;
+/** The parallel (non-touching) partner of each corner piece. */
+const PARALLEL_PIECE = [-1, -1, 4, 5, 2, 3];
 
 /** Distance (tiles) needed to stop from `kmh`. */
 export function brakingDistance(kmh: number): number {
@@ -107,8 +111,24 @@ export class RailSystem {
     return false;
   }
 
+  /**
+   * Is this piece — or a piece crossing it on the same tile — occupied by another train?
+   * Tracks that cross or touch on one tile can't both carry trains at once.
+   */
   private occupiedByOther(s: number, id: number): boolean {
-    const set = this.occ.get(pieceKey(s));
+    const tile = segTile(s);
+    const p = segPiece(s);
+    if (p >= 6) return this.pieceBusy(tile * 8 + p, id);
+    const bits = this.state.map.layers.track[tile]!;
+    for (let q = 0; q < 6; q++) {
+      if (!hasPiece(bits, q) || (q !== p && q === PARALLEL_PIECE[p])) continue;
+      if (this.pieceBusy(tile * 8 + q, id)) return true;
+    }
+    return false;
+  }
+
+  private pieceBusy(key: number, id: number): boolean {
+    const set = this.occ.get(key);
     if (!set) return false;
     for (const o of set) if (o !== id) return true;
     return false;
@@ -252,10 +272,8 @@ export class RailSystem {
             const entry = OPPOSITE_EDGE[e];
             const nHead = headInfo(map, nt);
             if (nHead && nHead.dir === entry) continue; // bridge head seen from below
-            for (let q = 0; q < 6; q++) {
-              if (!hasPiece(track[nt]!, q)) continue;
-              const [q0, q1] = PIECE_EDGES[q]!;
-              if (q0 !== entry && q1 !== entry) continue;
+            for (const q of EDGE_PIECES[entry]!) {
+              if (!hasPiece(track[nt]!, q) || !isLinked(map, ct, cp, e, q)) continue;
               if (this.boundary(ct, cp, e, nt, q)) continue;
               visit(nt * 8 + q);
             }

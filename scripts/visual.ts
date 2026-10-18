@@ -100,10 +100,10 @@ try {
   await page.keyboard.press('Digit4');
   await drag(ox - 8, oy + 10, ox + 8, oy + 10);
   await drag(ox - 8, oy + 11, ox + 8, oy + 11); // double track: rows 10 and 11
-  await drag(ox - 1, oy + 18, ox + 2, oy + 10); // from below to the far line
-  await drag(ox - 5, oy + 10, ox - 7, oy + 17); // from the far line down past the near one
+  await drag(ox - 7, oy + 17, ox + 1, oy + 4); // a diagonal straight over both tracks
+  await drag(ox + 4, oy + 18, ox + 4, oy + 10); // straight up, ending on the far track
   await page.keyboard.press('Escape');
-  await view({ x: ox - 2, y: oy + 12, yaw: 0, pitch: 1.4, distance: 9 });
+  await view({ x: ox - 1, y: oy + 11, yaw: 0, pitch: 1.4, distance: 10 });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${outDir}/tool-junction.png` });
 

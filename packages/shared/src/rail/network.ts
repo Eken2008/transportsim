@@ -2,6 +2,7 @@ import { TileType } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
 import { depotExit } from './station.ts';
 import { headInfo, spanOver } from './structures.ts';
+import { EDGE_PIECES, isLinked } from './links.ts';
 import {
   EDGE_DX,
   EDGE_DY,
@@ -79,16 +80,13 @@ export function nextSegments(map: GameMap, s: number, owner: number, out: number
   const type = map.layers.type[n]!;
   if (!isTrackTile(type) || map.layers.owner[n] !== owner) return out;
   if (type === TileType.Depot && entry !== depotExit(map.layers.data[n]!)) return out;
-  // Heights must match at the shared edge (they do by construction, since corners are shared).
+  // Only pieces explicitly linked to ours continue it.
   const bits = map.layers.track[n]!;
   const heading = TD_HEADING[td]!;
-  for (let p = 0; p < 6; p++) {
-    if (!hasPiece(bits, p)) continue;
-    const [e0, e1] = PIECE_EDGES[p]!;
-    let ntd: number;
-    if (e0 === entry) ntd = trackdir(p, 0);
-    else if (e1 === entry) ntd = trackdir(p, 1);
-    else continue;
+  const piece = td >> 1;
+  for (const p of EDGE_PIECES[entry]!) {
+    if (!hasPiece(bits, p) || !isLinked(map, tile, piece, exit, p)) continue;
+    const ntd = trackdir(p, PIECE_EDGES[p]![0] === entry ? 0 : 1);
     if (turnSteps(heading, TD_HEADING[ntd]!) > 1) continue;
     // One-way signals can't be passed from behind.
     const sig = map.layers.signals[n]!;

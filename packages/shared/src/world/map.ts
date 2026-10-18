@@ -2,6 +2,7 @@ import { CHUNK_SIZE, Ground, MAX_TREES, OWNER_NONE, TileType } from './constants
 
 type TypedArrayCtor =
   | Uint8ArrayConstructor
+  | Uint32ArrayConstructor
   | Uint16ArrayConstructor
   | Uint32ArrayConstructor
   | Int16ArrayConstructor;
@@ -20,6 +21,8 @@ export const TILE_LAYERS = {
   data: Uint16Array,
   /** Track piece bits 0-5 (see rail/track.ts) on Rail, Station and Depot tiles. */
   track: Uint8Array,
+  /** Explicit track connections across this tile's N and W edges (see rail/links.ts). */
+  links: Uint32Array,
   /** Signals on Rail tiles: bit `trackdir` set = signal facing trains on that trackdir. */
   signals: Uint16Array,
   /** Town id + 1 for town-owned tiles (houses, town roads); 0 = none. */
@@ -141,6 +144,7 @@ export class GameMap {
     this.layers.track[i] = 0;
     this.layers.town[i] = 0;
     this.layers.signals[i] = 0;
+    this.layers.links[i] = 0;
   }
 
   setWater(i: number): void {
@@ -150,6 +154,7 @@ export class GameMap {
     this.layers.track[i] = 0;
     this.layers.town[i] = 0;
     this.layers.signals[i] = 0;
+    this.layers.links[i] = 0;
   }
 
   chunkIndex(cx: number, cy: number): number {

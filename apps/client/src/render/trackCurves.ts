@@ -11,6 +11,7 @@ import {
   depotExit,
   hasPiece,
   headInfo,
+  isLinked,
   segHeights,
   trackdir,
   turnSteps,
@@ -123,15 +124,34 @@ export class TrackCurves {
     };
     const mine = this.piecesTouching(tile, edge);
     const theirs = this.piecesTouching(n, back);
-    // Valid pairs: a piece here continuing into a piece there with at most a 45° turn.
-    const pairs: { a: number; b: number; turn: number }[] = [];
+    // Connected pairs across this joint (pieces that merely touch don't count).
+    const all: { a: number; b: number; turn: number }[] = [];
     for (const a of mine) {
       for (const b of theirs) {
+        if (!isLinked(this.map, tile, a, edge as 0, b)) continue;
         const turn = turnSteps(heading(tile, a, edge, true), heading(n, b, back, false));
-        if (turn <= 1) pairs.push({ a, b, turn });
+        if (turn <= 1) all.push({ a, b, turn });
       }
     }
-    if (!pairs.some((p) => p.a === piece)) return null;
+    if (!all.some((p) => p.a === piece)) return null;
+    // Only the group of pieces connected to ours shapes our joint; a track crossing at the same
+    // point (touching but not connected) keeps its own direction.
+    const groupA = new Set([piece]);
+    const groupB = new Set<number>();
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const p of all) {
+        if (groupA.has(p.a) && !groupB.has(p.b)) {
+          groupB.add(p.b);
+          changed = true;
+        }
+        if (groupB.has(p.b) && !groupA.has(p.a)) {
+          groupA.add(p.a);
+          changed = true;
+        }
+      }
+    }
+    const pairs = all.filter((p) => groupA.has(p.a));
     const dirA = (a: number) => this.outward(tile, a, edge);
     const dirB = (b: number) => this.outward(n, b, back).negate();
     const straight = pairs.find((p) => p.turn === 0);

@@ -8,6 +8,7 @@ import {
   type Station,
 } from '../rail/station.ts';
 import { headInfo, otherHead, structuresAt } from '../rail/structures.ts';
+import { linkPlaced, unlinkPieces } from '../rail/links.ts';
 import { EDGE_DX, EDGE_DY, Piece, hasPiece } from '../rail/track.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { CROSSING_FLAG } from './track.ts';
@@ -129,6 +130,10 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
           const tx = i % map.width;
           map.touchTile(tx, (i - tx) / map.width, dirtyChunks);
         }
+        for (const t of linkPlaced(map, tiles, tiles.map(() => piece))) {
+          const tx = t % map.width;
+          map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
+        }
         st.x0 = Math.min(st.x0, x);
         st.y0 = Math.min(st.y0, y);
         st.x1 = Math.max(st.x1, x + w - 1);
@@ -165,6 +170,10 @@ export const buildDepotHandler: CommandHandler<BuildDepotCommand> = {
         state.depots.add(i);
         const dirtyChunks = new Set<number>();
         map.touchTile(x, y, dirtyChunks);
+        for (const t of linkPlaced(map, [i], [exit === 1 || exit === 3 ? Piece.X : Piece.Y])) {
+          const tx = t % map.width;
+          map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
+        }
         state.onTrackChanged();
         return { dirtyChunks };
       },
@@ -255,6 +264,12 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
         for (const { i, kind } of jobs) {
           const x = i % map.width;
           const y = (i - x) / map.width;
+          if (kind !== 'trees') {
+            for (const t of unlinkPieces(map, i, map.layers.track[i]!)) {
+              const tx = t % map.width;
+              map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
+            }
+          }
           if (kind === 'trees') {
             const ground = (map.layers.data[i]! >> 3) & 7;
             map.setClear(i, ground as Ground, 0);

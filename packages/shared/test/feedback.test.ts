@@ -47,70 +47,70 @@ function reachable(state: GameState, start: number, owner: number): Set<number> 
   return seen;
 }
 
-describe('route planner', () => {
-  test('a dragged route continues existing track without 90° turns', () => {
+/** Segments reachable by driving from `start` (following links). */
+function drive(state: GameState, start: number, owner: number): Set<number> {
+  return reachable(state, start, owner);
+}
+const tileOf = (s: number) => Math.floor(s / 16);
+
+describe('explicit track connections', () => {
+  test('a diagonal built across a straight line crosses it without connecting', () => {
     const { state, map, build, owner } = world();
-    // Existing line heading east, ending at x = 20.
+    build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 20, piece: Piece.X })));
+    // A separate diagonal staircase over the line: pieces on the line's tiles touch its edges.
+    build([
+      { x: 18, y: 23, piece: Piece.SE }, { x: 19, y: 23, piece: Piece.NW }, { x: 19, y: 22, piece: Piece.SE },
+      { x: 20, y: 22, piece: Piece.NW }, { x: 20, y: 21, piece: Piece.SE }, { x: 21, y: 21, piece: Piece.NW },
+      { x: 21, y: 20, piece: Piece.SE }, { x: 22, y: 20, piece: Piece.NW }, { x: 22, y: 19, piece: Piece.SE },
+      { x: 23, y: 19, piece: Piece.NW },
+    ]);
+    // Driving east along the line never leaves it.
+    const along = drive(state, seg(map.tileIndex(10, 20), trackdir(Piece.X, 0)), owner);
+    expect([...along].every((s) => Math.floor(tileOf(s) / map.width) === 20 && (s % 16) >> 1 === Piece.X)).toBe(true);
+    expect([...along].some((s) => tileOf(s) === map.tileIndex(30, 20))).toBe(true);
+    // Driving the diagonal crosses the line and carries on.
+    const diag = drive(state, seg(map.tileIndex(18, 23), trackdir(Piece.SE, 0)), owner);
+    expect([...diag].some((s) => tileOf(s) === map.tileIndex(23, 19))).toBe(true);
+    expect([...diag].some((s) => (s % 16) >> 1 === Piece.X)).toBe(false);
+  });
+
+  test('building at a loose end connects; touching mid-way does not', () => {
+    const { state, map, build, owner } = world();
+    build(Array.from({ length: 5 }, (_, k) => ({ x: 10 + k, y: 30, piece: Piece.X })));
+    // A single piece placed at the end of the line continues it.
+    build([{ x: 15, y: 30, piece: Piece.X }]);
+    expect(drive(state, seg(map.tileIndex(10, 30), trackdir(Piece.X, 0)), owner).has(seg(map.tileIndex(15, 30), trackdir(Piece.X, 0)))).toBe(true);
+    // A corner piece added on a line tile is a deliberate switch: its loose end joins the line.
+    build([{ x: 12, y: 30, piece: Piece.SW }, { x: 12, y: 31, piece: Piece.NE }]);
+    // Eastbound on the line, the switch at x = 12 leads onto the corner piece (W→S).
+    const from = drive(state, seg(map.tileIndex(10, 30), trackdir(Piece.X, 0)), owner);
+    expect(from.has(seg(map.tileIndex(12, 30), trackdir(Piece.SW, 1)))).toBe(true);
+  });
+
+  test('a dragged route starting on a line continues it', () => {
+    const { state, map, build, owner } = world();
     build(Array.from({ length: 11 }, (_, k) => ({ x: 10 + k, y: 30, piece: Piece.X })));
-    // Drag from just past its end to a point south-east of it.
-    const plan = planTrack(map, 21, 30, 30, 38, { owner })!;
-    expect(plan).not.toBeNull();
-    build(plan);
-    const tiles = reachable(state, seg(map.tileIndex(10, 30), trackdir(Piece.X, 0)), owner);
-    const reachedEnd = [...tiles].some((s) => Math.floor(s / 16) === map.tileIndex(30, 38));
-    expect(reachedEnd).toBe(true);
+    build(planTrack(map, 20, 30, 30, 38, { owner })!);
+    const reach = drive(state, seg(map.tileIndex(10, 30), trackdir(Piece.X, 0)), owner);
+    expect([...reach].some((s) => tileOf(s) === map.tileIndex(30, 38))).toBe(true);
   });
 
-  test('a route joins track at its end and goes around obstacles', () => {
+  test('a dragged route over a double line crosses both tracks without joining them', () => {
     const { state, map, build, owner } = world();
-    build(Array.from({ length: 6 }, (_, k) => ({ x: 40, y: 10 + k, piece: Piece.Y }))); // N-S line at x = 40
-    for (let y = 18; y <= 24; y++) map.setWater(map.tileIndex(30, y)); // a pond in the way
-    const plan = planTrack(map, 20, 21, 40, 16, { owner })!;
-    expect(plan).not.toBeNull();
-    expect(plan.some((q) => q.x === 30 && q.y >= 18 && q.y <= 24)).toBe(false);
-    build(plan);
-    const from = seg(map.tileIndex(plan[0]!.x, plan[0]!.y), trackdir(plan[0]!.piece, 0));
-    const back = seg(map.tileIndex(plan[0]!.x, plan[0]!.y), trackdir(plan[0]!.piece, 1));
-    const reach = new Set([...reachable(state, from, owner), ...reachable(state, back, owner)]);
-    expect([...reach].some((s) => Math.floor(s / 16) === map.tileIndex(40, 10))).toBe(true);
-  });
-});
-
-describe('route planner across existing lines', () => {
-  test('crossing a line to reach a parallel one goes straight over, not along it', () => {
-    const { map, build, owner } = world();
-    // Two parallel east-west lines on rows 10 and 12.
-    build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 10, piece: Piece.X })));
-    build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 12, piece: Piece.X })));
-    // Drag from below the lower line up to the upper line.
-    const plan = planTrack(map, 20, 18, 22, 10, { owner })!;
-    expect(plan).not.toBeNull();
-    const onLower = plan.filter((q) => q.y === 12);
-    expect(onLower).toHaveLength(1); // crosses the lower line once...
-    expect(onLower[0]!.piece).toBe(Piece.Y); // ...as a diamond crossing, not via switches
-  });
-});
-
-describe('routes only connect at the ends of the drag', () => {
-  /** Does the plan add a piece to row `y` that shares an edge with the X line there (a switch)? */
-  const switchesOnRow = (plan: PlacedPiece[], y: number) =>
-    plan.some((q) => q.y === y && q.piece !== Piece.X && q.piece !== Piece.Y);
-
-  test('double track: a branch from the far line crosses the near line without joining it', () => {
-    const { map, build, owner } = world();
     for (const y of [20, 21]) build(Array.from({ length: 31 }, (_, k) => ({ x: 20 + k, y, piece: Piece.X })));
-    for (const [sx, sy, ex, ey] of [
-      [35, 20, 33, 28], // start on the far line, drag south past the near one
-      [30, 20, 38, 27],
-      [34, 28, 35, 20], // start below, end on the far line
-      [28, 26, 36, 20],
-    ]) {
-      const plan = planTrack(map, sx!, sy!, ex!, ey!, { owner })!;
-      expect(plan).not.toBeNull();
-      const nearRow = plan.filter((q) => q.y === 21);
-      expect(nearRow).toHaveLength(1);
-      expect(nearRow[0]!.piece).toBe(Piece.Y); // a diamond crossing
-      expect(switchesOnRow(plan.filter((q) => q.y === 21), 21)).toBe(false);
+    const plan = planTrack(map, 34, 28, 35, 20, { owner })!;
+    expect(plan).not.toBeNull();
+    build(plan);
+    // From the route a train can't drive onto either track; the drag doesn't decide to connect.
+    const startSeg = seg(map.tileIndex(plan[0]!.x, plan[0]!.y), trackdir(plan[0]!.piece, 0));
+    const startBack = seg(map.tileIndex(plan[0]!.x, plan[0]!.y), trackdir(plan[0]!.piece, 1));
+    const reach = new Set([...drive(state, startSeg, owner), ...drive(state, startBack, owner)]);
+    const row = (s: number) => Math.floor(tileOf(s) / map.width);
+    expect([...reach].some((s) => (s % 16) >> 1 === Piece.X)).toBe(false);
+    // Trains on both tracks run straight through.
+    for (const y of [20, 21]) {
+      const line = drive(state, seg(map.tileIndex(20, y), trackdir(Piece.X, 0)), owner);
+      expect([...line].every((s) => row(s) === y)).toBe(true);
     }
   });
 

@@ -1,6 +1,7 @@
 import type { Company } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
 import { railVehicle } from '../vehicles/catalog.ts';
+import { linkAllByGeometry } from '../rail/links.ts';
 import type { Train } from '../vehicles/train.ts';
 import { TileType } from '../world/constants.ts';
 import { recountTowns, type Town } from '../town/towns.ts';
@@ -136,6 +137,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       lastPickup: typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
     });
   }
+  if (!snap.layers?.links) linkAllByGeometry(map); // saves from before explicit links
   for (let i = 0; i < map.layers.type.length; i++) {
     if (map.layers.type[i] === TileType.Depot) state.depots.add(i);
     if (map.layers.signals[i]) state.signalTiles.add(i);

@@ -2,6 +2,7 @@ import { COSTS } from '../economy/costs.ts';
 import { PIECE_COUNT, Piece, hasPiece, isDiagonal, pieceFitsSlope } from '../rail/track.ts';
 import type { GameState } from '../sim/state.ts';
 import { HEAD_BRIDGE, HEAD_TUNNEL, structuresAt } from '../rail/structures.ts';
+import { linkPlaced, pendingLinks, unlinkPieces } from '../rail/links.ts';
 import { ROAD_E, ROAD_N, ROAD_S, ROAD_W } from '../town/road.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { fail, isInt, type CommandHandler, type CommandContext, type PlanResult } from './types.ts';
@@ -88,7 +89,10 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
       add.set(i, pending | (1 << p));
       cost += isDiagonal(p) ? Math.round(COSTS.railPiece * 0.75) : COSTS.railPiece;
     }
-    if (add.size === 0) return fail('Already built');
+    // Pieces in this command connect to each other; loose ends connect to touching track.
+    const placedTiles = parsed.map((q) => map.tileIndex(q.x, q.y));
+    const placedPieces = parsed.map((q) => q.p);
+    if (add.size === 0 && pendingLinks(map, placedTiles, placedPieces, add) === 0) return fail('Already built');
 
     return {
       ok: true,
@@ -108,6 +112,10 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
           map.layers.owner[i] = company;
           map.layers.track[i] = map.layers.track[i]! | bits;
           map.touchTile(x, y, dirtyChunks);
+        }
+        for (const t of linkPlaced(map, placedTiles, placedPieces)) {
+          const tx = t % map.width;
+          map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
         }
         state.onTrackChanged();
         return { dirtyChunks };
@@ -144,6 +152,10 @@ export const removeTrackHandler: CommandHandler<RemoveTrackCommand> = {
           const y = (i - x) / map.width;
           const left = map.layers.track[i]! & ~bits;
           state.removeSignalsOn(i, bits);
+          for (const t of unlinkPieces(map, i, bits)) {
+            const tx = t % map.width;
+            map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
+          }
           if (left === 0) {
             const data = map.layers.data[i]!;
             if (data & CROSSING_FLAG) {

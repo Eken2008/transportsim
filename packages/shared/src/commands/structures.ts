@@ -7,6 +7,7 @@ import {
 } from '../rail/structures.ts';
 import { EDGE_DX, EDGE_DY, Edge, OPPOSITE_EDGE, Piece, edgeHeight, pieceFitsSlope } from '../rail/track.ts';
 import { ymdFromDays } from '../sim/date.ts';
+import { linkPlaced } from '../rail/links.ts';
 import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
@@ -114,6 +115,10 @@ export const buildBridgeHandler: CommandHandler<BuildBridgeCommand> = {
           map.layers.town[i] = 0;
         }
         for (let k = 0; k <= len + 1; k++) map.touchTile(x0 + EDGE_DX[dir] * k, y0 + EDGE_DY[dir] * k, dirtyChunks);
+        for (const t of linkPlaced(map, [a, b], [piece, piece])) {
+          const tx = t % map.width;
+          map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
+        }
         state.onTrackChanged();
         return { dirtyChunks };
       },
@@ -174,6 +179,10 @@ export const buildTunnelHandler: CommandHandler<BuildTunnelCommand> = {
           map.layers.town[i] = 0;
           const tx = i % map.width;
           map.touchTile(tx, (i - tx) / map.width, dirtyChunks);
+        }
+        for (const t of linkPlaced(map, [a, b], [piece, piece])) {
+          const tx = t % map.width;
+          map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
         }
         state.onTrackChanged();
         return { dirtyChunks };

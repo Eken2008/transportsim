@@ -12,12 +12,10 @@ import {
   hasPiece,
   pieceFitsSlope,
   pieceLength,
-  tdEntry,
   tdExit,
   tdPiece,
   trackdir,
   turnSteps,
-  type Edge,
   type PlacedPiece,
 } from './track.ts';
 
@@ -32,10 +30,8 @@ export interface PlanOptions {
 const TURN_COST = 0.45;
 /** Reusing a piece that already exists is a little cheaper than building one. */
 const EXISTING_FACTOR = 0.85;
-/** Making a new level crossing of existing track along the way. */
-const DIAMOND_COST = 0.4;
-/** Starting or ending without joining nearby track. */
-const LOOSE_END_COST = 2;
+/** Building over a tile that already has track (it is crossed, not joined): only a tie-breaker. */
+const DIAMOND_COST = 0.02;
 
 type Build = 'existing' | 'new' | null;
 
@@ -60,31 +56,6 @@ function pieceStatus(map: GameMap, x: number, y: number, piece: number, owner: n
     return ok && pieceFitsSlope(map.tileCorners(x, y), piece) ? 'new' : null;
   }
   return null;
-}
-
-/**
- * Does existing track on the neighbour across `edge` touch this tile and continue smoothly
- * from `heading` (null: any heading)?
- */
-function joinsAcross(map: GameMap, x: number, y: number, edge: Edge, heading: number | null, owner: number, outward: boolean): boolean {
-  const nx = x + EDGE_DX[edge];
-  const ny = y + EDGE_DY[edge];
-  if (!map.inBounds(nx, ny)) return false;
-  const n = map.tileIndex(nx, ny);
-  const type = map.layers.type[n];
-  if (type !== TileType.Rail && type !== TileType.Station && type !== TileType.Depot) return false;
-  if (map.layers.owner[n] !== owner) return false;
-  const back = OPPOSITE_EDGE[edge];
-  for (let p = 0; p < 6; p++) {
-    if (!hasPiece(map.layers.track[n]!, p)) continue;
-    const [e0, e1] = PIECE_EDGES[p]!;
-    if (e0 !== back && e1 !== back) continue;
-    if (heading === null) return true;
-    // Direction of travel on the neighbour's piece, matching ours.
-    const td = outward ? trackdir(p, e0 === back ? 0 : 1) : trackdir(p, e0 === back ? 1 : 0);
-    if (turnSteps(heading, TD_HEADING[td]!) <= 1) return true;
-  }
-  return false;
 }
 
 /**
@@ -139,22 +110,13 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   };
   const h = (x: number, y: number) => Math.hypot(x - x1, y - y1) * 0.7;
   const pieceCost = (status: Build, piece: number) => pieceLength(piece) * (status === 'existing' ? EXISTING_FACTOR : 1);
-  /** Ending on the target tile: prefer leaving towards track that's already there. */
-  const endCost = (x: number, y: number, td: number) => {
-    if (joinsAcross(map, x, y, tdExit(td), TD_HEADING[td]!, opts.owner, true)) return 0;
-    for (const e of [0, 1, 2, 3] as Edge[]) {
-      if (joinsAcross(map, x, y, e, null, opts.owner, true)) return LOOSE_END_COST; // track nearby, but we don't join it
-    }
-    return 0;
-  };
 
-  // Start: any piece on the start tile, cheaper if it continues track that leads into it.
+  // Start: any piece on the start tile. The planner doesn't steer towards connections; pieces
+  // built together connect, and loose ends connect to track they touch (see rail/links.ts).
   for (let td = 0; td < 12; td++) {
     const status = pieceStatus(map, x0, y0, tdPiece(td), opts.owner);
     if (!status) continue;
-    const joins = joinsAcross(map, x0, y0, tdEntry(td), TD_HEADING[td]!, opts.owner, false);
-    let cost = pieceCost(status, tdPiece(td)) + (joins ? 0 : LOOSE_END_COST * 0.5);
-    if (x0 === x1 && y0 === y1) cost += endCost(x0, y0, td);
+    const cost = pieceCost(status, tdPiece(td));
     const k = key(x0, y0, td, status === 'existing');
     g.set(k, cost);
     push(cost + h(x0, y0), k);
@@ -195,14 +157,9 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       const atEnd = nx === x1 && ny === y1;
       // A route connects to other track only where the drag starts and ends. In between it may
       // keep following track it started on, or cross track at right angles — never join it.
-      if (!atEnd) {
-        if (status === 'existing' && !riding) continue;
-        const bits = map.layers.track[map.tileIndex(nx, ny)]!;
-        if (status === 'new' && bits && touchesEdge(bits, p)) continue;
-      }
+      if (!atEnd && status === 'existing' && !riding) continue;
       let cost = gc + pieceCost(status, p) + turn * TURN_COST;
       if (status === 'new' && !atEnd && map.layers.track[map.tileIndex(nx, ny)]) cost += DIAMOND_COST;
-      if (nx === x1 && ny === y1) cost += endCost(nx, ny, ntd);
       const k = key(nx, ny, ntd, riding && status === 'existing');
       const old = g.get(k);
       if (old !== undefined && old <= cost) continue;
@@ -214,13 +171,3 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   return null;
 }
 
-/** Does piece p share an edge with any piece in `bits` (i.e. would adding it make a switch)? */
-function touchesEdge(bits: number, p: number): boolean {
-  const [a0, a1] = PIECE_EDGES[p]!;
-  for (let q = 0; q < 6; q++) {
-    if (q === p || !hasPiece(bits, q)) continue;
-    const [b0, b1] = PIECE_EDGES[q]!;
-    if (a0 === b0 || a0 === b1 || a1 === b0 || a1 === b1) return true;
-  }
-  return false;
-}
