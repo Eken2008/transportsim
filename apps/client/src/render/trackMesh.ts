@@ -21,6 +21,7 @@ import { SIGNAL_POST_HEIGHT, signalPlacement } from './signalGeometry.ts';
 import { addBridge, addHeadFoundation, addTunnelPortal } from './structureMesh.ts';
 import { addCrossingFurniture } from './crossings.ts';
 import type { Lod } from './terrainMesh.ts';
+import { TRACK_LIFT, curvePoint, curveTangent, straightCurve, type PieceCurve, type TrackCurves } from './trackCurves.ts';
 
 const BALLAST = lin('#8f877c');
 const BALLAST_FAR = lin('#6d655c');
@@ -39,17 +40,13 @@ const ONE_WAY_PLATE = lin('#f2f2f2');
 const _foot = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
-const LIFT = 0.012;
-const JOINT_OVERLAP = 0.06;
-const _ea = new THREE.Vector3();
-const _eb = new THREE.Vector3();
+const LIFT = TRACK_LIFT;
 const GAUGE = 0.15;
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _q = new THREE.Vector3();
-const _side = new THREE.Vector3();
 
 /** World-space endpoints of a piece on a tile (centre line at ballast level). */
 export function pieceEndpoints(map: GameMap, x: number, y: number, piece: number, a: THREE.Vector3, b: THREE.Vector3): void {
@@ -60,31 +57,71 @@ export function pieceEndpoints(map: GameMap, x: number, y: number, piece: number
   b.set(x + EDGE_MID_X[e2], h2 * HEIGHT_SCALE + LIFT, y + EDGE_MID_Y[e2]);
 }
 
-/** Append one track piece (ballast, sleepers, rails) to a builder. */
-export function addPiece(g: GeoBuilder, a0: THREE.Vector3, b0: THREE.Vector3, lod: Lod): void {
-  // Overlap neighbouring pieces slightly so 45° joints close up without gaps.
-  _dir.subVectors(b0, a0).normalize().multiplyScalar(JOINT_OVERLAP);
-  const a = _ea.copy(a0).sub(_dir);
-  const b = _eb.copy(b0).add(_dir);
-  g.color(lod >= 2 ? BALLAST_FAR : BALLAST).box(a, b, 0.42, 0.03, false);
+const _t = new THREE.Vector3();
+const _pt = new THREE.Vector3();
+const _lat = new THREE.Vector3();
+
+interface Section {
+  p: THREE.Vector3;
+  lat: THREE.Vector3;
+}
+
+/** Cross-sections along a curve; shared ends have identical sections, so joints are seamless. */
+function sections(c: PieceCurve): Section[] {
+  // Straight pieces need a single span; curved ones a few.
+  const chord = _t.subVectors(c.p3, c.p0);
+  const len = chord.length();
+  const dev = (q: THREE.Vector3) => _pt.subVectors(q, c.p0).cross(chord).length() / Math.max(len, 1e-6);
+  const n = dev(c.p1) < 0.003 && dev(c.p2) < 0.003 ? 1 : 6;
+  const out: Section[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const p = curvePoint(c, t, new THREE.Vector3());
+    const tan = curveTangent(c, t, _lat);
+    out.push({ p, lat: new THREE.Vector3(-tan.z, 0, tan.x).normalize() });
+  }
+  return out;
+}
+
+/** Sweep a box-shaped profile (offset sideways, width, base, height) along sections. */
+function sweep(g: GeoBuilder, secs: Section[], offset: number, half: number, base: number, height: number): void {
+  const L = (s: Section, y: number) => s.p.clone().addScaledVector(s.lat, offset - half).setY(s.p.y + y);
+  const R = (s: Section, y: number) => s.p.clone().addScaledVector(s.lat, offset + half).setY(s.p.y + y);
+  for (let i = 0; i < secs.length - 1; i++) {
+    const a = secs[i]!;
+    const b = secs[i + 1]!;
+    const top = base + height;
+    g.quad(L(a, top), R(a, top), R(b, top), L(b, top));
+    g.quad(R(a, base), R(b, base), R(b, top), R(a, top));
+    g.quad(L(b, base), L(a, base), L(a, top), L(b, top));
+  }
+}
+
+/** Append one track piece (ballast, sleepers, rails) following its curve. */
+export function addPieceCurve(g: GeoBuilder, c: PieceCurve, lod: Lod): void {
+  const secs = sections(c);
+  g.color(lod >= 2 ? BALLAST_FAR : BALLAST);
+  sweep(g, secs, 0, 0.21, 0, 0.03);
   if (lod >= 2) return;
-  const len = a0.distanceTo(b0);
-  _side.set(-(b.z - a.z), 0, b.x - a.x).normalize();
   if (lod === 0) {
+    const len = c.p0.distanceTo(c.p3);
     const n = Math.max(3, Math.round(len / 0.14));
     g.color(SLEEPER);
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n;
-      _p.lerpVectors(a0, b0, t).setY(_p.y + 0.03);
-      const half = _q.copy(_side).multiplyScalar(0.16);
+      curvePoint(c, t, _p).setY(_p.y + 0.03);
+      const tan = curveTangent(c, t, _t);
+      const half = _q.set(-tan.z, 0, tan.x).normalize().multiplyScalar(0.16);
       g.box(_a2.copy(_p).sub(half), _b2.copy(_p).add(half), 0.05, 0.02, false);
     }
   }
   g.color(RAIL);
-  for (const s of [-1, 1]) {
-    const off = _q.copy(_side).multiplyScalar((s * GAUGE) / 2);
-    g.box(_a2.copy(a).add(off).setY(a.y + 0.05), _b2.copy(b).add(off).setY(b.y + 0.05), 0.022, 0.025, false);
-  }
+  for (const side of [-1, 1]) sweep(g, secs, (side * GAUGE) / 2, 0.011, 0.05, 0.025);
+}
+
+/** A straight piece between two points (bridge decks). */
+export function addPiece(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, lod: Lod): void {
+  addPieceCurve(g, straightCurve(a, b), lod);
 }
 const _a2 = new THREE.Vector3();
 const _b2 = new THREE.Vector3();
@@ -97,6 +134,7 @@ export function addTrack(
   cy: number,
   lod: Lod,
   companyColor: (owner: number) => THREE.Color,
+  curves: TrackCurves,
 ): void {
   const x0 = cx * CHUNK_SIZE;
   const y0 = cy * CHUNK_SIZE;
@@ -129,8 +167,7 @@ export function addTrack(
       }
       for (let p = 0; p < PIECE_COUNT; p++) {
         if (!hasPiece(bits, p)) continue;
-        pieceEndpoints(map, x, y, p, _a, _b);
-        addPiece(g, _a, _b, lod);
+        addPieceCurve(g, curves.get(i, p), lod);
       }
       const sig = map.layers.signals[i]!;
       if (sig && lod <= 1) {

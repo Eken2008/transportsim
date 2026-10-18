@@ -84,7 +84,7 @@ export class GameRenderer {
     this.catchment = new AreaGhost(world.map, 0.2);
     this.catchment.mesh.renderOrder = 4;
     this.scene.add(this.catchment.mesh);
-    this.trains = new TrainRenderer(world);
+    this.trains = new TrainRenderer(world, this.chunks.curves);
     this.scene.add(this.trains.root);
     this.signalLights = new SignalLights(world);
     this.scene.add(this.signalLights.mesh);

@@ -19,6 +19,7 @@ import {
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { UNIT_MODELS } from './trainModels.ts';
+import { TRACK_LIFT, curvePoint, type TrackCurves } from './trackCurves.ts';
 
 /** Height of the rail head above the terrain surface. */
 const RAIL_TOP = 0.088;
@@ -34,10 +35,18 @@ const _m = new THREE.Matrix4();
 const _s = new THREE.Matrix4();
 const UP = new THREE.Vector3(0, 1, 0);
 
+let curves: TrackCurves | null = null;
+
 /** World position at distance `d` along a segment (tiles), on top of the rails. */
 function segWorld(map: GameMap, s: number, d: number, out: THREE.Vector3): void {
   const tile = segTile(s);
   const td = segTd(s);
+  if (curves && !isSpanTd(td)) {
+    const t = Math.min(1, Math.max(0, d / pieceLength(tdPiece(td))));
+    curvePoint(curves.get(tile, td >> 1), td & 1 ? 1 - t : t, out);
+    out.y += RAIL_TOP - TRACK_LIFT;
+    return;
+  }
   const [ha, hb] = segHeights(map, tile, td);
   const t = d / pieceLength(tdPiece(td));
   const p = segPoint(map, s, d);
@@ -93,7 +102,12 @@ export class TrainRenderer {
   private readonly colors = COMPANY_COLORS.map((c) => new THREE.Color(c));
   private segs: number[] = [];
 
-  constructor(private readonly world: ClientWorld) {}
+  constructor(
+    private readonly world: ClientWorld,
+    trackCurves?: TrackCurves,
+  ) {
+    curves = trackCurves ?? null;
+  }
 
   private meshesFor(model: UnitModel, need: number): ModelMeshes {
     let m = this.meshes.get(model);

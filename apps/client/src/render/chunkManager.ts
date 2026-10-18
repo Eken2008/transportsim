@@ -5,6 +5,7 @@ import { buildTerrainGeometry, buildWaterGeometry, type Lod } from './terrainMes
 import { addRoads, buildHouses } from './buildings.ts';
 import { GeoBuilder } from './geoBuilder.ts';
 import { addTrack } from './trackMesh.ts';
+import { TrackCurves } from './trackCurves.ts';
 import { buildTrees } from './trees.ts';
 
 interface ChunkView {
@@ -50,12 +51,26 @@ export class ChunkManager {
   private readonly world: ClientWorld;
   private readonly subscribe: (chunks: number[]) => void;
   private unlisten: () => void;
+  /** Smooth track centre lines shared with the train renderer. */
+  readonly curves: TrackCurves;
 
   constructor(world: ClientWorld, subscribe: (chunks: number[]) => void) {
     this.world = world;
     this.subscribe = subscribe;
     this.dataRev = new Uint32Array(world.map.chunksX * world.map.chunksY);
-    this.unlisten = world.onChunk((cx, cy) => this.dataRev[cy * world.map.chunksX + cx]!++);
+    this.curves = new TrackCurves(world.map);
+    this.unlisten = world.onChunk((cx, cy) => {
+      // Track curves depend on neighbouring tiles, so neighbouring chunks rebuild too.
+      this.curves.clear();
+      const m = world.map;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const x = cx + dx;
+          const y = cy + dy;
+          if (x >= 0 && y >= 0 && x < m.chunksX && y < m.chunksY) this.dataRev[y * m.chunksX + x]!++;
+        }
+      }
+    });
   }
 
   /** Force the subscription to be re-sent (after a reconnect). */
@@ -143,7 +158,7 @@ export class ChunkManager {
     }
     const infra = new GeoBuilder();
     addRoads(infra, map, cx, cy);
-    addTrack(infra, map, cx, cy, lod, (owner) => this.companyColor(owner));
+    addTrack(infra, map, cx, cy, lod, (owner) => this.companyColor(owner), this.curves);
     const infraGeo = infra.build();
     if (infraGeo) {
       const mesh = new THREE.Mesh(infraGeo, this.terrainMaterial);
