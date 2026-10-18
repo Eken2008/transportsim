@@ -37,7 +37,13 @@ function world() {
 function reachable(state: GameState, start: number, owner: number): Set<number> {
   const seen = new Set([start]);
   const todo = [start];
-  while (todo.length) for (const n of nextSegments(state.map, todo.pop()!, owner)) if (!seen.has(n)) seen.add(n), todo.push(n);
+  while (todo.length) {
+    for (const n of nextSegments(state.map, todo.pop()!, owner)) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      todo.push(n);
+    }
+  }
   return seen;
 }
 
