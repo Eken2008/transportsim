@@ -15,9 +15,9 @@ import {
 } from './track.ts';
 
 /**
- * Explicit track connections. Two pieces on neighbouring tiles that meet at the shared edge are
- * connected only if a link says so — touching alone isn't enough, so a diagonal can cross a
- * straight line without becoming a switch.
+ * Track connections. Pieces on neighbouring tiles that meet at the shared edge connect when the
+ * turn between them is at most 45°, except that track never connects into a 90° bend through a
+ * corner piece. Connections are stored, so trains, signals and rendering agree on them.
  *
  * Each edge has three pieces that can touch it. A tile stores the links across its own north
  * and west edges in the `links` layer: bit (i * 3 + j) for the N edge (bits 0-8) and 9 + (i * 3
@@ -147,64 +147,98 @@ export function unlinkPieces(map: GameMap, tile: number, pieceBits: number): num
   return [...changed];
 }
 
+const isCorner = (p: number) => p >= 2 && p <= 5;
+
+/** The other edge of a piece. */
+const otherEdge = (p: number, e: Edge): Edge => {
+  const [e0, e1] = PIECE_EDGES[p]!;
+  return e === e0 ? e1 : e0;
+};
+
 /**
- * Link a set of newly placed (or reused) pieces: pieces in the set connect to each other where
- * they meet, and each end with no partner in the set connects to the straightest existing piece
- * it touches. Pieces in the set never connect to other existing track mid-way.
+ * Would linking piece `p` (on `tile`, across edge `e`) to piece `q` make a 90° turn through a
+ * corner piece? Corner pieces are short, so straight → corner → perpendicular straight is a
+ * right-angle bend in half a tile; that never connects.
+ */
+export function makesRightAngle(map: GameMap, tile: number, p: number, e: Edge, q: number): boolean {
+  const n = neighbourTile(map, tile, e);
+  if (n < 0) return false;
+  const opp = OPPOSITE_EDGE[e];
+  // Through p: something linked to p's other end → p → q.
+  if (isCorner(p)) {
+    const pe = otherEdge(p, e);
+    for (const r of linkedAcross(map, tile, p, pe)) {
+      // r travels towards p (leaving its tile through the edge facing p), then on through q.
+      if (turnSteps(headingOut(r, OPPOSITE_EDGE[pe]), headingIn(q, opp)) > 1) return true;
+    }
+  }
+  // Through q: p → q → something linked to q's other end.
+  if (isCorner(q)) {
+    const qe = otherEdge(q, opp);
+    for (const s of linkedAcross(map, n, q, qe)) {
+      if (turnSteps(headingOut(p, e), headingIn(s, OPPOSITE_EDGE[qe])) > 1) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Connect newly placed (or reused) pieces to every piece they touch with at most a 45° turn,
+ * except where that would make a 90° bend through a corner piece. Links among the new pieces
+ * are made first, so a route keeps its own shape when it meets existing track.
  * Returns tiles whose link data changed.
  */
-export function linkPlaced(map: GameMap, placed: readonly PieceEnd['tile'][], pieces: readonly number[]): number[] {
+export function linkPlaced(map: GameMap, placed: readonly number[], pieces: readonly number[]): number[] {
   const changed = new Set<number>();
   const inSet = new Set(placed.map((t, k) => t * 8 + pieces[k]!));
-  placed.forEach((tile, k) => {
-    const p = pieces[k]!;
-    for (const e of PIECE_EDGES[p]!) {
-      const cands = linkCandidates(map, tile, p, e);
-      if (cands.length === 0) continue;
-      const n = neighbourTile(map, tile, e);
-      const ours = cands.filter((q) => inSet.has(n * 8 + q));
-      const targets = ours.length > 0 ? ours : [cands[0]!];
-      for (const q of targets) {
-        const t = setLink(map, tile, p, e, q, true);
-        if (t >= 0) changed.add(t);
+  for (const internal of [true, false]) {
+    placed.forEach((tile, k) => {
+      const p = pieces[k]!;
+      for (const e of PIECE_EDGES[p]!) {
+        const n = neighbourTile(map, tile, e);
+        for (const q of linkCandidates(map, tile, p, e)) {
+          if (inSet.has(n * 8 + q) !== internal) continue;
+          if (isLinked(map, tile, p, e, q) || makesRightAngle(map, tile, p, e, q)) continue;
+          const t = setLink(map, tile, p, e, q, true);
+          if (t >= 0) changed.add(t);
+        }
       }
-    }
-  });
+    });
+  }
   return [...changed];
 }
 
 /**
- * How many links linkPlaced() would add (before the pieces in `adding` exist, they are treated
- * as present). Used to tell "Already built" apart from "connect these".
+ * How many links linkPlaced() would add. Pieces about to be added count as changes on their own;
+ * otherwise this tells "Already built" apart from "connect these".
  */
 export function pendingLinks(map: GameMap, placed: readonly number[], pieces: readonly number[], adding: ReadonlyMap<number, number>): number {
   if (adding.size > 0) return 1;
   let n = 0;
-  const inSet = new Set(placed.map((t, k) => t * 8 + pieces[k]!));
   placed.forEach((tile, k) => {
     const p = pieces[k]!;
     for (const e of PIECE_EDGES[p]!) {
-      const cands = linkCandidates(map, tile, p, e);
-      if (cands.length === 0) continue;
-      const nt = neighbourTile(map, tile, e);
-      const ours = cands.filter((q) => inSet.has(nt * 8 + q));
-      for (const q of ours.length > 0 ? ours : [cands[0]!]) if (!isLinked(map, tile, p, e, q)) n++;
+      for (const q of linkCandidates(map, tile, p, e)) {
+        if (!isLinked(map, tile, p, e, q) && !makesRightAngle(map, tile, p, e, q)) n++;
+      }
     }
   });
   return n;
 }
 
-/**
- * Infer links for a whole map from geometry (every pair of touching pieces with ≤ 45° turn).
- * Used for saves made before links existed.
- */
+/** Infer links for a whole map (saves made before links existed), with the same rules. */
 export function linkAllByGeometry(map: GameMap): void {
   const { type, track } = map.layers;
+  const tiles: number[] = [];
+  const pieces: number[] = [];
   for (let tile = 0; tile < type.length; tile++) {
     if (!isTrack(type[tile]!)) continue;
     for (let p = 0; p < 6; p++) {
-      if (!hasPiece(track[tile]!, p)) continue;
-      for (const e of PIECE_EDGES[p]!) for (const q of linkCandidates(map, tile, p, e)) setLink(map, tile, p, e, q, true);
+      if (hasPiece(track[tile]!, p)) {
+        tiles.push(tile);
+        pieces.push(p);
+      }
     }
   }
+  linkPlaced(map, tiles, pieces);
 }

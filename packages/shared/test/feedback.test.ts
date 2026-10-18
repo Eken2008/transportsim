@@ -7,12 +7,16 @@ import {
   Piece,
   TICKS_PER_DAY,
   executeCommand,
+  linkAllByGeometry,
   nextSegments,
   planTrack,
   seg,
   trackdir,
   type Command,
   type PlacedPiece,
+  TD_HEADING,
+  tdExit as tdExitEdge,
+  turnSteps,
 } from '../src/index.ts';
 
 function world() {
@@ -53,38 +57,58 @@ function drive(state: GameState, start: number, owner: number): Set<number> {
 }
 const tileOf = (s: number) => Math.floor(s / 16);
 
-describe('explicit track connections', () => {
-  test('a diagonal built across a straight line crosses it without connecting', () => {
-    const { state, map, build, owner } = world();
-    build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 20, piece: Piece.X })));
-    // A separate diagonal staircase over the line: pieces on the line's tiles touch its edges.
-    build([
-      { x: 18, y: 23, piece: Piece.SE }, { x: 19, y: 23, piece: Piece.NW }, { x: 19, y: 22, piece: Piece.SE },
-      { x: 20, y: 22, piece: Piece.NW }, { x: 20, y: 21, piece: Piece.SE }, { x: 21, y: 21, piece: Piece.NW },
-      { x: 21, y: 20, piece: Piece.SE }, { x: 22, y: 20, piece: Piece.NW }, { x: 22, y: 19, piece: Piece.SE },
-      { x: 23, y: 19, piece: Piece.NW },
-    ]);
-    // Driving east along the line never leaves it.
-    const along = drive(state, seg(map.tileIndex(10, 20), trackdir(Piece.X, 0)), owner);
-    expect([...along].every((s) => Math.floor(tileOf(s) / map.width) === 20 && (s % 16) >> 1 === Piece.X)).toBe(true);
-    expect([...along].some((s) => tileOf(s) === map.tileIndex(30, 20))).toBe(true);
-    // Driving the diagonal crosses the line and carries on.
-    const diag = drive(state, seg(map.tileIndex(18, 23), trackdir(Piece.SE, 0)), owner);
-    expect([...diag].some((s) => tileOf(s) === map.tileIndex(23, 19))).toBe(true);
-    expect([...diag].some((s) => (s % 16) >> 1 === Piece.X)).toBe(false);
+describe('track connections', () => {
+  test('a corner piece never joins two perpendicular straights (no 90° connections)', () => {
+    for (const order of ['line first', 'stub first'] as const) {
+      const { state, map, build, owner } = world();
+      const line = () => build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 20, piece: Piece.X })));
+      // A north-south stub from below, ending in a corner piece on the line's tile (S–W).
+      const stub = () =>
+        build([
+          ...Array.from({ length: 4 }, (_, k) => ({ x: 20, y: 24 - k, piece: Piece.Y })),
+          { x: 20, y: 20, piece: Piece.SW },
+        ]);
+      if (order === 'line first') {
+        line();
+        stub();
+      } else {
+        stub();
+        line();
+      }
+      const row = (s: number) => Math.floor(tileOf(s) / map.width);
+      // Northbound on the stub a train reaches the corner piece but can't turn onto the line.
+      const up = drive(state, seg(map.tileIndex(20, 24), trackdir(Piece.Y, 1)), owner);
+      expect([...up].some((s) => row(s) === 20 && (s % 16) >> 1 === Piece.X)).toBe(false);
+      // Trains on the line run straight past.
+      for (const td of [0, 1]) {
+        const along = drive(state, seg(map.tileIndex(td ? 30 : 10, 20), trackdir(Piece.X, td)), owner);
+        expect([...along].every((s) => row(s) === 20 && (s % 16) >> 1 === Piece.X)).toBe(true);
+      }
+    }
   });
 
-  test('building at a loose end connects; touching mid-way does not', () => {
+  test('45° branches and continuations still connect', () => {
     const { state, map, build, owner } = world();
     build(Array.from({ length: 5 }, (_, k) => ({ x: 10 + k, y: 30, piece: Piece.X })));
-    // A single piece placed at the end of the line continues it.
     build([{ x: 15, y: 30, piece: Piece.X }]);
     expect(drive(state, seg(map.tileIndex(10, 30), trackdir(Piece.X, 0)), owner).has(seg(map.tileIndex(15, 30), trackdir(Piece.X, 0)))).toBe(true);
-    // A corner piece added on a line tile is a deliberate switch: its loose end joins the line.
-    build([{ x: 12, y: 30, piece: Piece.SW }, { x: 12, y: 31, piece: Piece.NE }]);
-    // Eastbound on the line, the switch at x = 12 leads onto the corner piece (W→S).
+    // A diagonal branch (corner piece, then more diagonal) leaving the line is a 45° switch.
+    build([{ x: 12, y: 30, piece: Piece.SW }, { x: 12, y: 31, piece: Piece.NE }, { x: 13, y: 31, piece: Piece.SW }]);
     const from = drive(state, seg(map.tileIndex(10, 30), trackdir(Piece.X, 0)), owner);
     expect(from.has(seg(map.tileIndex(12, 30), trackdir(Piece.SW, 1)))).toBe(true);
+    expect(from.has(seg(map.tileIndex(13, 31), trackdir(Piece.SW, 1)))).toBe(true);
+  });
+
+  test('saves from before stored connections follow the same rule', () => {
+    const { state, map, build, owner } = world();
+    build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 20, piece: Piece.X })));
+    build([...Array.from({ length: 4 }, (_, k) => ({ x: 20, y: 24 - k, piece: Piece.Y })), { x: 20, y: 20, piece: Piece.SW }]);
+    map.layers.links.fill(0);
+    linkAllByGeometry(map);
+    const up = drive(state, seg(map.tileIndex(20, 24), trackdir(Piece.Y, 1)), owner);
+    expect([...up].some((s) => Math.floor(tileOf(s) / map.width) === 20 && (s % 16) >> 1 === Piece.X)).toBe(false);
+    const along = drive(state, seg(map.tileIndex(10, 20), trackdir(Piece.X, 0)), owner);
+    expect(along.has(seg(map.tileIndex(30, 20), trackdir(Piece.X, 0)))).toBe(true);
   });
 
   test('a dragged route starting on a line continues it', () => {
@@ -166,5 +190,30 @@ describe('consist editing', () => {
     run({ type: 'trainAction', id: t.id, action: 'start' });
     for (let i = 0; i < TICKS_PER_DAY; i++) state.step();
     expect(executeCommand(state, { playerId: 1, companyId: t.owner }, { type: 'editConsist', id: t.id, units: ['badger'] }).ok).toBe(false);
+  });
+});
+
+describe('route planner and right angles', () => {
+  test('planned routes never bend 90° through a single corner piece', () => {
+    const { map, owner } = world();
+    const heading = (q: PlacedPiece, next: PlacedPiece) => {
+      // Heading of q when travelling towards next: pick q's trackdir whose exit faces next.
+      for (const td of [trackdir(q.piece, 0), trackdir(q.piece, 1)]) {
+        const nx = q.x + [0, 1, 0, -1][tdExitEdge(td)]!;
+        const ny = q.y + [-1, 0, 1, 0][tdExitEdge(td)]!;
+        if (nx === next.x && ny === next.y) return TD_HEADING[td]!;
+      }
+      return -1;
+    };
+    for (const [ex, ey] of [[30, 12], [12, 30], [28, 25], [22, 30]] as const) {
+      const plan = planTrack(map, 10, 10, ex, ey, { owner })!;
+      expect(plan).not.toBeNull();
+      for (let i = 1; i + 2 < plan.length; i++) {
+        if (plan[i]!.piece < 2) continue;
+        const before = heading(plan[i - 1]!, plan[i]!);
+        const after = heading(plan[i + 1]!, plan[i + 2]!);
+        expect(turnSteps(before, after)).toBeLessThanOrEqual(1);
+      }
+    }
   });
 });

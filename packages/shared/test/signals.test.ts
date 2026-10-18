@@ -12,7 +12,7 @@ import {
 } from '../src/index.ts';
 
 /**
- * A clockwise rectangular loop (corners are single diagonal tiles) with a station on the
+ * A clockwise rectangular loop (45° corners of three corner pieces) with a station on the
  * top and bottom rows and a depot feeding the top row.
  */
 function loop() {
@@ -29,17 +29,22 @@ function loop() {
     if (!r.ok) throw new Error(`${cmd.type}: ${r.error}`);
   };
   const pieces: number[] = [];
-  for (let x = 11; x <= 39; x++) pieces.push(x, 10, Piece.X, x, 25, Piece.X);
-  for (let y = 11; y <= 24; y++) pieces.push(10, y, Piece.Y, 40, y, Piece.Y);
-  pieces.push(40, 10, Piece.SW, 40, 25, Piece.NW, 10, 25, Piece.NE, 10, 10, Piece.SE);
-  pieces.push(25, 10, Piece.NE); // junction from the depot
+  for (let x = 12; x <= 38; x++) pieces.push(x, 10, Piece.X, x, 25, Piece.X);
+  for (let y = 12; y <= 23; y++) pieces.push(10, y, Piece.Y, 40, y, Piece.Y);
+  // 45° corners: three corner pieces each (a single corner piece would be a 90° bend).
+  pieces.push(39, 10, Piece.SW, 39, 11, Piece.NE, 40, 11, Piece.SW); // top right
+  pieces.push(40, 24, Piece.NW, 39, 24, Piece.SE, 39, 25, Piece.NW); // bottom right
+  pieces.push(11, 25, Piece.NE, 11, 24, Piece.SW, 10, 24, Piece.NE); // bottom left
+  pieces.push(10, 11, Piece.SE, 11, 11, Piece.NW, 11, 10, Piece.SE); // top left
+  // Branch from the depot joining the top row heading east.
+  pieces.push(24, 9, Piece.NE, 25, 9, Piece.SW, 25, 10, Piece.NE);
   run({ type: 'buildTrack', pieces });
-  run({ type: 'buildDepot', x: 25, y: 9, exit: Edge.S });
+  run({ type: 'buildDepot', x: 24, y: 8, exit: Edge.S });
   run({ type: 'buildStation', x: 14, y: 10, axis: 0, platforms: 1, length: 5 });
   run({ type: 'buildStation', x: 30, y: 25, axis: 0, platforms: 1, length: 5 });
   const [top, bottom] = [0, 1];
   const buy = () => {
-    run({ type: 'buyTrain', depot: map.tileIndex(25, 9), units: ['kestrel', 'coach_wood', 'coach_wood'] });
+    run({ type: 'buyTrain', depot: map.tileIndex(24, 8), units: ['kestrel', 'coach_wood', 'coach_wood'] });
     const t = [...state.trains.values()].at(-1)!;
     run({ type: 'setOrders', id: t.id, orders: [{ kind: 'station', station: top }, { kind: 'station', station: bottom }] });
     return t;

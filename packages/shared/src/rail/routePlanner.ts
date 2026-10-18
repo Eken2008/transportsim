@@ -74,7 +74,15 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   const w = map.width;
   // Search state: tile, trackdir, and whether every piece so far is existing track (riding
   // along existing track from the start of the drag).
-  const key = (x: number, y: number, td: number, riding: boolean) => ((y * w + x) * 16 + td) * 2 + (riding ? 1 : 0);
+  // ...and, on a corner piece, the heading before it (8 = none), so the route never bends 90°
+  // through a single corner piece (track doesn't connect that way).
+  const key = (x: number, y: number, td: number, riding: boolean, prev: number) =>
+    (((y * w + x) * 16 + td) * 2 + (riding ? 1 : 0)) * 9 + prev;
+  const decode = (k: number) => {
+    const prev = k % 9;
+    const r = Math.floor(k / 9);
+    return { prev, riding: r % 2 === 1, td: Math.floor(r / 2) % 16, tile: Math.floor(r / 32) };
+  };
   const g = new Map<number, number>();
   const parent = new Map<number, number>();
   // Small binary heap of [f, key]
@@ -117,7 +125,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
     const status = pieceStatus(map, x0, y0, tdPiece(td), opts.owner);
     if (!status) continue;
     const cost = pieceCost(status, tdPiece(td));
-    const k = key(x0, y0, td, status === 'existing');
+    const k = key(x0, y0, td, status === 'existing', 8);
     g.set(k, cost);
     push(cost + h(x0, y0), k);
   }
@@ -125,16 +133,13 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   let expanded = 0;
   while (heap.length) {
     const cur = pop();
-    const riding = cur % 2 === 1;
-    const td = Math.floor(cur / 2) % 16;
-    const tile = Math.floor(cur / 32);
+    const { prev, riding, td, tile } = decode(cur);
     const x = tile % w;
     const y = (tile - x) / w;
     if (x === x1 && y === y1) {
       const out: PlacedPiece[] = [];
       for (let k: number | undefined = cur; k !== undefined; k = parent.get(k)) {
-        const t = Math.floor(k / 2) % 16;
-        const ti = Math.floor(k / 32);
+        const { td: t, tile: ti } = decode(k);
         out.push({ x: ti % w, y: Math.floor(ti / w), piece: tdPiece(t) as PlacedPiece['piece'] });
       }
       return out.reverse();
@@ -152,6 +157,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       const ntd = trackdir(p, e0 === entry ? 0 : 1);
       const turn = turnSteps(TD_HEADING[td]!, TD_HEADING[ntd]!);
       if (turn > 1) continue;
+      if (prev !== 8 && turnSteps(prev, TD_HEADING[ntd]!) > 1) continue; // 90° through a corner
       const status = pieceStatus(map, nx, ny, p, opts.owner);
       if (!status) continue;
       const atEnd = nx === x1 && ny === y1;
@@ -160,7 +166,8 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       if (!atEnd && status === 'existing' && !riding) continue;
       let cost = gc + pieceCost(status, p) + turn * TURN_COST;
       if (status === 'new' && !atEnd && map.layers.track[map.tileIndex(nx, ny)]) cost += DIAMOND_COST;
-      const k = key(nx, ny, ntd, riding && status === 'existing');
+      const corner = p >= 2;
+      const k = key(nx, ny, ntd, riding && status === 'existing', corner ? TD_HEADING[td]! : 8);
       const old = g.get(k);
       if (old !== undefined && old <= cost) continue;
       g.set(k, cost);
