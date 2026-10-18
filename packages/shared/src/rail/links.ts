@@ -153,18 +153,20 @@ const otherEdge = (p: number, e: Edge): Edge => {
   return e === e0 ? e1 : e0;
 };
 
+const isCorner = (p: number) => p >= 2 && p <= 5;
+
 /**
- * Would linking piece `p` (on `tile`, across edge `e`) to piece `q` make a 90° bend across a
- * single piece? Track entering a piece and track leaving its other end may differ by at most
- * 45°, so neither straight → corner → perpendicular straight nor diagonal → straight → opposite
- * diagonal ever connects.
+ * Would linking piece `p` (on `tile`, across edge `e`) to piece `q` make a 90° bend through a
+ * corner piece? Corner pieces are short, so straight → corner → perpendicular straight is a
+ * right angle in half a tile; that never connects. (Two 45° turns either side of a straight
+ * piece — diagonal, straight, diagonal — are a normal curve and do connect.)
  */
 export function makesRightAngle(map: GameMap, tile: number, p: number, e: Edge, q: number): boolean {
   const n = neighbourTile(map, tile, e);
   if (n < 0) return false;
   const opp = OPPOSITE_EDGE[e];
   // Through p: something linked to p's other end → p → q.
-  {
+  if (isCorner(p)) {
     const pe = otherEdge(p, e);
     for (const r of linkedAcross(map, tile, p, pe)) {
       // r travels towards p (leaving its tile through the edge facing p), then on through q.
@@ -172,7 +174,7 @@ export function makesRightAngle(map: GameMap, tile: number, p: number, e: Edge, 
     }
   }
   // Through q: p → q → something linked to q's other end.
-  {
+  if (isCorner(q)) {
     const qe = otherEdge(q, opp);
     for (const s of linkedAcross(map, n, q, qe)) {
       if (turnSteps(headingOut(p, e), headingIn(s, OPPOSITE_EDGE[qe])) > 1) return true;

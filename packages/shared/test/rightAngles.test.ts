@@ -12,17 +12,20 @@ import {
   headingIn,
   headingOut,
   linkedAcross,
+  nextSegments,
+  seg,
+  trackdir,
   planTrack,
   turnSteps,
 } from '../src/index.ts';
 
-/** Every place where track entering a piece and track leaving it differ by more than 45°. */
+/** Every place where track bends 90° through a corner piece (enters and leaves it > 45° apart). */
 function rightAngles(map: GameMap): string[] {
   const out: string[] = [];
   for (let t = 0; t < map.layers.type.length; t++) {
     const bits = map.layers.track[t]!;
     if (!bits) continue;
-    for (let p = 0; p < 6; p++) {
+    for (let p = 2; p < 6; p++) {
       if (!((bits >> p) & 1)) continue;
       const [e0, e1] = PIECE_EDGES[p]!;
       for (const r of linkedAcross(map, t, p, e0)) {
@@ -64,7 +67,7 @@ describe('no 90° connections', () => {
     }
   }, 30_000);
 
-  test('a second track joining the point where a diagonal meets a line does not connect at 90°', () => {
+  test('a diagonal can turn twice in a row: diagonal, one straight tile, diagonal', () => {
     const state = new GameState({ ...DEFAULT_SETTINGS, mapWidth: 128, mapHeight: 128 }, new GameMap(128, 128));
     const map = state.map;
     map.heights.fill(2);
@@ -72,14 +75,24 @@ describe('no 90° connections', () => {
     const pl = state.addPlayer('A', true);
     const c = state.foundCompany(pl)!;
     c.money = 1e9;
-    const run = (pieces: number[]) => executeCommand(state, { playerId: pl.id, companyId: c.id }, { type: 'buildTrack', pieces });
-    // Line, then a diagonal from the south-west ending in a corner piece on the line at x = 44
-    // (joining the line heading east), then a diagonal leaving the line eastwards to the south-east.
-    const line: number[] = [];
-    for (let x = 30; x <= 60; x++) line.push(x, 41, Piece.X);
-    run(line);
-    run([40, 45, Piece.SE, 41, 45, Piece.NW, 41, 44, Piece.SE, 42, 44, Piece.NW, 42, 43, Piece.SE, 43, 43, Piece.NW, 43, 42, Piece.SE, 44, 42, Piece.NW, 44, 41, Piece.SE]);
-    run([45, 41, Piece.SW, 45, 42, Piece.NE, 46, 42, Piece.SW, 46, 43, Piece.NE]);
-    expect(rightAngles(map)).toEqual([]);
+    // Heading south-east, then east for one tile, then north-east (a shallow V), built in one go
+    // and built piece by piece.
+    const vee = [40, 40, Piece.NE, 41, 40, Piece.SW, 41, 41, Piece.NE, 42, 41, Piece.X, 43, 41, Piece.NW, 43, 40, Piece.SE, 44, 40, Piece.NW];
+    for (const oneGo of [true, false]) {
+      for (let i = 0; i < map.width * map.height; i++) map.setClear(i, 0, 0);
+      if (oneGo) executeCommand(state, { playerId: pl.id, companyId: c.id }, { type: 'buildTrack', pieces: vee });
+      else for (let k = 0; k < vee.length; k += 3) executeCommand(state, { playerId: pl.id, companyId: c.id }, { type: 'buildTrack', pieces: vee.slice(k, k + 3) });
+      const start = seg(map.tileIndex(40, 40), trackdir(Piece.NE, 0));
+      const seen = new Set([start]);
+      const todo = [start];
+      while (todo.length) {
+        for (const n of nextSegments(map, todo.pop()!, c.id)) {
+          if (seen.has(n)) continue;
+          seen.add(n);
+          todo.push(n);
+        }
+      }
+      expect(seen.has(seg(map.tileIndex(44, 40), trackdir(Piece.NW, 1)))).toBe(true); // W→N
+    }
   });
 });
