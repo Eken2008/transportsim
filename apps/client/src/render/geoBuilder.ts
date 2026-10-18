@@ -53,6 +53,39 @@ export class GeoBuilder {
     if (bottom) this.quad(a0, b0, b1, a1);
   }
 
+  /** Axis-aligned box (no bottom face). */
+  aabb(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): void {
+    const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    this.quad(v(x0, y1, z0), v(x0, y1, z1), v(x1, y1, z1), v(x1, y1, z0)); // top
+    this.quad(v(x0, y0, z1), v(x1, y0, z1), v(x1, y1, z1), v(x0, y1, z1)); // +z
+    this.quad(v(x1, y0, z0), v(x0, y0, z0), v(x0, y1, z0), v(x1, y1, z0)); // -z
+    this.quad(v(x1, y0, z1), v(x1, y0, z0), v(x1, y1, z0), v(x1, y1, z1)); // +x
+    this.quad(v(x0, y0, z0), v(x0, y0, z1), v(x0, y1, z1), v(x0, y1, z0)); // -x
+  }
+
+  /** Gable roof over [x0,x1]×[z0,z1] starting at height y, ridge along X, `rise` high. */
+  gable(x0: number, z0: number, x1: number, z1: number, y: number, rise: number, overhang = 0.04): void {
+    const v = (x: number, yy: number, z: number) => new THREE.Vector3(x, yy, z);
+    const a = x0 - overhang;
+    const b = x1 + overhang;
+    const zm = (z0 + z1) / 2;
+    const top = y + rise;
+    const n = z0 - overhang;
+    const s = z1 + overhang;
+    this.quad(v(a, y, s), v(b, y, s), v(b, top, zm), v(a, top, zm)); // south slope
+    this.quad(v(b, y, n), v(a, y, n), v(a, top, zm), v(b, top, zm)); // north slope
+    this.tri(v(b, y, s), v(b, y, n), v(b, top, zm)); // east gable
+    this.tri(v(a, y, n), v(a, y, s), v(a, top, zm)); // west gable
+  }
+
+  /** Four-sided pyramid (spire) over a square base. */
+  pyramid(cx: number, cz: number, half: number, y: number, rise: number): void {
+    const v = (x: number, yy: number, z: number) => new THREE.Vector3(x, yy, z);
+    const t = v(cx, y + rise, cz);
+    const p = [v(cx - half, y, cz - half), v(cx - half, y, cz + half), v(cx + half, y, cz + half), v(cx + half, y, cz - half)];
+    for (let i = 0; i < 4; i++) this.tri(p[i]!, p[(i + 1) % 4]!, t);
+  }
+
   build(): THREE.BufferGeometry | null {
     if (this.pos.length === 0) return null;
     const geo = new THREE.BufferGeometry();

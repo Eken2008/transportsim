@@ -65,9 +65,8 @@ export function addPiece(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, lod:
 const _a2 = new THREE.Vector3();
 const _b2 = new THREE.Vector3();
 
-/** Track (and level-crossing road surface) for a whole chunk, or null if there is none. */
-export function buildTrackGeometry(map: GameMap, cx: number, cy: number, lod: Lod): THREE.BufferGeometry | null {
-  const g = new GeoBuilder();
+/** Append a chunk's track (and level-crossing road surfaces) to a builder. */
+export function addTrack(g: GeoBuilder, map: GameMap, cx: number, cy: number, lod: Lod): void {
   const x0 = cx * CHUNK_SIZE;
   const y0 = cy * CHUNK_SIZE;
   for (let y = y0; y < y0 + CHUNK_SIZE; y++) {
@@ -88,5 +87,4 @@ export function buildTrackGeometry(map: GameMap, cx: number, cy: number, lod: Lo
       }
     }
   }
-  return g.build();
 }

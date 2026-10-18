@@ -1,4 +1,5 @@
 import { COMPANY_COLORS, MAX_COMPANIES, type Company } from '../company/company.ts';
+import { generateTowns, type Town } from '../town/towns.ts';
 import { GameMap } from '../world/map.ts';
 import { generateTerrain } from '../world/terrain.ts';
 import { TICKS_PER_DAY, daysFromYmd, ymdFromDays } from './date.ts';
@@ -29,6 +30,7 @@ export class GameState {
   dayTick = 0;
   readonly companies = new Map<number, Company>();
   readonly players = new Map<number, Player>();
+  readonly towns = new Map<number, Town>();
   private nextPlayerId = 1;
   /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
   trackVersion = 0;
@@ -47,7 +49,9 @@ export class GameState {
       waterLevel: settings.waterLevel,
       treeDensity: settings.treeDensity,
     });
-    return new GameState(settings, map);
+    const state = new GameState(settings, map);
+    for (const t of generateTowns(map, settings.seed, settings.startYear)) state.towns.set(t.id, t);
+    return state;
   }
 
   /** Advance the simulation by one tick. */

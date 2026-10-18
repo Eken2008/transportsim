@@ -2,6 +2,7 @@ import type { Command } from '../commands/index.ts';
 import type { Company } from '../company/company.ts';
 import type { GameSettings, ServerLimits } from '../sim/settings.ts';
 import type { Player } from '../sim/state.ts';
+import type { Town } from '../town/towns.ts';
 import type { ChunkData } from '../world/chunks.ts';
 
 export const PROTOCOL_VERSION = 1;
@@ -67,6 +68,8 @@ export type ServerMessage =
     }
   | { t: 'roomClosed'; reason: string }
   | { t: 'chunk'; data: ChunkData }
+  /** Town list; `full` replaces the client's list, otherwise entries are upserted. */
+  | { t: 'towns'; towns: Town[]; full: boolean }
   | { t: 'global'; global: GlobalState }
   | { t: 'commandResult'; seq: number; ok: boolean; error?: string; cost?: number }
   /** Host connectivity; when disconnected the room closes at `closesAt` (epoch ms). */

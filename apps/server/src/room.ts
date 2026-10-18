@@ -144,6 +144,7 @@ export class Room {
       autosave: this.autosave,
       spawn: this.spawnFor(player),
     });
+    this.send(session, { t: 'towns', towns: [...this.state.towns.values()], full: true });
 
     if (isHost && this.hostCloseTimer) {
       clearTimeout(this.hostCloseTimer);
@@ -341,12 +342,15 @@ export class Room {
     };
   }
 
-  /** Spread players around the map so they don't all start in the same spot. */
+  /** Start each player at a town (largest first), falling back to land near the centre. */
   private spawnFor(player: Player): { x: number; y: number } {
+    const towns = [...this.state.towns.values()].sort((a, b) => b.population - a.population);
+    if (towns.length > 0) {
+      const t = towns[(player.id - 1) % Math.min(towns.length, Math.max(4, this.state.settings.maxPlayers))]!;
+      return { x: t.x, y: t.y };
+    }
     const { width, height } = this.state.map;
-    const r = player.isHost ? 0 : Math.min(width, height) * 0.22;
-    const a = player.id * 2.39996; // golden angle
-    return findLandNear(this.state.map, width / 2 + Math.cos(a) * r, height / 2 + Math.sin(a) * r);
+    return findLandNear(this.state.map, width / 2, height / 2);
   }
 
   // ---- helpers ---------------------------------------------------------------

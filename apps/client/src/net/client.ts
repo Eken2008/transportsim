@@ -98,6 +98,9 @@ class AppClient {
       case 'chunk':
         this.world?.applyChunk(m.data);
         return;
+      case 'towns':
+        this.world?.applyTowns(m.towns, m.full);
+        return;
       case 'global':
         this.world?.applyGlobal(m.global);
         useApp.setState({ global: m.global });

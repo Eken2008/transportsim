@@ -1,14 +1,10 @@
 import { COSTS } from '../economy/costs.ts';
 import { PIECE_COUNT, Piece, hasPiece, isDiagonal, pieceFitsSlope } from '../rail/track.ts';
 import type { GameState } from '../sim/state.ts';
+import { ROAD_E, ROAD_N, ROAD_S, ROAD_W } from '../town/road.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { fail, isInt, type CommandHandler, type CommandContext, type PlanResult } from './types.ts';
 
-/** Road bits on Road tiles and level crossings (data bits 0-3): N, E, S, W. */
-export const ROAD_N = 1;
-export const ROAD_E = 2;
-export const ROAD_S = 4;
-export const ROAD_W = 8;
 /** On Rail tiles, data bit 8 marks a level crossing (road bits stay in bits 0-3). */
 export const CROSSING_FLAG = 0x100;
 

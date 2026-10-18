@@ -181,3 +181,44 @@ describe('wire frames', () => {
     expect(() => decodeFrame(new Uint8Array([9, 1, 2]))).toThrow();
   });
 });
+
+describe('towns', () => {
+  test('towns get connected roads and road-facing houses', async () => {
+    const { EDGE_DX, EDGE_DY, ROAD_EDGE_BITS, OPPOSITE_EDGE } = await import('../src/index.ts');
+    const state = GameState.create({ ...DEFAULT_SETTINGS, mapWidth: 256, mapHeight: 256, seed: 99, waterLevel: 0.1 });
+    const map = state.map;
+    expect(state.towns.size).toBeGreaterThan(3);
+    let roads = 0;
+    let houses = 0;
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        const i = map.tileIndex(x, y);
+        const t = map.layers.type[i];
+        if (t === TileType.Road) {
+          roads++;
+          expect(map.layers.town[i]).toBeGreaterThan(0);
+          for (let e = 0; e < 4; e++) {
+            if (!(map.layers.data[i]! & ROAD_EDGE_BITS[e]!)) continue;
+            const j = map.tileIndex(x + EDGE_DX[e]!, y + EDGE_DY[e]!);
+            // Connections are symmetric
+            expect(map.layers.type[j]).toBe(TileType.Road);
+            expect(map.layers.data[j]! & ROAD_EDGE_BITS[OPPOSITE_EDGE[e]!]!).toBeTruthy();
+          }
+        } else if (t === TileType.House) {
+          houses++;
+          const face = (map.layers.data[i]! >> 8) & 3;
+          expect(map.type(x + EDGE_DX[face]!, y + EDGE_DY[face]!)).toBe(TileType.Road);
+        }
+      }
+    }
+    expect(roads).toBeGreaterThan(20);
+    expect(houses).toBeGreaterThan(20);
+    const pop = [...state.towns.values()].reduce((s, t) => s + t.population, 0);
+    expect(pop).toBeGreaterThan(houses * 4);
+    // Deterministic, and survives save/load with recounted population
+    const again = GameState.create({ ...DEFAULT_SETTINGS, mapWidth: 256, mapHeight: 256, seed: 99, waterLevel: 0.1 });
+    expect([...again.towns.values()].map((t) => t.name)).toEqual([...state.towns.values()].map((t) => t.name));
+    const restored = restoreSnapshot(encodeSnapshot(state), LIMITS);
+    expect([...restored.towns.values()]).toEqual([...state.towns.values()]);
+  });
+});

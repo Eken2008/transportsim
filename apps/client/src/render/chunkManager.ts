@@ -2,7 +2,9 @@ import { CHUNK_SIZE, HEIGHT_SCALE, MAX_HEIGHT } from '@transportsim/shared';
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { buildTerrainGeometry, buildWaterGeometry, type Lod } from './terrainMesh.ts';
-import { buildTrackGeometry } from './trackMesh.ts';
+import { addRoads, buildHouses } from './buildings.ts';
+import { GeoBuilder } from './geoBuilder.ts';
+import { addTrack } from './trackMesh.ts';
 import { buildTrees } from './trees.ts';
 
 interface ChunkView {
@@ -139,12 +141,16 @@ export class ChunkManager {
       water.matrixAutoUpdate = false;
       group.add(water);
     }
-    const trackGeo = buildTrackGeometry(map, cx, cy, lod);
-    if (trackGeo) {
-      const track = new THREE.Mesh(trackGeo, this.terrainMaterial);
-      track.matrixAutoUpdate = false;
-      group.add(track);
+    const infra = new GeoBuilder();
+    addRoads(infra, map, cx, cy);
+    addTrack(infra, map, cx, cy, lod);
+    const infraGeo = infra.build();
+    if (infraGeo) {
+      const mesh = new THREE.Mesh(infraGeo, this.terrainMaterial);
+      mesh.matrixAutoUpdate = false;
+      group.add(mesh);
     }
+    for (const h of buildHouses(map, cx, cy)) group.add(h);
     if (lod <= 2) for (const t of buildTrees(map, cx, cy, lod >= 1)) group.add(t);
     this.root.add(group);
     this.views.set(id, { cx, cy, lod, group, builtRev: this.dataRev[id]!, lastWanted: now });

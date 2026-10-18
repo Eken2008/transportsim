@@ -96,13 +96,25 @@ try {
   const hook = <T>(fn: (h: Hook, arg: never) => T, arg?: unknown) =>
     a.evaluate(([f, x]) => new Function('h', 'arg', `return (${f})(h, arg)`)((window as unknown as { transportsim: Hook }).transportsim, x), [fn.toString(), arg] as const) as Promise<T>;
   const spawn = await hook((h) => h.spawn);
-  const sx = spawn.x;
-  const sy = spawn.y;
-  const level = await hook(
-    (h, s: { x: number; y: number }) =>
-      h.command({ type: 'terraform', x0: s.x - 14, y0: s.y - 8, x1: s.x + 14, y1: s.y + 10, mode: 'level', level: 4 }),
-    { x: sx, y: sy },
-  );
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y, yaw: 0.6, pitch: 0.75, distance: 30 }), spawn);
+  await a.waitForTimeout(3000);
+  await a.screenshot({ path: `${outDir}/02b-town.png` });
+  // Find a spot near the spawn town that can be levelled (no houses or roads in the way).
+  let sx = spawn.x;
+  let sy = spawn.y;
+  let level: { ok: boolean; error?: string } = { ok: false, error: 'no spot found' };
+  for (const [dx, dy] of [[24, 0], [-24, 0], [0, 24], [0, -24], [30, 30], [-30, -30], [40, 0]] as const) {
+    level = await hook(
+      (h, s: { x: number; y: number }) =>
+        h.command({ type: 'terraform', x0: s.x - 14, y0: s.y - 8, x1: s.x + 14, y1: s.y + 10, mode: 'level', level: 4 }),
+      { x: spawn.x + dx, y: spawn.y + dy },
+    );
+    if (level.ok) {
+      sx = spawn.x + dx;
+      sy = spawn.y + dy;
+      break;
+    }
+  }
   check(level.ok, `level area via command API${level.ok ? '' : `: ${level.error}`}`);
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y, yaw: 0.35, pitch: 1.05, distance: 34 }), { x: sx, y: sy });
   await a.waitForTimeout(2500);

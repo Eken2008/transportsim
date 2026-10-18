@@ -8,6 +8,7 @@ import type { Modifiers, Tool } from '../tools/tool.ts';
 import { CameraController } from './camera.ts';
 import { ChunkManager } from './chunkManager.ts';
 import { Cursor } from './cursor.ts';
+import { LabelLayer } from './labels.ts';
 import { pickTerrain, type TerrainHit } from './picking.ts';
 import { TrackGhost } from './trackGhost.ts';
 
@@ -22,6 +23,7 @@ export class GameRenderer {
   readonly chunks: ChunkManager;
   readonly cursor: Cursor;
   readonly ghost: TrackGhost;
+  readonly labels: LabelLayer;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly world: ClientWorld;
@@ -57,6 +59,7 @@ export class GameRenderer {
     this.chunks = new ChunkManager(world, (ids) => client.subscribe(ids));
     this.cursor = new Cursor(world.map);
     this.ghost = new TrackGhost(world.map);
+    this.labels = new LabelLayer(canvas.parentElement!, world);
     this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
     client.resubscribe = () => this.chunks.resubscribe();
 
@@ -167,6 +170,7 @@ export class GameRenderer {
     }
 
     this.renderer.render(this.scene, this.camera);
+    this.labels.update(this.camera, this.canvas.clientWidth, this.canvas.clientHeight, this.controller.distance);
 
     this.fpsFrames++;
     if (now - this.fpsTime > 1000) {
@@ -183,6 +187,7 @@ export class GameRenderer {
     this.controller.dispose();
     this.chunks.dispose();
     this.ghost.dispose();
+    this.labels.dispose();
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();
   }

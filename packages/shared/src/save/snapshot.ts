@@ -1,4 +1,5 @@
 import type { Company } from '../company/company.ts';
+import { recountTowns, type Town } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
 import { GameState } from '../sim/state.ts';
@@ -19,6 +20,7 @@ export interface Snapshot {
   heights: Uint8Array;
   layers: Record<LayerName, LayerArray>;
   companies: Company[];
+  towns: Town[];
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -35,6 +37,7 @@ export function takeSnapshot(state: GameState): Snapshot {
     heights: state.map.heights,
     layers,
     companies: [...state.companies.values()],
+    towns: [...state.towns.values()],
   };
 }
 
@@ -84,6 +87,18 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       foundedDays: num(c.foundedDays, state.date),
     });
   }
+  for (const t of Array.isArray(snap.towns) ? snap.towns : []) {
+    if (!t || typeof t.id !== 'number') continue;
+    state.towns.set(t.id, {
+      id: t.id,
+      name: String(t.name ?? 'Town').slice(0, 40),
+      x: num(t.x, 0),
+      y: num(t.y, 0),
+      population: 0,
+      houses: 0,
+    });
+  }
+  recountTowns(map, state.towns.values());
   return state;
 }
 

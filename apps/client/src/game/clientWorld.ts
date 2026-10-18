@@ -5,6 +5,7 @@ import {
   type ChunkData,
   type GameSettings,
   type GlobalState,
+  type Town,
 } from '@transportsim/shared';
 
 /**
@@ -15,6 +16,8 @@ export class ClientWorld {
   readonly state: GameState;
   readonly loaded: Uint8Array;
   private chunkListeners = new Set<(cx: number, cy: number) => void>();
+  /** Bumped when the town list changes (labels re-read it). */
+  townsRev = 0;
 
   constructor(settings: GameSettings) {
     this.state = new GameState(settings, new GameMap(settings.mapWidth, settings.mapHeight));
@@ -44,6 +47,12 @@ export class ClientWorld {
     for (const c of g.companies) s.companies.set(c.id, c);
     s.players.clear();
     for (const p of g.players) s.players.set(p.id, p);
+  }
+
+  applyTowns(towns: Town[], full: boolean): void {
+    if (full) this.state.towns.clear();
+    for (const t of towns) this.state.towns.set(t.id, t);
+    this.townsRev++;
   }
 
   onChunk(fn: (cx: number, cy: number) => void): () => void {
