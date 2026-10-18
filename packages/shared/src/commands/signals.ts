@@ -5,8 +5,16 @@ import { CROSSING_FLAG } from './track.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
 /**
- * Set the signals on one track piece. `dirs` bit 0 = signal for trains travelling the piece
- * forwards (trackdir piece*2), bit 1 = backwards (piece*2+1). 0 removes them.
+ * Signals layer: bit `trackdir` (0-11) = a signal facing trains on that trackdir.
+ * Bit 12 = the tile's signals are one-way: trains may not pass them from behind.
+ * A normal signal only acts on trains travelling its way; trains from behind pass freely.
+ */
+export const SIGNAL_ONE_WAY = 0x1000;
+export const SIGNAL_BITS = 0x0fff;
+
+/**
+ * Set the signal on one track piece. `dirs`: 0 = none, 1 = facing trains travelling the
+ * piece forwards (trackdir piece*2), 2 = facing backwards (piece*2+1).
  */
 export interface SetSignalCommand {
   type: 'setSignal';
@@ -14,6 +22,7 @@ export interface SetSignalCommand {
   y: number;
   piece: number;
   dirs: number;
+  oneWay?: boolean;
 }
 
 /** Parallel corner pieces that don't touch (NE+SW, SE+NW) may both carry signals. */
@@ -23,29 +32,37 @@ export const setSignalHandler: CommandHandler<SetSignalCommand> = {
   needsCompany: true,
   plan(state, ctx, cmd): PlanResult {
     const { x, y, piece, dirs } = cmd;
+    const oneWay = cmd.oneWay === true;
     if (![x, y, piece, dirs].every(isInt) || piece < 0 || piece >= PIECE_COUNT || dirs < 0 || dirs > 3) {
       return fail('Invalid signal');
     }
+    if (dirs === 3) return fail('A signal faces one way; trains coming from behind pass a normal signal freely');
     const map = state.map;
     if (!map.inBounds(x, y)) return fail('Out of bounds');
     const i = map.tileIndex(x, y);
     if (map.layers.type[i] !== TileType.Rail) return fail('Signals go on plain track');
     if (map.layers.owner[i] !== ctx.companyId) return fail('Track belongs to another company');
     if (map.layers.data[i]! & CROSSING_FLAG) return fail("Signals can't go on a level crossing");
+    if (map.layers.data[i]! & 0x600) return fail("Signals can't go on a bridge or tunnel end");
     const bits = map.layers.track[i]!;
     if (!hasPiece(bits, piece)) return fail('No track there');
     if (dirs !== 0 && (bits & ~(1 << piece) & ~PARALLEL[piece]!) !== 0) {
       return fail('Signals need a tile without junctions');
     }
-    const current = (map.layers.signals[i]! >> (piece * 2)) & 3;
-    if (current === dirs) return fail(dirs ? 'Already there' : 'No signal there');
-    const added = (dirs & ~current & 1 ? 1 : 0) + (dirs & ~current & 2 ? 1 : 0);
+    const sig = map.layers.signals[i]!;
+    const current = (sig >> (piece * 2)) & 3;
+    const currentOneWay = (sig & SIGNAL_ONE_WAY) !== 0;
+    if (current === dirs && (dirs === 0 || currentOneWay === oneWay)) return fail(dirs ? 'Already there' : 'No signal there');
+    const cost = current === 0 && dirs !== 0 ? COSTS.signal : dirs !== 0 ? Math.round(COSTS.signal * 0.25) : 0;
     return {
       ok: true,
-      cost: state.cost(added * COSTS.signal),
+      cost: state.cost(cost),
       commit() {
-        map.layers.signals[i] = (map.layers.signals[i]! & ~(3 << (piece * 2))) | (dirs << (piece * 2));
-        if (map.layers.signals[i]) state.signalTiles.add(i);
+        let next = (sig & ~(3 << (piece * 2))) | (dirs << (piece * 2));
+        if (dirs !== 0) next = oneWay ? next | SIGNAL_ONE_WAY : next & ~SIGNAL_ONE_WAY;
+        if (!(next & SIGNAL_BITS)) next = 0;
+        map.layers.signals[i] = next;
+        if (next) state.signalTiles.add(i);
         else state.signalTiles.delete(i);
         const dirtyChunks = new Set<number>();
         map.touchTile(x, y, dirtyChunks);

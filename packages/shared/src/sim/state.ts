@@ -141,7 +141,10 @@ export class GameState {
     for (let p = 0; p < 6; p++) if ((pieceBits >> p) & 1) mask |= 3 << (p * 2);
     const sig = this.map.layers.signals;
     sig[tile] = sig[tile]! & ~mask;
-    if (!sig[tile]) this.signalTiles.delete(tile);
+    if (!(sig[tile]! & 0x0fff)) {
+      sig[tile] = 0;
+      this.signalTiles.delete(tile);
+    }
   }
 
   /** Whether any vehicle is parked in (or heading into) the depot on this tile. */

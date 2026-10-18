@@ -47,7 +47,8 @@ export type ClientMessage =
   | { t: 'command'; seq: number; cmd: Command }
   | { t: 'setSpeed'; speed: GameSpeed }
   | { t: 'autosave'; enabled: boolean }
-  | { t: 'requestSave' }
+  /** Ask for a snapshot: kept in the host's browser, or (`export`) downloaded as a file by anyone. */
+  | { t: 'requestSave'; export?: boolean }
   | { t: 'chat'; text: string }
   | { t: 'ping'; at: number };
 
@@ -87,6 +88,6 @@ export type ServerMessage =
   /** Host connectivity; when disconnected the room closes at `closesAt` (epoch ms). */
   | { t: 'hostStatus'; connected: boolean; closesAt?: number }
   | { t: 'autosaveStatus'; enabled: boolean }
-  | { t: 'saveData'; kind: 'auto' | 'manual'; name: string; date: number; snapshot: Uint8Array }
+  | { t: 'saveData'; kind: 'auto' | 'manual'; name: string; date: number; snapshot: Uint8Array; export?: boolean }
   | { t: 'chat'; from: string; text: string; at: number; system?: boolean }
   | { t: 'pong'; at: number };

@@ -16,9 +16,11 @@ import {
 } from './station.ts';
 import {
   buyTrainHandler,
+  editConsistHandler,
   setOrdersHandler,
   trainActionHandler,
   type BuyTrainCommand,
+  type EditConsistCommand,
   type SetOrdersCommand,
   type TrainActionCommand,
 } from './trains.ts';
@@ -44,6 +46,7 @@ export type Command =
   | BuyTrainCommand
   | TrainActionCommand
   | SetOrdersCommand
+  | EditConsistCommand
   | SetSignalCommand
   | BuildBridgeCommand
   | BuildTunnelCommand;
@@ -59,6 +62,7 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   buyTrain: buyTrainHandler,
   trainAction: trainActionHandler,
   setOrders: setOrdersHandler,
+  editConsist: editConsistHandler,
   setSignal: setSignalHandler,
   buildBridge: buildBridgeHandler,
   buildTunnel: buildTunnelHandler,

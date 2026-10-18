@@ -11,6 +11,7 @@ export * from './rail/track.ts';
 export * from './rail/station.ts';
 export * from './rail/network.ts';
 export * from './rail/structures.ts';
+export * from './rail/routePlanner.ts';
 export * from './rail/pathfinder.ts';
 export * from './vehicles/catalog.ts';
 export * from './vehicles/train.ts';

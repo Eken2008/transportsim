@@ -87,6 +87,11 @@ export class RailSystem {
     return s;
   }
 
+  /** The consist changed: recompute length, power and so on. */
+  invalidateStats(t: Train): void {
+    this.stats.delete(t.id);
+  }
+
   forget(t: Train): void {
     this.releaseAll(t);
     this.dropClaims(t);

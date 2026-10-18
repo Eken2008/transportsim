@@ -23,6 +23,16 @@ export interface TrainActionCommand {
   action: TrainActionKind;
 }
 
+/**
+ * Rearrange, add or remove vehicles of a train parked in a depot. `units` is the complete new
+ * consist front to back; vehicles not in the old consist are bought, missing ones are sold.
+ */
+export interface EditConsistCommand {
+  type: 'editConsist';
+  id: number;
+  units: string[];
+}
+
 export interface SetOrdersCommand {
   type: 'setOrders';
   id: number;
@@ -177,6 +187,55 @@ export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
         const same = current?.kind === 'station' ? orders.findIndex((o) => o.kind === 'station' && o.station === current.station) : -1;
         t.orderIndex = same >= 0 ? same : 0;
         t.routeFor = '';
+        state.dirtyTrains.add(t.id);
+        return noEffects();
+      },
+    };
+  },
+};
+
+export const editConsistHandler: CommandHandler<EditConsistCommand> = {
+  needsCompany: true,
+  plan(state, ctx, cmd): PlanResult {
+    const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
+    if (!t || t.owner !== ctx.companyId) return fail('Not your train');
+    if (t.status !== 'depot') return fail('Trains can only be changed inside a depot');
+    const units = cmd.units;
+    if (!Array.isArray(units) || units.length === 0 || units.length > MAX_UNITS) return fail(`A train has 1–${MAX_UNITS} vehicles`);
+    const year = ymdFromDays(state.date).year;
+    // Multiset difference between old and new consists.
+    const old = new Map<string, number>();
+    for (const u of t.units) old.set(u.type, (old.get(u.type) ?? 0) + 1);
+    let added = 0;
+    let engines = 0;
+    for (const id of units) {
+      const v = typeof id === 'string' ? railVehicle(id) : undefined;
+      if (!v) return fail('Unknown vehicle');
+      if (v.kind === 'loco') engines++;
+      const have = old.get(id) ?? 0;
+      if (have > 0) old.set(id, have - 1);
+      else {
+        if (!isAvailable(v, year, state.settings.timeline)) return fail(`${v.name} is not available in ${year}`);
+        added += v.cost;
+      }
+    }
+    if (engines === 0) return fail('A train needs at least one engine');
+    if (trainStats(units.map((type) => ({ type }))).length > MAX_TRAIN_LENGTH) return fail(`Trains can be at most ${MAX_TRAIN_LENGTH} tiles long`);
+    const age = (state.date - t.builtDays) / 365;
+    const resale = Math.max(0.2, 0.85 - age * 0.04);
+    let removed = 0;
+    for (const [id, n] of old) removed += (railVehicle(id)?.cost ?? 0) * n;
+    const cost = state.cost(added) - Math.round(state.cost(removed) * resale);
+    const same = units.length === t.units.length && units.every((u, i) => u === t.units[i]!.type);
+    if (same) return fail('No changes');
+    return {
+      ok: true,
+      cost,
+      commit() {
+        t.units = units.map((type) => ({ type }));
+        t.value = Math.max(0, t.value + state.cost(added) - state.cost(removed));
+        t.cargo = [];
+        state.rail.invalidateStats(t);
         state.dirtyTrains.add(t.id);
         return noEffects();
       },

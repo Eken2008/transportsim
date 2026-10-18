@@ -260,8 +260,8 @@ export class Room {
         this.send(session, { t: 'autosaveStatus', enabled: this.autosave });
         return;
       case 'requestSave':
-        if (!isHost) return;
-        this.sendSave(session, 'manual');
+        if (!isHost && !msg.export) return;
+        this.sendSave(session, 'manual', msg.export === true);
         return;
       case 'chat': {
         const text = String(msg.text ?? '').trim().slice(0, 300);
@@ -300,13 +300,14 @@ export class Room {
     this.sendSave(host, 'auto');
   }
 
-  private sendSave(session: Session, kind: 'auto' | 'manual'): void {
+  private sendSave(session: Session, kind: 'auto' | 'manual', exportFile = false): void {
     this.send(session, {
       t: 'saveData',
       kind,
       name: this.state.settings.name,
       date: this.state.date,
       snapshot: encodeSnapshot(this.state),
+      export: exportFile || undefined,
     });
   }
 

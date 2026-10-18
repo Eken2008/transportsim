@@ -90,6 +90,9 @@ export function nextSegments(map: GameMap, s: number, owner: number, out: number
     else if (e1 === entry) ntd = trackdir(p, 1);
     else continue;
     if (turnSteps(heading, TD_HEADING[ntd]!) > 1) continue;
+    // One-way signals can't be passed from behind.
+    const sig = map.layers.signals[n]!;
+    if (sig & 0x1000 && (sig >> (ntd ^ 1)) & 1) continue;
     out.push(n * 16 + ntd);
   }
   return out;
