@@ -135,7 +135,10 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       rating: num(s.rating, 175),
     });
   }
-  for (let i = 0; i < map.layers.type.length; i++) if (map.layers.type[i] === TileType.Depot) state.depots.add(i);
+  for (let i = 0; i < map.layers.type.length; i++) {
+    if (map.layers.type[i] === TileType.Depot) state.depots.add(i);
+    if (map.layers.signals[i]) state.signalTiles.add(i);
+  }
   for (const t of Array.isArray(snap.trains) ? snap.trains : []) {
     const train = sanitizeTrain(t, state);
     if (train) state.trains.set(train.id, train);

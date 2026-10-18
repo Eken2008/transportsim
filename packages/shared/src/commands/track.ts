@@ -68,6 +68,7 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
       } else if (type === TileType.Rail) {
         if (map.layers.owner[i] !== company) return fail(`Track belongs to another company ${at(x, y)}`);
         if (map.layers.data[i]! & CROSSING_FLAG) return fail(`Can't add track to a level crossing ${at(x, y)}`);
+        if (map.layers.signals[i]) return fail(`Remove the signals before adding a junction ${at(x, y)}`);
       } else if (type === TileType.Road) {
         const road = map.layers.data[i]! & 0xf;
         const okX = p === Piece.X && road === (ROAD_N | ROAD_S);

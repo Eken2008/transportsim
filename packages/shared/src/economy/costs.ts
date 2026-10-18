@@ -9,4 +9,5 @@ export const COSTS = {
   stationRemove: 150,
   depot: 1800,
   depotRemove: 300,
+  signal: 350,
 } as const;

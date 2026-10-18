@@ -116,6 +116,7 @@ export function trainStatus(t: TrainInfo): string {
   if (t.status === 'depot') return 'In depot';
   if (t.status === 'loading') return `Loading at ${stationName(t.lastStation)}`;
   if (t.status === 'stopped') return 'Stopped';
+  if (t.depot >= 0) return 'Waiting to leave the depot';
   if (t.toDepot) return 'Heading for depot';
   const o = t.orders[t.orderIndex];
   if (!o) return 'No orders';

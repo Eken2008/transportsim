@@ -14,6 +14,7 @@ import {
 } from '@transportsim/shared';
 import * as THREE from 'three';
 import { GeoBuilder, lin } from './geoBuilder.ts';
+import { SIGNAL_POST_HEIGHT, signalPlacement } from './signalGeometry.ts';
 import type { Lod } from './terrainMesh.ts';
 
 const BALLAST = lin('#8f877c');
@@ -27,6 +28,10 @@ const CANOPY = lin('#5d6b78');
 const POST = lin('#3c4148');
 const DEPOT_WALL = lin('#a59c8e');
 const DEPOT_DOOR = lin('#2a2d31');
+const SIGNAL_POST = lin('#30343a');
+const SIGNAL_HEAD = lin('#16181b');
+const _foot = new THREE.Vector3();
+const _dir = new THREE.Vector3();
 
 const LIFT = 0.012;
 const GAUGE = 0.15;
@@ -104,6 +109,16 @@ export function addTrack(
         if (!hasPiece(bits, p)) continue;
         pieceEndpoints(map, x, y, p, _a, _b);
         addPiece(g, _a, _b, lod);
+      }
+      const sig = map.layers.signals[i]!;
+      if (sig && lod <= 1) {
+        for (let td = 0; td < 12; td++) {
+          if (!((sig >> td) & 1)) continue;
+          signalPlacement(map, x, y, td, _foot, _dir);
+          const f = _foot;
+          g.color(SIGNAL_POST).aabb(f.x - 0.018, f.y, f.z - 0.018, f.x + 0.018, f.y + SIGNAL_POST_HEIGHT, f.z + 0.018);
+          g.color(SIGNAL_HEAD).aabb(f.x - 0.045, f.y + SIGNAL_POST_HEIGHT - 0.04, f.z - 0.045, f.x + 0.045, f.y + SIGNAL_POST_HEIGHT + 0.12, f.z + 0.045);
+        }
       }
     }
   }

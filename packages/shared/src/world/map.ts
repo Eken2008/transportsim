@@ -20,6 +20,8 @@ export const TILE_LAYERS = {
   data: Uint16Array,
   /** Track piece bits 0-5 (see rail/track.ts) on Rail, Station and Depot tiles. */
   track: Uint8Array,
+  /** Signals on Rail tiles: bit `trackdir` set = signal facing trains on that trackdir. */
+  signals: Uint16Array,
   /** Town id + 1 for town-owned tiles (houses, town roads); 0 = none. */
   town: Uint16Array,
 } satisfies Record<string, TypedArrayCtor>;
@@ -138,6 +140,7 @@ export class GameMap {
     this.layers.data[i] = (Math.min(trees, MAX_TREES) & 0x7) | ((ground & 0x7) << 3);
     this.layers.track[i] = 0;
     this.layers.town[i] = 0;
+    this.layers.signals[i] = 0;
   }
 
   setWater(i: number): void {
@@ -146,6 +149,7 @@ export class GameMap {
     this.layers.data[i] = 0;
     this.layers.track[i] = 0;
     this.layers.town[i] = 0;
+    this.layers.signals[i] = 0;
   }
 
   chunkIndex(cx: number, cy: number): number {

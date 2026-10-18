@@ -78,6 +78,8 @@ export type ServerMessage =
   | { t: 'trains'; trains: TrainInfo[]; removed: number[]; full: boolean }
   /** Positions of trains near the client's subscribed chunks (~10 Hz). */
   | { t: 'trainPos'; trains: TrainMotion[] }
+  /** Aspects of signals in subscribed chunks: `red[i]` is the red-trackdir mask of `tiles[i]`. */
+  | { t: 'signals'; tiles: number[]; red: number[] }
   | { t: 'global'; global: GlobalState }
   | { t: 'commandResult'; seq: number; ok: boolean; error?: string; cost?: number }
   /** Host connectivity; when disconnected the room closes at `closesAt` (epoch ms). */

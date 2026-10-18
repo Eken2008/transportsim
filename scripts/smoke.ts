@@ -157,6 +157,12 @@ try {
   // Second station further east, then buy a train in the depot and give it orders — all via the UI.
   await a.keyboard.press('Digit6');
   await clickTile(sx + 5, sy - 4);
+  // A one-way signal on the line between the depot and the first station.
+  await a.keyboard.press('Digit9');
+  const beforeSignal = await a.locator('.money').innerText();
+  await clickTile(sx - 6, sy - 4);
+  await a.waitForTimeout(800);
+  check(beforeSignal !== (await a.locator('.money').innerText()), 'placed a signal');
   await a.keyboard.press('Escape');
   await clickTile(sx - 11, sy - 4);
   const depotWin = a.locator('.window', { hasText: 'Train depot' });
@@ -177,6 +183,7 @@ try {
   check(/Heading to|Loading at/.test(status), `train is running (${status})`);
   await trainWin.getByRole('button', { name: /Locate/ }).click();
   await hook((h) => h.view({ distance: 7, pitch: 0.55, yaw: 2.2 }));
+  await a.waitForTimeout(800);
   await a.waitForTimeout(1500);
   await a.screenshot({ path: `${outDir}/03c-train.png` });
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 1, y: s.y - 4, yaw: 0.7, pitch: 0.75, distance: 18 }), { x: sx, y: sy });

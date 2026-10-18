@@ -1,5 +1,8 @@
 import {
   depotExitSegment,
+  isTrackTile,
+  nextSegments,
+  seg,
   pieceKey,
   segLength,
   segReverse,
@@ -9,7 +12,18 @@ import {
   segmentsConnect,
 } from '../rail/network.ts';
 import { depotGoal, extendThroughPlatform, findPath, stationGoal, type PathGoal } from '../rail/pathfinder.ts';
-import { edgeHeight, tdEntry, tdExit, tdPiece, pieceLength } from '../rail/track.ts';
+import {
+  EDGE_DX,
+  EDGE_DY,
+  OPPOSITE_EDGE,
+  PIECE_EDGES,
+  edgeHeight,
+  hasPiece,
+  pieceLength,
+  tdEntry,
+  tdExit,
+  tdPiece,
+} from '../rail/track.ts';
 import { TICKS_PER_DAY, TICKS_PER_SECOND } from '../sim/date.ts';
 import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
@@ -55,6 +69,13 @@ export class RailSystem {
   /** pieceKey → ids of trains on that piece. */
   private occ = new Map<number, Set<number>>();
   private stats = new Map<number, TrainStats>();
+  /** Signal blocks: pieceKey → block id, rebuilt when track or signals change. */
+  private blocksFor = -1;
+  private blockOf = new Map<number, number>();
+  /** block → (train → pieces of that train in the block) */
+  private blockUse = new Map<number, Map<number, number>>();
+  /** block → train that has committed to entering it past a green signal */
+  private claims = new Map<number, number>();
   /** Called when a train arrives at a platform (cargo handling hooks in here). */
   onArrive: ((t: Train, station: number) => void) | null = null;
   /** Called every tick while loading; return true to keep waiting (e.g. full load). */
@@ -70,6 +91,7 @@ export class RailSystem {
 
   forget(t: Train): void {
     this.releaseAll(t);
+    this.dropClaims(t);
     this.stats.delete(t.id);
   }
 
@@ -93,7 +115,13 @@ export class RailSystem {
     const k = pieceKey(s);
     let set = this.occ.get(k);
     if (!set) this.occ.set(k, (set = new Set()));
+    if (set.has(t.id)) return;
     set.add(t.id);
+    const b = this.blockOf.get(k);
+    if (b === undefined) return;
+    let use = this.blockUse.get(b);
+    if (!use) this.blockUse.set(b, (use = new Map()));
+    use.set(t.id, (use.get(t.id) ?? 0) + 1);
   }
 
   private release(t: Train, s: number): void {
@@ -102,22 +130,146 @@ export class RailSystem {
     if (!set) return;
     // Another segment of the same train may still be on this piece (it can't, pieces are
     // traversed once per pass, but be safe if a train is tightly looped).
-    if (!t.path.some((p) => pieceKey(p) === k)) set.delete(t.id);
+    if (t.path.some((p) => pieceKey(p) === k) || !set.delete(t.id)) return;
     if (set.size === 0) this.occ.delete(k);
+    this.leaveBlockPiece(t, k);
+  }
+
+  private leaveBlockPiece(t: Train, k: number): void {
+    const b = this.blockOf.get(k);
+    if (b === undefined) return;
+    const use = this.blockUse.get(b);
+    const n = (use?.get(t.id) ?? 1) - 1;
+    if (use && n > 0) {
+      use.set(t.id, n);
+      return;
+    }
+    use?.delete(t.id);
+    if (use && use.size === 0) this.blockUse.delete(b);
+    if (this.claims.get(b) === t.id) this.claims.delete(b);
+  }
+
+  private dropClaims(t: Train): void {
+    for (const [b, id] of this.claims) if (id === t.id) this.claims.delete(b);
   }
 
   private releaseAll(t: Train): void {
     for (const s of t.path) {
-      const set = this.occ.get(pieceKey(s));
-      set?.delete(t.id);
-      if (set && set.size === 0) this.occ.delete(pieceKey(s));
+      const k = pieceKey(s);
+      const set = this.occ.get(k);
+      if (!set?.delete(t.id)) continue;
+      if (set.size === 0) this.occ.delete(k);
+      this.leaveBlockPiece(t, k);
     }
   }
 
   /** Rebuild occupancy from scratch (after loading a save). */
   rebuildOccupancy(): void {
     this.occ.clear();
+    this.blockUse.clear();
+    this.claims.clear();
     for (const t of this.state.trains.values()) for (const s of t.path) this.occupy(t, s);
+  }
+
+  // ---- signal blocks -------------------------------------------------------------
+
+  private ensureBlocks(): void {
+    if (this.blocksFor !== this.state.trackVersion) this.rebuildBlocks();
+  }
+
+  /** Is there a signal at the exit edge of this segment, facing trains on it? */
+  signalFacing(s: number): boolean {
+    return ((this.state.map.layers.signals[segTile(s)]! >> segTd(s)) & 1) === 1;
+  }
+
+  /** Is there a signal (on either side) at edge `e` between piece p of `tile` and piece q of `ntile`? */
+  private boundary(tile: number, p: number, e: number, ntile: number, q: number): boolean {
+    const sig = this.state.map.layers.signals;
+    const [a0, a1] = PIECE_EDGES[p]!;
+    const mine = e === a1 ? p * 2 : e === a0 ? p * 2 + 1 : -1;
+    if (mine >= 0 && (sig[tile]! >> mine) & 1) return true;
+    const opp = OPPOSITE_EDGE[e as 0];
+    const [b0, b1] = PIECE_EDGES[q]!;
+    const theirs = opp === b1 ? q * 2 : opp === b0 ? q * 2 + 1 : -1;
+    return theirs >= 0 && ((sig[ntile]! >> theirs) & 1) === 1;
+  }
+
+  /** Flood-fill track pieces into blocks separated by signals. */
+  private rebuildBlocks(): void {
+    const map = this.state.map;
+    const { type, track, owner } = map.layers;
+    const w = map.width;
+    this.blockOf.clear();
+    let next = 0;
+    const stack: number[] = [];
+    // Parallel corner pieces (NE+SW, SE+NW) don't touch; every other pair touches or crosses.
+    const PARALLEL = [-1, -1, 4, 5, 2, 3];
+    for (let tile = 0; tile < type.length; tile++) {
+      if (!isTrackTile(type[tile]!)) continue;
+      for (let p = 0; p < 6; p++) {
+        if (!hasPiece(track[tile]!, p) || this.blockOf.has(tile * 8 + p)) continue;
+        const id = next++;
+        this.blockOf.set(tile * 8 + p, id);
+        stack.push(tile * 8 + p);
+        while (stack.length) {
+          const k = stack.pop()!;
+          const ct = Math.floor(k / 8);
+          const cp = k % 8;
+          const visit = (key: number) => {
+            if (this.blockOf.has(key)) return;
+            this.blockOf.set(key, id);
+            stack.push(key);
+          };
+          for (let q = 0; q < 6; q++) if (q !== cp && q !== PARALLEL[cp] && hasPiece(track[ct]!, q)) visit(ct * 8 + q);
+          const x = ct % w;
+          const y = (ct - x) / w;
+          for (const e of PIECE_EDGES[cp]!) {
+            const nx = x + EDGE_DX[e];
+            const ny = y + EDGE_DY[e];
+            if (nx < 0 || ny < 0 || nx >= w || ny >= map.height) continue;
+            const nt = ny * w + nx;
+            if (!isTrackTile(type[nt]!) || owner[nt] !== owner[ct]) continue;
+            // Depot doors behave like signals: a depot is always its own block.
+            if (type[nt] === TileType.Depot || type[ct] === TileType.Depot) continue;
+            const entry = OPPOSITE_EDGE[e];
+            for (let q = 0; q < 6; q++) {
+              if (!hasPiece(track[nt]!, q)) continue;
+              const [q0, q1] = PIECE_EDGES[q]!;
+              if (q0 !== entry && q1 !== entry) continue;
+              if (this.boundary(ct, cp, e, nt, q)) continue;
+              visit(nt * 8 + q);
+            }
+          }
+        }
+      }
+    }
+    this.blocksFor = this.state.trackVersion;
+    this.rebuildOccupancy();
+  }
+
+  /** Signal block id of a piece (tile * 8 + piece), for diagnostics and tests. */
+  blockOfPiece(key: number): number | undefined {
+    this.ensureBlocks();
+    return this.blockOf.get(key);
+  }
+
+  /** Block occupied or claimed by a train other than `except`. */
+  private blockBusy(b: number, except: number): boolean {
+    const use = this.blockUse.get(b);
+    if (use) for (const id of use.keys()) if (id !== except) return true;
+    const c = this.claims.get(b);
+    return c !== undefined && c !== except;
+  }
+
+  /** Red if the block beyond the signal on this tile/trackdir is occupied or claimed. */
+  signalRed(tile: number, td: number): boolean {
+    this.ensureBlocks();
+    const owner = this.state.map.layers.owner[tile]!;
+    for (const n of nextSegments(this.state.map, seg(tile, td), owner)) {
+      const b = this.blockOf.get(pieceKey(n));
+      if (b !== undefined && this.blockBusy(b, -1)) return true;
+    }
+    return false;
   }
 
   depotHasVehicles(tile: number): boolean {
@@ -131,29 +283,38 @@ export class RailSystem {
   // ---- control -----------------------------------------------------------------
 
   canStart(t: Train): string | null {
-    if (t.status === 'depot') {
-      if (t.orders.length === 0) return 'Give the train some orders first';
-      if (this.occupiedByOther(depotExitSegment(this.state.map, t.depot), t.id)) return 'The depot exit is blocked';
-      return null;
-    }
+    if (t.status === 'depot') return t.orders.length === 0 ? 'Give the train some orders first' : null;
     return t.status === 'stopped' ? null : 'Already running';
   }
 
-  /** Leave the depot (or resume after a player stop). Call canStart() first. */
+  /**
+   * Leave the depot (or resume after a player stop). Call canStart() first. A train leaving
+   * a depot waits inside until the line beyond the door is clear: the door acts as a signal.
+   */
   start(t: Train): void {
     if (t.status === 'depot') {
-      const s = depotExitSegment(this.state.map, t.depot);
-      t.path = [s];
-      t.pos = 0;
-      t.speed = 0;
-      t.depot = -1;
       t.status = 'running';
       t.route = [];
       t.routeFor = '';
-      this.occupy(t, s);
+      t.speed = 0;
     } else if (t.status === 'stopped') {
       t.status = 'running';
     }
+  }
+
+  /** Move a train waiting inside its depot onto the line if the block beyond the door is free. */
+  private tryLeaveDepot(t: Train): void {
+    const map = this.state.map;
+    const s = depotExitSegment(map, t.depot);
+    if (this.occupiedByOther(s, t.id)) return;
+    const beyond = nextSegments(map, s, t.owner).map((n) => this.blockOf.get(pieceKey(n)));
+    if (beyond.some((b) => b !== undefined && this.blockBusy(b, t.id))) return;
+    for (const b of beyond) if (b !== undefined) this.claims.set(b, t.id);
+    t.path = [s];
+    t.pos = 0;
+    t.depot = -1;
+    this.occupy(t, s);
+    this.state.dirtyTrains.add(t.id);
   }
 
   stop(t: Train): void {
@@ -180,6 +341,7 @@ export class RailSystem {
     t.route = [];
     t.routeFor = '';
     t.speed = 0;
+    this.dropClaims(t);
     return true;
   }
 
@@ -191,6 +353,7 @@ export class RailSystem {
   // ---- simulation --------------------------------------------------------------
 
   step(): void {
+    this.ensureBlocks();
     for (const t of this.state.trains.values()) {
       if (t.status === 'depot') continue;
       this.stepTrain(t);
@@ -199,6 +362,10 @@ export class RailSystem {
 
   private stepTrain(t: Train): void {
     const map = this.state.map;
+    if (t.path.length === 0) {
+      if (t.depot >= 0 && t.status === 'running') this.tryLeaveDepot(t);
+      return;
+    }
     // Track under the train may have been removed (only possible for tiles not occupied when
     // the command ran, so this is a safety net for saves/edge cases).
     if (!t.path.every((s) => segmentExists(map, s))) {
@@ -273,9 +440,18 @@ export class RailSystem {
     const map = this.state.map;
     let d = segLength(t.path[0]!) - t.pos;
     let prev = t.path[0]!;
+    const commit = brakingDistance(t.speed) + 1;
     for (const s of t.route) {
       if (d > horizon) return d;
       if (!segmentsConnect(map, prev, s, t.owner)) return d; // route went stale
+      if (this.signalFacing(prev)) {
+        const b = this.blockOf.get(pieceKey(s));
+        if (b !== undefined) {
+          if (this.blockBusy(b, t.id)) return d - SAFETY_MARGIN;
+          // Close enough that we will pass: reserve the block so nobody else enters.
+          if (d <= commit && t.status === 'running') this.claims.set(b, t.id);
+        }
+      }
       if (this.occupiedByOther(s, t.id)) return d - SAFETY_MARGIN;
       d += segLength(s);
       prev = s;
@@ -293,7 +469,12 @@ export class RailSystem {
         break;
       }
       const next = t.route[0];
-      if (next === undefined || !segmentsConnect(map, head, next, t.owner) || this.occupiedByOther(next, t.id)) {
+      if (
+        next === undefined ||
+        !segmentsConnect(map, head, next, t.owner) ||
+        this.occupiedByOther(next, t.id) ||
+        (this.signalFacing(head) && this.blockBusy(this.blockOf.get(pieceKey(next)) ?? -1, t.id))
+      ) {
         t.pos = segLength(head);
         t.speed = 0;
         break;
@@ -342,6 +523,7 @@ export class RailSystem {
 
   private enterDepot(t: Train, tile: number): void {
     this.releaseAll(t);
+    this.dropClaims(t);
     t.path = [];
     t.route = [];
     t.pos = 0;

@@ -27,6 +27,9 @@ export class ClientWorld {
   readonly trains = new Map<number, TrainInfo>();
   trainsRev = 0;
   readonly motions = new Map<number, { m: TrainMotion; at: number }>();
+  /** Signal tile → mask of trackdirs showing red (only for tiles near our view). */
+  readonly signalRed = new Map<number, number>();
+  signalsRev = 0;
 
   constructor(settings: GameSettings) {
     this.state = new GameState(settings, new GameMap(settings.mapWidth, settings.mapHeight));
@@ -93,6 +96,12 @@ export class ClientWorld {
     }
     // Drop trains that left our view (no update for a while).
     for (const [id, v] of this.motions) if (!seen.has(id) && now - v.at > 1500) this.motions.delete(id);
+  }
+
+  applySignals(tiles: number[], red: number[]): void {
+    this.signalRed.clear();
+    tiles.forEach((t, i) => this.signalRed.set(t, red[i]!));
+    this.signalsRev++;
   }
 
   onChunk(fn: (cx: number, cy: number) => void): () => void {

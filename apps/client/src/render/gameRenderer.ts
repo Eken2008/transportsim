@@ -14,6 +14,8 @@ import { LabelLayer } from './labels.ts';
 import { pickTerrain, type TerrainHit } from './picking.ts';
 import { TrackGhost } from './trackGhost.ts';
 import { TrainRenderer } from './trainRenderer.ts';
+import { SignalLights } from './signalLights.ts';
+import { SignalTool } from '../tools/signalTool.ts';
 import { TileType } from '@transportsim/shared';
 import { openWindow } from '../store.ts';
 import { OrdersTool } from '../tools/ordersTool.ts';
@@ -32,6 +34,7 @@ export class GameRenderer {
   readonly labels: LabelLayer;
   readonly area: AreaGhost;
   readonly trains: TrainRenderer;
+  readonly signalLights: SignalLights;
   private downAt: { x: number; y: number } | null = null;
 
   private readonly canvas: HTMLCanvasElement;
@@ -72,6 +75,8 @@ export class GameRenderer {
     this.scene.add(this.area.mesh);
     this.trains = new TrainRenderer(world);
     this.scene.add(this.trains.root);
+    this.signalLights = new SignalLights(world);
+    this.scene.add(this.signalLights.mesh);
     this.labels = new LabelLayer(canvas.parentElement!, world);
     this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
     client.resubscribe = () => this.chunks.resubscribe();
@@ -168,6 +173,9 @@ export class GameRenderer {
       case 'orders':
         this.tool = new OrdersTool(this.area);
         break;
+      case 'signal':
+        this.tool = new SignalTool(this.ghost);
+        break;
       default:
         this.tool = new TerraformTool(id, this.cursor);
     }
@@ -229,6 +237,7 @@ export class GameRenderer {
 
     this.controller.update(dt);
     this.trains.update(now, useApp.getState().global?.speed ?? 1);
+    this.signalLights.update();
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;
     fog.far = this.controller.distance * 9 + 300;
@@ -263,6 +272,7 @@ export class GameRenderer {
     this.labels.dispose();
     this.area.dispose();
     this.trains.dispose();
+    this.signalLights.dispose();
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();
   }

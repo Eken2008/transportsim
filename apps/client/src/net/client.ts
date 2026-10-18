@@ -111,6 +111,9 @@ class AppClient {
       case 'trainPos':
         this.world?.applyTrainPositions(m.trains);
         return;
+      case 'signals':
+        this.world?.applySignals(m.tiles, m.red);
+        return;
       case 'global':
         this.world?.applyGlobal(m.global);
         useApp.setState({ global: m.global });

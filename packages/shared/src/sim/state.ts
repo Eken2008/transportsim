@@ -45,6 +45,8 @@ export class GameState {
   readonly removedTrains = new Set<number>();
   /** Tile indices of all depots. */
   readonly depots = new Set<number>();
+  /** Tile indices that carry at least one signal. */
+  readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
   private nextPlayerId = 1;
   /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
@@ -128,7 +130,13 @@ export class GameState {
   }
 
   /** Remove signals on the given pieces of a tile (track is being removed). */
-  removeSignalsOn(_tile: number, _pieceBits: number): void {}
+  removeSignalsOn(tile: number, pieceBits: number): void {
+    let mask = 0;
+    for (let p = 0; p < 6; p++) if ((pieceBits >> p) & 1) mask |= 3 << (p * 2);
+    const sig = this.map.layers.signals;
+    sig[tile] = sig[tile]! & ~mask;
+    if (!sig[tile]) this.signalTiles.delete(tile);
+  }
 
   /** Whether any vehicle is parked in (or heading into) the depot on this tile. */
   depotHasVehicles(tile: number): boolean {

@@ -181,6 +181,7 @@ const TOOLS: { id: ToolId; icon: string; label: string; key: string; group: numb
   { id: 'level', icon: '▭', label: 'Level land (drag an area)', key: '3', group: 0 },
   { id: 'rail', icon: '🛤', label: 'Build railway (drag; Ctrl removes)', key: '4', group: 1 },
   { id: 'removeRail', icon: '✂', label: 'Remove railway', key: '5', group: 1 },
+  { id: 'signal', icon: '🚦', label: 'Signals (click cycles; Ctrl removes)', key: '9', group: 1 },
   { id: 'station', icon: '🚉', label: 'Build station (R rotates)', key: '6', group: 1 },
   { id: 'depot', icon: '🏚', label: 'Build train depot', key: '7', group: 1 },
   { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', group: 2 },
@@ -314,7 +315,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>4</kbd> railway (drag; hold <kbd>Ctrl</kbd> to remove) · <kbd>5</kbd> remove railway
       </div>
       <div>
-        <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
+        <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>9</kbd> signals · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
       </div>
       <div>
         Click a depot, station or train to open it · <kbd>T</kbd> train list · <kbd>Space</kbd> pause (host)

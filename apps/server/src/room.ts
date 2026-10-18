@@ -39,6 +39,8 @@ export interface Session {
   /** Simple rate limiter for commands. */
   cmdWindowStart: number;
   cmdCount: number;
+  /** Last signal aspects sent (to send only changes). */
+  lastSignals?: string;
 }
 
 const MAX_CHUNKS_PER_FLUSH = 12;
@@ -345,8 +347,9 @@ export class Room {
     }
   }
 
-  /** Stream positions of trains touching each client's subscribed chunks. */
+  /** Stream positions of trains touching each client's subscribed chunks, and signal aspects. */
   private sendPositions(): void {
+    this.sendSignals();
     const map = this.state.map;
     const running = [...this.state.trains.values()].filter((t) => t.path.length > 0);
     if (running.length === 0 || this.sessions.size === 0) return;
@@ -362,6 +365,29 @@ export class Room {
     for (const s of this.sessions) {
       const trains = running.filter((_, i) => [...chunksOf[i]!].some((c) => s.subscribed.has(c)));
       if (trains.length) this.send(s, { t: 'trainPos', trains: trains.map((t) => this.state.rail.motion(t)) });
+    }
+  }
+
+  private sendSignals(): void {
+    const map = this.state.map;
+    const rail = this.state.rail;
+    for (const s of this.sessions) {
+      const tiles: number[] = [];
+      const red: number[] = [];
+      for (const tile of this.state.signalTiles) {
+        const x = tile % map.width;
+        const chunk = Math.floor((tile - x) / map.width / CHUNK_SIZE) * map.chunksX + Math.floor(x / CHUNK_SIZE);
+        if (!s.subscribed.has(chunk)) continue;
+        const bits = map.layers.signals[tile]!;
+        let mask = 0;
+        for (let td = 0; td < 12; td++) if ((bits >> td) & 1 && rail.signalRed(tile, td)) mask |= 1 << td;
+        tiles.push(tile);
+        red.push(mask);
+      }
+      const key = tiles.join(',') + '|' + red.join(',');
+      if (key === s.lastSignals) continue;
+      s.lastSignals = key;
+      this.send(s, { t: 'signals', tiles, red });
     }
   }
 
