@@ -164,3 +164,20 @@ describe('sync and saves', () => {
     expect(ymdFromDays(state.date)).toEqual({ year: 1950, month: 1, day: 1 });
   });
 });
+
+describe('wire frames', () => {
+  test('small frames are plain, large frames are deflated, both round-trip', async () => {
+    const { encodeFrame, decodeFrame } = await import('../src/index.ts');
+    const small = encodeFrame({ t: 'ping', at: 1 });
+    expect(small[0]).toBe(0);
+    expect(decodeFrame(small)).toEqual({ t: 'ping', at: 1 });
+    const state = GameState.create(settings());
+    const msg = { t: 'chunk', data: extractChunk(state.map, 0, 0) } as const;
+    const big = encodeFrame(msg);
+    expect(big[0]).toBe(1);
+    expect(big.length).toBeLessThan(encode(msg).length / 2);
+    const back = decodeFrame<typeof msg>(big);
+    expect(back.data.heights).toEqual(msg.data.heights);
+    expect(() => decodeFrame(new Uint8Array([9, 1, 2]))).toThrow();
+  });
+});

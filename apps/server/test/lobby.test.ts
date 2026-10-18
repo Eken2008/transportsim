@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import {
   PROTOCOL_VERSION,
   TICKS_PER_DAY,
-  decode,
-  encode,
+  decodeFrame,
+  encodeFrame,
   type ClientMessage,
   type ServerMessage,
 } from '@transportsim/shared';
@@ -25,7 +25,7 @@ class FakeConn implements Connection {
   inbox: ServerMessage[] = [];
   closed = false;
   send(bytes: Uint8Array) {
-    this.inbox.push(decode<ServerMessage>(bytes));
+    this.inbox.push(decodeFrame<ServerMessage>(bytes));
   }
   close() {
     this.closed = true;
@@ -40,7 +40,7 @@ class FakeConn implements Connection {
 
 function client(lobby: Lobby, name: string, id = `${name}-client-id`) {
   const conn = new FakeConn();
-  const send = (m: ClientMessage) => lobby.onMessage(conn, encode(m));
+  const send = (m: ClientMessage) => lobby.onMessage(conn, encodeFrame(m));
   send({ t: 'hello', protocol: PROTOCOL_VERSION, clientId: id, name });
   return { conn, send };
 }
@@ -121,7 +121,8 @@ describe('lobby & rooms', () => {
     expect(host.conn.inbox.filter((m) => m.t === 'chunk')).toHaveLength(4);
 
     // Find a land corner and raise it
-    let x = 5, y = 5;
+    let x = 5;
+    const y = 5;
     while (map.cornerHeight(x, y) === 0 && x < 120) x++;
     const h = map.cornerHeight(x, y);
     host.send({ t: 'command', seq: 1, cmd: { type: 'terraform', x0: x, y0: y, x1: x, y1: y, mode: 'raise' } });
@@ -179,9 +180,9 @@ describe('lobby & rooms', () => {
     const lobby = new Lobby(CONFIG);
     const conn = new FakeConn();
     lobby.onMessage(conn, new Uint8Array([0xc1, 0xff, 0x00]));
-    lobby.onMessage(conn, encode({ t: 'listRooms' }));
+    lobby.onMessage(conn, encodeFrame({ t: 'listRooms' }));
     expect(conn.last('error')).toBeDefined();
-    lobby.onMessage(conn, encode({ t: 'hello', protocol: -1, clientId: 'abcdefghij', name: 'x' }));
+    lobby.onMessage(conn, encodeFrame({ t: 'hello', protocol: -1, clientId: 'abcdefghij', name: 'x' }));
     expect(conn.closed).toBe(true);
   });
 });

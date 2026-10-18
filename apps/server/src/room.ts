@@ -1,10 +1,11 @@
 import {
   GAME_SPEEDS,
   TICKS_PER_SECOND,
-  encode,
+  encodeFrame,
   encodeSnapshot,
   executeCommand,
   extractChunk,
+  findLandNear,
   ymdFromDays,
   type ClientMessage,
   type GameSpeed,
@@ -141,6 +142,7 @@ export class Room {
       settings: this.state.settings,
       global: this.globalState(),
       autosave: this.autosave,
+      spawn: this.spawnFor(player),
     });
 
     if (isHost && this.hostCloseTimer) {
@@ -323,7 +325,7 @@ export class Room {
     const map = this.state.map;
     const cx = c % map.chunksX;
     const cy = (c - cx) / map.chunksX;
-    const bytes = encode({ t: 'chunk', data: extractChunk(map, cx, cy) } satisfies ServerMessage);
+    const bytes = encodeFrame({ t: 'chunk', data: extractChunk(map, cx, cy) } satisfies ServerMessage);
     this.chunkCache.set(c, { version, bytes });
     return bytes;
   }
@@ -339,15 +341,23 @@ export class Room {
     };
   }
 
+  /** Spread players around the map so they don't all start in the same spot. */
+  private spawnFor(player: Player): { x: number; y: number } {
+    const { width, height } = this.state.map;
+    const r = player.isHost ? 0 : Math.min(width, height) * 0.22;
+    const a = player.id * 2.39996; // golden angle
+    return findLandNear(this.state.map, width / 2 + Math.cos(a) * r, height / 2 + Math.sin(a) * r);
+  }
+
   // ---- helpers ---------------------------------------------------------------
 
   send(session: Session, msg: ServerMessage): void {
-    session.conn.send(encode(msg));
+    session.conn.send(encodeFrame(msg));
   }
 
   broadcast(msg: ServerMessage): void {
     if (this.sessions.size === 0) return;
-    const bytes = encode(msg);
+    const bytes = encodeFrame(msg);
     for (const s of this.sessions) s.conn.send(bytes);
   }
 

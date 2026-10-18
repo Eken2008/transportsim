@@ -32,7 +32,8 @@ const server = Bun.serve<SocketData, never>({
   websocket: {
     // Saves can be large (a 2048² map is ~20 MB uncompressed).
     maxPayloadLength: 96 * 1024 * 1024,
-    perMessageDeflate: true,
+    // Compression is done per frame in the codec (Bun's permessage-deflate drops large inbound messages).
+    perMessageDeflate: false,
     idleTimeout: 120,
     open(ws: ServerWebSocket<SocketData>) {
       ws.data.conn = {

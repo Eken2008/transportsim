@@ -1,8 +1,8 @@
 import {
   GameState,
   PROTOCOL_VERSION,
-  decode,
-  encode,
+  decodeFrame,
+  encodeFrame,
   restoreSnapshot,
   sanitizeSettings,
   type ClientMessage,
@@ -31,7 +31,7 @@ export class Lobby {
   onMessage(conn: Connection, data: Uint8Array | ArrayBuffer): void {
     let msg: ClientMessage;
     try {
-      msg = decode<ClientMessage>(data);
+      msg = decodeFrame<ClientMessage>(data);
     } catch {
       return this.send(conn, { t: 'error', message: 'Malformed message' });
     }
@@ -142,7 +142,7 @@ export class Lobby {
   }
 
   private send(conn: Connection, msg: ServerMessage): void {
-    conn.send(encode(msg));
+    conn.send(encodeFrame(msg));
   }
 
   shutdown(): void {

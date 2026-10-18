@@ -106,23 +106,46 @@ export function generateTerrain(map: GameMap, opts: TerrainOptions): void {
         continue;
       }
       const min = Math.min(a, b, c, d);
+      // Low-frequency noise drives coherent patches rather than per-tile speckle.
+      const patch = detail(x / 23 + 100, y / 23 - 100);
       let ground: Ground = Ground.Grass;
       if (min >= SNOW_LINE) ground = Ground.Snow;
-      else if (max <= 1 && rng.chance(0.35)) ground = Ground.Sand;
-      else if (max - min >= 2 || (min > SNOW_LINE - 6 && rng.chance(0.4))) ground = Ground.Rocks;
-      else if (rng.chance(0.04)) ground = Ground.Rough;
+      else if (min === 0 && max <= 1 && patch > -0.35) ground = Ground.Sand; // beaches
+      else if (max - min >= 2 || (min > SNOW_LINE - 5 && patch > 0.1)) ground = Ground.Rocks;
+      else if (patch > 0.62) ground = Ground.Rough;
 
       let trees = 0;
       if (ground === Ground.Grass || ground === Ground.Rough) {
-        const f = forest(x / 40, y / 40) * 0.5 + 0.5 + 0.15 * forest(x / 9, y / 9);
-        const density = f * opts.treeDensity - 0.45;
-        if (density > 0 && rng.chance(Math.min(1, density * 2.2))) {
-          trees = Math.max(1, Math.min(MAX_TREES, Math.round(density * 8 * rng.next() + 1)));
+        // Forests: dense cores with soft edges, plus a few scattered trees in the open.
+        const f = forest(x / 48, y / 48) * 0.5 + 0.5 + 0.12 * forest(x / 10, y / 10);
+        const density = (f - 0.52) * opts.treeDensity;
+        if (density > 0 && rng.chance(Math.min(1, density * 4))) {
+          trees = Math.max(1, Math.min(MAX_TREES, Math.round(1 + density * 9 + rng.next())));
+        } else if (rng.chance(0.012 * opts.treeDensity)) {
+          trees = 1;
         }
       }
       map.setClear(i, ground, trees);
     }
   }
+}
+
+/** Spiral outward from (x, y) to the nearest dry, gently sloped tile. */
+export function findLandNear(map: GameMap, x: number, y: number): { x: number; y: number } {
+  const maxR = Math.max(map.width, map.height);
+  for (let r = 0; r < maxR; r += 2) {
+    for (let k = 0; k < Math.max(1, r * 8); k += 2) {
+      const a = (k / Math.max(1, r * 8)) * Math.PI * 2;
+      const tx = Math.round(x + Math.cos(a) * r);
+      const ty = Math.round(y + Math.sin(a) * r);
+      if (!map.inBounds(tx, ty)) continue;
+      if (map.type(tx, ty) === TileType.Water) continue;
+      if (map.tileMinHeight(tx, ty) >= 1 && map.tileMaxHeight(tx, ty) - map.tileMinHeight(tx, ty) <= 1) {
+        return { x: tx, y: ty };
+      }
+    }
+  }
+  return { x, y };
 }
 
 /** Recompute Water/Clear for a tile after terraforming. */

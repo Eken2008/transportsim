@@ -3,7 +3,7 @@ export const CHUNK_SIZE = 64;
 /** Highest allowed corner height level. */
 export const MAX_HEIGHT = 40;
 /** World units per height level (a tile is 1×1 world units). */
-export const HEIGHT_SCALE = 0.25;
+export const HEIGHT_SCALE = 0.3;
 /** Height level at which snow starts to appear (visual + tree line). */
 export const SNOW_LINE = 26;
 

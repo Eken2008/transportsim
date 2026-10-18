@@ -62,6 +62,8 @@ export type ServerMessage =
       settings: GameSettings;
       global: GlobalState;
       autosave: boolean;
+      /** Suggested initial camera position (tile coordinates). */
+      spawn: { x: number; y: number };
     }
   | { t: 'roomClosed'; reason: string }
   | { t: 'chunk'; data: ChunkData }
