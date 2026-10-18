@@ -32,8 +32,6 @@ export interface PlanOptions {
 const TURN_COST = 0.45;
 /** Reusing a piece that already exists is a little cheaper than building one. */
 const EXISTING_FACTOR = 0.85;
-/** Making a new switch on existing track along the way (not at the start or end). */
-const JUNCTION_COST = 2.5;
 /** Making a new level crossing of existing track along the way. */
 const DIAMOND_COST = 0.4;
 /** Starting or ending without joining nearby track. */
@@ -103,7 +101,9 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   const by1 = Math.max(y0, y1) + margin;
   const maxNodes = opts.maxNodes ?? 40_000;
   const w = map.width;
-  const key = (x: number, y: number, td: number) => (y * w + x) * 16 + td;
+  // Search state: tile, trackdir, and whether every piece so far is existing track (riding
+  // along existing track from the start of the drag).
+  const key = (x: number, y: number, td: number, riding: boolean) => ((y * w + x) * 16 + td) * 2 + (riding ? 1 : 0);
   const g = new Map<number, number>();
   const parent = new Map<number, number>();
   // Small binary heap of [f, key]
@@ -155,7 +155,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
     const joins = joinsAcross(map, x0, y0, tdEntry(td), TD_HEADING[td]!, opts.owner, false);
     let cost = pieceCost(status, tdPiece(td)) + (joins ? 0 : LOOSE_END_COST * 0.5);
     if (x0 === x1 && y0 === y1) cost += endCost(x0, y0, td);
-    const k = key(x0, y0, td);
+    const k = key(x0, y0, td, status === 'existing');
     g.set(k, cost);
     push(cost + h(x0, y0), k);
   }
@@ -163,15 +163,16 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   let expanded = 0;
   while (heap.length) {
     const cur = pop();
-    const td = cur % 16;
-    const tile = (cur - td) / 16;
+    const riding = cur % 2 === 1;
+    const td = Math.floor(cur / 2) % 16;
+    const tile = Math.floor(cur / 32);
     const x = tile % w;
     const y = (tile - x) / w;
     if (x === x1 && y === y1) {
       const out: PlacedPiece[] = [];
       for (let k: number | undefined = cur; k !== undefined; k = parent.get(k)) {
-        const t = k % 16;
-        const ti = (k - t) / 16;
+        const t = Math.floor(k / 2) % 16;
+        const ti = Math.floor(k / 32);
         out.push({ x: ti % w, y: Math.floor(ti / w), piece: tdPiece(t) as PlacedPiece['piece'] });
       }
       return out.reverse();
@@ -191,14 +192,18 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       if (turn > 1) continue;
       const status = pieceStatus(map, nx, ny, p, opts.owner);
       if (!status) continue;
-      let cost = gc + pieceCost(status, p) + turn * TURN_COST;
-      if (status === 'new' && !(nx === x1 && ny === y1)) {
-        // Joining or crossing track mid-route only where it pays off; the drag ends are free.
+      const atEnd = nx === x1 && ny === y1;
+      // A route connects to other track only where the drag starts and ends. In between it may
+      // keep following track it started on, or cross track at right angles — never join it.
+      if (!atEnd) {
+        if (status === 'existing' && !riding) continue;
         const bits = map.layers.track[map.tileIndex(nx, ny)]!;
-        if (bits) cost += touchesEdge(bits, p) ? JUNCTION_COST : DIAMOND_COST;
+        if (status === 'new' && bits && touchesEdge(bits, p)) continue;
       }
+      let cost = gc + pieceCost(status, p) + turn * TURN_COST;
+      if (status === 'new' && !atEnd && map.layers.track[map.tileIndex(nx, ny)]) cost += DIAMOND_COST;
       if (nx === x1 && ny === y1) cost += endCost(nx, ny, ntd);
-      const k = key(nx, ny, ntd);
+      const k = key(nx, ny, ntd, riding && status === 'existing');
       const old = g.get(k);
       if (old !== undefined && old <= cost) continue;
       g.set(k, cost);

@@ -91,6 +91,38 @@ describe('route planner across existing lines', () => {
   });
 });
 
+describe('routes only connect at the ends of the drag', () => {
+  /** Does the plan add a piece to row `y` that shares an edge with the X line there (a switch)? */
+  const switchesOnRow = (plan: PlacedPiece[], y: number) =>
+    plan.some((q) => q.y === y && q.piece !== Piece.X && q.piece !== Piece.Y);
+
+  test('double track: a branch from the far line crosses the near line without joining it', () => {
+    const { map, build, owner } = world();
+    for (const y of [20, 21]) build(Array.from({ length: 31 }, (_, k) => ({ x: 20 + k, y, piece: Piece.X })));
+    for (const [sx, sy, ex, ey] of [
+      [35, 20, 33, 28], // start on the far line, drag south past the near one
+      [30, 20, 38, 27],
+      [34, 28, 35, 20], // start below, end on the far line
+      [28, 26, 36, 20],
+    ]) {
+      const plan = planTrack(map, sx!, sy!, ex!, ey!, { owner })!;
+      expect(plan).not.toBeNull();
+      const nearRow = plan.filter((q) => q.y === 21);
+      expect(nearRow).toHaveLength(1);
+      expect(nearRow[0]!.piece).toBe(Piece.Y); // a diamond crossing
+      expect(switchesOnRow(plan.filter((q) => q.y === 21), 21)).toBe(false);
+    }
+  });
+
+  test('extending a line by dragging from its middle past its end still works', () => {
+    const { map, build, owner } = world();
+    build(Array.from({ length: 10 }, (_, k) => ({ x: 20 + k, y: 30, piece: Piece.X })));
+    const plan = planTrack(map, 24, 30, 36, 30, { owner })!;
+    expect(plan).not.toBeNull();
+    expect(plan.every((q) => q.y === 30 && q.piece === Piece.X)).toBe(true);
+  });
+});
+
 describe('signals', () => {
   test('a piece takes one signal; one-way signals block trains from behind', () => {
     const { state, map, run, build, owner } = world();
