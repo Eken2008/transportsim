@@ -8,7 +8,6 @@ import {
   type Station,
 } from '../rail/station.ts';
 import { Piece, hasPiece } from '../rail/track.ts';
-import type { GameState } from '../sim/state.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { CROSSING_FLAG } from './track.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
