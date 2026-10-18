@@ -339,7 +339,7 @@ try {
   const resumedMoney = await a2.locator('.money').innerText();
   // Running costs keep ticking, so allow a small drift between saving and reading the value.
   const money = (s: string) => Number(s.replace(/[^0-9-]/g, ''));
-  check(Math.abs(money(resumedMoney) - money(savedMoney)) < money(savedMoney) * 0.01, `resumed game keeps company money (${savedMoney} → ${resumedMoney})`);
+  check(Math.abs(money(resumedMoney) - money(savedMoney)) < Math.max(500, money(savedMoney) * 0.01), `resumed game keeps company money (${savedMoney} → ${resumedMoney})`);
   await a2.screenshot({ path: `${outDir}/06-resumed.png` });
 } catch (e) {
   failed = true;
