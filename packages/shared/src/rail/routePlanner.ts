@@ -3,6 +3,7 @@ import { ROAD_E, ROAD_N, ROAD_S, ROAD_W } from '../town/road.ts';
 import { TileType } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
 import { HEAD_BRIDGE, HEAD_TUNNEL } from './structures.ts';
+import { linkCandidates } from './links.ts';
 import {
   EDGE_DX,
   EDGE_DY,
@@ -12,6 +13,7 @@ import {
   hasPiece,
   pieceFitsSlope,
   pieceLength,
+  tdEntry,
   tdExit,
   tdPiece,
   trackdir,
@@ -30,6 +32,10 @@ export interface PlanOptions {
 const TURN_COST = 0.45;
 /** Reusing a piece that already exists is a little cheaper than building one. */
 const EXISTING_FACTOR = 0.85;
+/** Starting a new piece beside existing track on the start tile without joining it. */
+const LOOSE_START_COST = 1.5;
+/** Starting or ending a route pointing away from the drag direction (per 45°). */
+const ALIGN_COST = 0.6;
 /** Building over a tile that already has track (it is crossed, not joined): only a tie-breaker. */
 const DIAMOND_COST = 0.02;
 
@@ -117,6 +123,9 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
     return top;
   };
   const h = (x: number, y: number) => Math.hypot(x - x1, y - y1) * 0.7;
+  // The route should start and end heading the way the player dragged.
+  const dragHeading = (Math.round(Math.atan2(y1 - y0, x1 - x0) / (Math.PI / 4)) + 8) % 8;
+  const misalign = (td: number) => (x0 === x1 && y0 === y1 ? 0 : turnSteps(TD_HEADING[td]!, dragHeading) * ALIGN_COST);
   const pieceCost = (status: Build, piece: number) => pieceLength(piece) * (status === 'existing' ? EXISTING_FACTOR : 1);
 
   // Start: any piece on the start tile. The planner doesn't steer towards connections; pieces
@@ -124,7 +133,12 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   for (let td = 0; td < 12; td++) {
     const status = pieceStatus(map, x0, y0, tdPiece(td), opts.owner);
     if (!status) continue;
-    const cost = pieceCost(status, tdPiece(td));
+    let cost = pieceCost(status, tdPiece(td)) + misalign(td);
+    // Starting on a tile with track: a new first piece should begin where that track comes in
+    // (branching off it), not sit beside it unconnected — otherwise continue the existing piece.
+    if (status === 'new' && map.layers.track[map.tileIndex(x0, y0)]) {
+      if (linkCandidates(map, map.tileIndex(x0, y0), tdPiece(td), tdEntry(td)).length === 0) cost += LOOSE_START_COST;
+    }
     const k = key(x0, y0, td, status === 'existing', 8);
     g.set(k, cost);
     push(cost + h(x0, y0), k);
@@ -166,6 +180,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       if (!atEnd && status === 'existing' && !riding) continue;
       let cost = gc + pieceCost(status, p) + turn * TURN_COST;
       if (status === 'new' && !atEnd && map.layers.track[map.tileIndex(nx, ny)]) cost += DIAMOND_COST;
+      if (atEnd) cost += misalign(ntd);
       const k = key(nx, ny, ntd, riding && status === 'existing', p >= 2 ? TD_HEADING[td]! : 8);
       const old = g.get(k);
       if (old !== undefined && old <= cost) continue;
