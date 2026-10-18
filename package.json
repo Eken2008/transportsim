@@ -1,0 +1,23 @@
+{
+  "name": "transportsim",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c blue,green \"bun run --cwd apps/server dev\" \"bun run --cwd apps/client dev\"",
+    "build": "bun run --cwd apps/client build",
+    "start": "bun run --cwd apps/server start",
+    "test": "bun test",
+    "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/client",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "@types/bun": "^1.1.14"
+  }
+}

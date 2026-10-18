@@ -1,0 +1,148 @@
+import { createNoise2D } from 'simplex-noise';
+import { Random } from '../util/random.ts';
+import { Ground, MAX_HEIGHT, MAX_TREES, SNOW_LINE, TileType } from './constants.ts';
+import { GameMap } from './map.ts';
+
+export type TerrainRoughness = 'flat' | 'hilly' | 'mountainous';
+
+export interface TerrainOptions {
+  seed: number;
+  roughness: TerrainRoughness;
+  /** Approximate fraction of the map covered by sea (0..0.8). */
+  waterLevel: number;
+  /** Tree density multiplier (0..2). */
+  treeDensity: number;
+}
+
+const ROUGHNESS = {
+  flat: { maxHeight: 10, octaves: 4, scale: 1 / 380, mountain: 0.15 },
+  hilly: { maxHeight: 22, octaves: 5, scale: 1 / 300, mountain: 0.45 },
+  mountainous: { maxHeight: MAX_HEIGHT, octaves: 6, scale: 1 / 260, mountain: 0.9 },
+} as const;
+
+/**
+ * Enforce the slope rule: orthogonally adjacent corners may differ by at most one
+ * height level. Uses a two-pass chamfer sweep that lowers corners to the
+ * largest field ≤ the input satisfying the constraint (an exact L1 distance transform).
+ */
+export function enforceSlopeLimit(heights: Uint8Array, w: number, h: number): void {
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      let v = heights[i]!;
+      if (x > 0) v = Math.min(v, heights[i - 1]! + 1);
+      if (y > 0) v = Math.min(v, heights[i - w]! + 1);
+      heights[i] = v;
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const i = y * w + x;
+      let v = heights[i]!;
+      if (x < w - 1) v = Math.min(v, heights[i + 1]! + 1);
+      if (y < h - 1) v = Math.min(v, heights[i + w]! + 1);
+      heights[i] = v;
+    }
+  }
+}
+
+/** Generate heights, water, ground variants and trees. */
+export function generateTerrain(map: GameMap, opts: TerrainOptions): void {
+  const rng = new Random(opts.seed);
+  const base = createNoise2D(() => rng.next());
+  const ridge = createNoise2D(() => rng.next());
+  const detail = createNoise2D(() => rng.next());
+  const forest = createNoise2D(() => rng.next());
+  const params = ROUGHNESS[opts.roughness];
+
+  const cw = map.width + 1;
+  const ch = map.height + 1;
+  const raw = new Float32Array(cw * ch);
+
+  // 1. Fractal noise field in [0, 1]
+  for (let y = 0; y < ch; y++) {
+    for (let x = 0; x < cw; x++) {
+      let amp = 1;
+      let freq = params.scale;
+      let sum = 0;
+      let norm = 0;
+      for (let o = 0; o < params.octaves; o++) {
+        sum += amp * base(x * freq, y * freq);
+        norm += amp;
+        amp *= 0.5;
+        freq *= 2;
+      }
+      let v = (sum / norm) * 0.5 + 0.5;
+      // Ridged mountains grow out of high ground
+      const r = 1 - Math.abs(ridge(x * params.scale * 1.7, y * params.scale * 1.7));
+      v += params.mountain * r * r * Math.max(0, v - 0.45);
+      v += 0.03 * detail(x / 18, y / 18);
+      raw[y * cw + x] = v;
+    }
+  }
+
+  // 2. Pick sea level from the requested water fraction (histogram percentile)
+  const sorted = Float32Array.from(raw).sort();
+  const sea = sorted[Math.floor(Math.min(Math.max(opts.waterLevel, 0), 0.8) * (sorted.length - 1))]!;
+  const top = sorted[sorted.length - 1]!;
+  const span = Math.max(top - sea, 1e-6);
+
+  const heights = map.heights;
+  for (let i = 0; i < raw.length; i++) {
+    const t = (raw[i]! - sea) / span;
+    // Slight curve flattens lowlands, which gives more buildable land near the coast.
+    heights[i] = t <= 0 ? 0 : Math.min(params.maxHeight, Math.round(Math.pow(t, 1.35) * params.maxHeight + 0.5));
+  }
+  enforceSlopeLimit(heights, cw, ch);
+
+  // 3. Tile classification: water, ground and trees
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const i = y * map.width + x;
+      const [a, b, c, d] = map.tileCorners(x, y);
+      const max = Math.max(a, b, c, d);
+      if (max === 0) {
+        map.setWater(i);
+        continue;
+      }
+      const min = Math.min(a, b, c, d);
+      let ground: Ground = Ground.Grass;
+      if (min >= SNOW_LINE) ground = Ground.Snow;
+      else if (max <= 1 && rng.chance(0.35)) ground = Ground.Sand;
+      else if (max - min >= 2 || (min > SNOW_LINE - 6 && rng.chance(0.4))) ground = Ground.Rocks;
+      else if (rng.chance(0.04)) ground = Ground.Rough;
+
+      let trees = 0;
+      if (ground === Ground.Grass || ground === Ground.Rough) {
+        const f = forest(x / 40, y / 40) * 0.5 + 0.5 + 0.15 * forest(x / 9, y / 9);
+        const density = f * opts.treeDensity - 0.45;
+        if (density > 0 && rng.chance(Math.min(1, density * 2.2))) {
+          trees = Math.max(1, Math.min(MAX_TREES, Math.round(density * 8 * rng.next() + 1)));
+        }
+      }
+      map.setClear(i, ground, trees);
+    }
+  }
+}
+
+/** Recompute Water/Clear for a tile after terraforming. */
+export function reclassifyTile(map: GameMap, x: number, y: number): void {
+  const i = map.tileIndex(x, y);
+  const type = map.layers.type[i];
+  const maxH = map.tileMaxHeight(x, y);
+  if (type === TileType.Water && maxH > 0) {
+    map.setClear(i, Ground.Grass, 0);
+  } else if (type === TileType.Clear && maxH === 0 && touchesWater(map, x, y)) {
+    map.setWater(i);
+  }
+}
+
+function touchesWater(map: GameMap, x: number, y: number): boolean {
+  if (x === 0 || y === 0 || x === map.width - 1 || y === map.height - 1) return true; // map edge is sea
+  return (
+    map.type(x - 1, y) === TileType.Water ||
+    map.type(x + 1, y) === TileType.Water ||
+    map.type(x, y - 1) === TileType.Water ||
+    map.type(x, y + 1) === TileType.Water
+  );
+}
