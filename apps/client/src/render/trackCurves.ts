@@ -32,11 +32,6 @@ export interface PieceCurve {
   p3: THREE.Vector3;
 }
 
-interface EndRef {
-  tile: number;
-  piece: number;
-  edge: number;
-}
 
 const isTrack = (t: number) => t === TileType.Rail || t === TileType.Station || t === TileType.Depot;
 
@@ -68,49 +63,86 @@ export class TrackCurves {
     return this.endPoint(tile, piece, edge).sub(this.endPoint(tile, piece, other)).normalize();
   }
 
-  /** Pieces that physically continue this end (same owner, ≤ 45° turn, respecting depots and bridges). */
-  private neighbours(tile: number, piece: number, edge: number): EndRef[] {
+  /** Can track cross this edge of the tile at all (bridge span sides and depot walls can't)? */
+  private edgeOpen(tile: number, edge: number): boolean {
     const map = this.map;
-    const { type, owner, data, track } = map.layers;
-    const here = headInfo(map, tile);
-    if (here && here.dir === edge) return []; // span side of a bridge/tunnel end
-    if (type[tile] === TileType.Depot && depotExit(data[tile]!) !== edge) return [];
+    const info = headInfo(map, tile);
+    if (info && info.dir === edge) return false;
+    return !(map.layers.type[tile] === TileType.Depot && depotExit(map.layers.data[tile]!) !== edge);
+  }
+
+  /** The tile across `edge` if track there could join ours (same owner, open edges), else -1. */
+  private across(tile: number, edge: number): number {
+    const map = this.map;
+    const { type, owner } = map.layers;
+    if (!this.edgeOpen(tile, edge)) return -1;
     const w = map.width;
     const x = tile % w;
     const y = (tile - x) / w;
     const nx = x + EDGE_DX[edge as 0];
     const ny = y + EDGE_DY[edge as 0];
-    if (!map.inBounds(nx, ny)) return [];
+    if (!map.inBounds(nx, ny)) return -1;
     const n = ny * w + nx;
-    if (!isTrack(type[n]!) || owner[n] !== owner[tile]) return [];
-    const back = OPPOSITE_EDGE[edge as 0];
-    const there = headInfo(map, n);
-    if (there && there.dir === back) return [];
-    if (type[n] === TileType.Depot && depotExit(data[n]!) !== back) return [];
-    const [, e1] = PIECE_EDGES[piece]!;
-    const outTd = trackdir(piece, e1 === edge ? 0 : 1);
-    const found: { ref: EndRef; turn: number }[] = [];
-    for (let q = 0; q < 6; q++) {
-      if (!hasPiece(track[n]!, q)) continue;
-      const [q0, q1] = PIECE_EDGES[q]!;
-      if (q0 !== back && q1 !== back) continue;
-      const turn = turnSteps(TD_HEADING[outTd]!, TD_HEADING[trackdir(q, q0 === back ? 0 : 1)]!);
-      if (turn <= 1) found.push({ ref: { tile: n, piece: q, edge: back }, turn });
-    }
-    return found.sort((a, b) => a.turn - b.turn).map((f) => f.ref);
+    if (!isTrack(type[n]!) || owner[n] !== owner[tile]) return -1;
+    return this.edgeOpen(n, OPPOSITE_EDGE[edge as 0]) ? n : -1;
   }
 
-  /** Outward tangent shared by this end and the piece it joins. */
-  private tangent(tile: number, piece: number, edge: number, depth = 0): THREE.Vector3 {
-    const own = this.outward(tile, piece, edge);
-    const best = this.neighbours(tile, piece, edge)[0];
-    if (!best) return own;
-    const cont = this.outward(best.tile, best.piece, best.edge).negate();
-    const back = this.neighbours(best.tile, best.piece, best.edge)[0];
-    const mutual = back && back.tile === tile && back.piece === piece;
-    if (mutual || depth > 0) return own.add(cont).normalize();
-    // We branch off a through route at a junction: follow its tangent so the points look right.
-    return this.tangent(best.tile, best.piece, best.edge, depth + 1).negate();
+  private piecesTouching(tile: number, edge: number): number[] {
+    const out: number[] = [];
+    const bits = this.map.layers.track[tile]!;
+    for (let p = 0; p < 6; p++) {
+      const [e0, e1] = PIECE_EDGES[p]!;
+      if (hasPiece(bits, p) && (e0 === edge || e1 === edge)) out.push(p);
+    }
+    return out;
+  }
+
+  /**
+   * Direction of the track through the joint at `edge` of `tile`, pointing out of `tile`, or
+   * null if `piece` joins nothing there. Every piece meeting at a joint uses the same direction,
+   * so joints are seamless:
+   *  - a straight-through pair sets it (branches peel off it like a switch);
+   *  - otherwise a lone piece on one side (the trunk of a wye) sets it;
+   *  - otherwise it's the average of the two directions of the straightest pair.
+   */
+  private jointDirection(tile: number, piece: number, edge: number): THREE.Vector3 | null {
+    const n = this.across(tile, edge);
+    if (n < 0) return null;
+    const back = OPPOSITE_EDGE[edge as 0];
+    const heading = (t: number, p: number, e: number, out: boolean) => {
+      const [e0, e1] = PIECE_EDGES[p]!;
+      // Leaving t through e (out) or entering t through e.
+      return TD_HEADING[trackdir(p, out ? (e1 === e ? 0 : 1) : e0 === e ? 0 : 1)]!;
+    };
+    const mine = this.piecesTouching(tile, edge);
+    const theirs = this.piecesTouching(n, back);
+    // Valid pairs: a piece here continuing into a piece there with at most a 45° turn.
+    const pairs: { a: number; b: number; turn: number }[] = [];
+    for (const a of mine) {
+      for (const b of theirs) {
+        const turn = turnSteps(heading(tile, a, edge, true), heading(n, b, back, false));
+        if (turn <= 1) pairs.push({ a, b, turn });
+      }
+    }
+    if (!pairs.some((p) => p.a === piece)) return null;
+    const dirA = (a: number) => this.outward(tile, a, edge);
+    const dirB = (b: number) => this.outward(n, b, back).negate();
+    const straight = pairs.find((p) => p.turn === 0);
+    if (straight) return dirA(straight.a).add(dirB(straight.b)).normalize();
+    const joinedA = [...new Set(pairs.map((p) => p.a))];
+    const joinedB = [...new Set(pairs.map((p) => p.b))];
+    if (joinedA.length === 1 && joinedB.length === 1) return dirA(joinedA[0]!).add(dirB(joinedB[0]!)).normalize();
+    if (joinedA.length === 1) return dirA(joinedA[0]!);
+    if (joinedB.length === 1) return dirB(joinedB[0]!);
+    // Canonical choice (same from both sides): order pieces by the lower-indexed tile first.
+    const key = (p: { a: number; b: number }) => (tile < n ? p.a * 8 + p.b : p.b * 8 + p.a);
+    const best = pairs.sort((x, y) => key(x) - key(y))[0]!;
+    return dirA(best.a).add(dirB(best.b)).normalize();
+  }
+
+  /** Outward tangent of a piece end: the joint direction, or the piece's own if it's a dead end. */
+  private tangent(tile: number, piece: number, edge: number): THREE.Vector3 {
+    return this.jointDirection(tile, piece, edge) ?? this.outward(tile, piece, edge);
   }
 
   get(tile: number, piece: number): PieceCurve {

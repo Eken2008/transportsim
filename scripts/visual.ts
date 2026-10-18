@@ -69,6 +69,11 @@ try {
   // Points: a branch leaving the straight at x = 4 heading north-east.
   add(4, 2, NW); add(4, 1, SE); add(5, 1, NW); add(5, 0, SE); add(6, 0, NW);
   for (let y = -1; y >= -6; y--) add(6, y, Y);
+  // A wye: a line from the south splitting both ways onto the main line at x = 9.
+  for (let y = 3; y <= 8; y++) add(9, y, Y);
+  add(9, 2, SW); add(9, 2, SE);
+  // A diamond crossing at x = 11.
+  for (let y = -2; y <= 8; y++) add(11, y, Y);
   console.log('track', await run({ type: 'buildTrack', pieces }));
   // A hill on the east part: the line climbs and descends.
   for (let k = 0; k < 2; k++) console.log('hill', await run({ type: 'terraform', x0: ox + 17, y0: oy - 1, x1: ox + 18, y1: oy + 5, mode: 'raise' }));
@@ -79,6 +84,9 @@ try {
   await view({ x: ox - 2, y: oy + 1, yaw: 0.4, pitch: 1.1, distance: 9 });
   await page.waitForTimeout(3000);
   await page.screenshot({ path: `${outDir}/curve.png` });
+  await view({ x: ox + 9.5, y: oy + 3, yaw: 0.1, pitch: 1.2, distance: 9 });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${outDir}/junctions.png` });
   await view({ x: ox + 4.5, y: oy + 1, yaw: 0.2, pitch: 1.0, distance: 8 });
   await page.waitForTimeout(2000);
   await page.screenshot({ path: `${outDir}/points.png` });

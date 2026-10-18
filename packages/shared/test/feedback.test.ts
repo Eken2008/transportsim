@@ -76,6 +76,21 @@ describe('route planner', () => {
   });
 });
 
+describe('route planner across existing lines', () => {
+  test('crossing a line to reach a parallel one goes straight over, not along it', () => {
+    const { map, build, owner } = world();
+    // Two parallel east-west lines on rows 10 and 12.
+    build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 10, piece: Piece.X })));
+    build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 12, piece: Piece.X })));
+    // Drag from below the lower line up to the upper line.
+    const plan = planTrack(map, 20, 18, 22, 10, { owner })!;
+    expect(plan).not.toBeNull();
+    const onLower = plan.filter((q) => q.y === 12);
+    expect(onLower).toHaveLength(1); // crosses the lower line once...
+    expect(onLower[0]!.piece).toBe(Piece.Y); // ...as a diamond crossing, not via switches
+  });
+});
+
 describe('signals', () => {
   test('a piece takes one signal; one-way signals block trains from behind', () => {
     const { state, map, run, build, owner } = world();

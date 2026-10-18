@@ -30,8 +30,12 @@ export interface PlanOptions {
 
 /** Cost of a heading change (45°). Keeps routes straight unless turning pays off. */
 const TURN_COST = 0.45;
-/** Reusing a piece that already exists is cheaper than building one. */
-const EXISTING_FACTOR = 0.35;
+/** Reusing a piece that already exists is a little cheaper than building one. */
+const EXISTING_FACTOR = 0.85;
+/** Making a new switch on existing track along the way (not at the start or end). */
+const JUNCTION_COST = 2.5;
+/** Making a new level crossing of existing track along the way. */
+const DIAMOND_COST = 0.4;
 /** Starting or ending without joining nearby track. */
 const LOOSE_END_COST = 2;
 
@@ -188,6 +192,11 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       const status = pieceStatus(map, nx, ny, p, opts.owner);
       if (!status) continue;
       let cost = gc + pieceCost(status, p) + turn * TURN_COST;
+      if (status === 'new' && !(nx === x1 && ny === y1)) {
+        // Joining or crossing track mid-route only where it pays off; the drag ends are free.
+        const bits = map.layers.track[map.tileIndex(nx, ny)]!;
+        if (bits) cost += touchesEdge(bits, p) ? JUNCTION_COST : DIAMOND_COST;
+      }
       if (nx === x1 && ny === y1) cost += endCost(nx, ny, ntd);
       const k = key(nx, ny, ntd);
       const old = g.get(k);
@@ -198,4 +207,15 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
     }
   }
   return null;
+}
+
+/** Does piece p share an edge with any piece in `bits` (i.e. would adding it make a switch)? */
+function touchesEdge(bits: number, p: number): boolean {
+  const [a0, a1] = PIECE_EDGES[p]!;
+  for (let q = 0; q < 6; q++) {
+    if (q === p || !hasPiece(bits, q)) continue;
+    const [b0, b1] = PIECE_EDGES[q]!;
+    if (a0 === b0 || a0 === b1 || a1 === b0 || a1 === b1) return true;
+  }
+  return false;
 }
