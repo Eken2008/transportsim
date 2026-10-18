@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
 import { useApp, type ToolId } from '../store.ts';
+import { RailTool } from '../tools/railTool.ts';
 import { TerraformTool } from '../tools/terraformTool.ts';
-import type { Tool } from '../tools/tool.ts';
+import type { Modifiers, Tool } from '../tools/tool.ts';
 import { CameraController } from './camera.ts';
 import { ChunkManager } from './chunkManager.ts';
 import { Cursor } from './cursor.ts';
 import { pickTerrain, type TerrainHit } from './picking.ts';
+import { TrackGhost } from './trackGhost.ts';
 
 const SKY = new THREE.Color('#a8c8e6');
 
@@ -19,6 +21,7 @@ export class GameRenderer {
   readonly controller: CameraController;
   readonly chunks: ChunkManager;
   readonly cursor: Cursor;
+  readonly ghost: TrackGhost;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly world: ClientWorld;
@@ -27,6 +30,7 @@ export class GameRenderer {
   private lastPointer: { x: number; y: number } | null = null;
   private hoverDirty = false;
   private toolDown = false;
+  private mods: Modifiers = { ctrl: false, shift: false };
   private raf = 0;
   private lastTime = performance.now();
   private disposers: (() => void)[] = [];
@@ -52,7 +56,8 @@ export class GameRenderer {
     this.controller = new CameraController(this.camera, canvas, world.map);
     this.chunks = new ChunkManager(world, (ids) => client.subscribe(ids));
     this.cursor = new Cursor(world.map);
-    this.scene.add(this.chunks.root, this.cursor.root);
+    this.ghost = new TrackGhost(world.map);
+    this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
     client.resubscribe = () => this.chunks.resubscribe();
 
     this.disposers.push(
@@ -63,6 +68,7 @@ export class GameRenderer {
     );
     this.listen(canvas, 'pointermove', ((e: PointerEvent) => {
       this.lastPointer = { x: e.clientX, y: e.clientY };
+      this.setMods(e);
       this.hoverDirty = true;
     }) as EventListener);
     this.listen(canvas, 'pointerleave', () => {
@@ -75,16 +81,20 @@ export class GameRenderer {
       if (!hit) return;
       canvas.setPointerCapture(e.pointerId);
       this.toolDown = true;
-      this.tool.onDown(hit);
+      this.setMods(e);
+      this.tool.onDown(hit, this.mods);
     }) as EventListener);
     this.listen(canvas, 'pointerup', ((e: PointerEvent) => {
       if (e.button !== 0 || !this.toolDown) return;
       this.toolDown = false;
-      this.tool?.onUp(this.pick(e.clientX, e.clientY));
+      this.setMods(e);
+      this.tool?.onUp(this.pick(e.clientX, e.clientY), this.mods);
     }) as EventListener);
     this.listen(window, 'keydown', ((e: KeyboardEvent) => {
       if (e.code === 'Escape') useApp.setState({ tool: null });
+      this.setMods(e);
     }) as EventListener);
+    this.listen(window, 'keyup', ((e: KeyboardEvent) => this.setMods(e)) as EventListener);
 
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(canvas);
@@ -107,9 +117,20 @@ export class GameRenderer {
   private setTool(id: ToolId | null): void {
     this.tool?.cancel();
     this.toolDown = false;
-    this.tool = id ? new TerraformTool(id, this.cursor) : null;
+    this.ghost.hide();
+    this.cursor.hide();
+    if (id === 'rail' || id === 'removeRail') this.tool = new RailTool(this.ghost, id === 'removeRail');
+    else this.tool = id ? new TerraformTool(id, this.cursor) : null;
     this.canvas.style.cursor = id ? 'crosshair' : 'default';
     this.hoverDirty = true;
+  }
+
+  private setMods(e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): void {
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl !== this.mods.ctrl || e.shiftKey !== this.mods.shift) {
+      this.mods = { ctrl, shift: e.shiftKey };
+      this.hoverDirty = true;
+    }
   }
 
   private pick(clientX: number, clientY: number): TerrainHit | null {
@@ -139,7 +160,10 @@ export class GameRenderer {
 
     if (this.hoverDirty && this.tool) {
       this.hoverDirty = false;
-      this.tool.onHover(this.lastPointer && !this.controller.isDragging ? this.pick(this.lastPointer.x, this.lastPointer.y) : null);
+      this.tool.onHover(
+        this.lastPointer && !this.controller.isDragging ? this.pick(this.lastPointer.x, this.lastPointer.y) : null,
+        this.mods,
+      );
     }
 
     this.renderer.render(this.scene, this.camera);
@@ -158,6 +182,7 @@ export class GameRenderer {
     for (const d of this.disposers) d();
     this.controller.dispose();
     this.chunks.dispose();
+    this.ghost.dispose();
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();
   }

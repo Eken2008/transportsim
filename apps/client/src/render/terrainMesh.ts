@@ -15,20 +15,22 @@ export type Lod = 0 | 1 | 2 | 3;
 /** Visual water surface height (world units), slightly above sea-level corners. */
 export const WATER_Y = 0.45 * HEIGHT_SCALE;
 const SKIRT_DEPTH = 2;
+/** Skirts start just below the surface so they never show along seams between equal-LOD chunks. */
+const SKIRT_INSET = 0.03;
 
 const GROUND_RGB: Record<number, [number, number, number]> = {
-  [Ground.Grass]: rgb('#88a95a'),
+  [Ground.Grass]: rgb('#8db35e'),
   [Ground.Rough]: rgb('#9a9b62'),
   [Ground.Rocks]: rgb('#9c968c'),
   [Ground.Sand]: rgb('#dccb98'),
   [Ground.Snow]: rgb('#eef2f6'),
 };
-const HIGH_GRASS = rgb('#6e8f4a');
+const HIGH_GRASS = rgb('#73984f');
 const SEABED = rgb('#b3a274');
 const ROCK = rgb('#9c968c');
 
 function rgb(hex: string): [number, number, number] {
-  const c = new THREE.Color(hex).convertSRGBToLinear();
+  const c = new THREE.Color(hex); // ColorManagement converts sRGB hex to linear
   return [c.r, c.g, c.b];
 }
 
@@ -138,10 +140,10 @@ export function buildTerrainGeometry(map: GameMap, cx: number, cy: number, lod: 
   }
 
   function skirt(ax: number, az: number, bx: number, bz: number) {
-    const ha = H(ax, az);
-    const hb = H(bx, bz);
-    pushTri(ax, ha, az, bx, hb, bz, ax, bottom, az, 0.7);
-    pushTri(bx, hb, bz, bx, bottom, bz, ax, bottom, az, 0.7);
+    const ha = H(ax, az) - SKIRT_INSET;
+    const hb = H(bx, bz) - SKIRT_INSET;
+    pushTri(ax, ha, az, bx, hb, bz, ax, bottom, az);
+    pushTri(bx, hb, bz, bx, bottom, bz, ax, bottom, az);
   }
 
   const geo = new THREE.BufferGeometry();

@@ -3,7 +3,7 @@ import { client } from '../net/client.ts';
 import type { Cursor } from '../render/cursor.ts';
 import type { TerrainHit } from '../render/picking.ts';
 import { toast, useApp } from '../store.ts';
-import type { Tool } from './tool.ts';
+import type { Modifiers, Tool } from './tool.ts';
 
 /**
  * Click a corner to raise/lower it by one level, or drag to affect a rectangle.
@@ -23,7 +23,7 @@ export class TerraformTool implements Tool {
     return { type: 'terraform', x0: s.x, y0: s.y, x1: x, y1: y, mode: this.mode, level: this.mode === 'level' ? s.h : undefined };
   }
 
-  onHover(hit: TerrainHit | null): void {
+  onHover(hit: TerrainHit | null, _mods?: Modifiers): void {
     if (!hit) {
       if (!this.start) this.cursor.hide();
       useApp.setState({ hover: null });
@@ -49,7 +49,7 @@ export class TerraformTool implements Tool {
     useApp.setState({ hover: { x, y, height, cost: r?.ok ? r.cost : undefined, error: r && !r.ok ? r.error : undefined } });
   }
 
-  onDown(hit: TerrainHit): void {
+  onDown(hit: TerrainHit, _mods?: Modifiers): void {
     const map = client.world?.map;
     if (!map) return;
     this.start = { x: hit.cornerX, y: hit.cornerY, h: map.cornerHeight(hit.cornerX, hit.cornerY) };
@@ -57,7 +57,7 @@ export class TerraformTool implements Tool {
     this.onHover(hit);
   }
 
-  onUp(hit: TerrainHit | null): void {
+  onUp(hit: TerrainHit | null, _mods?: Modifiers): void {
     if (!this.start) return;
     const end = hit ? { x: hit.cornerX, y: hit.cornerY } : this.last;
     if (end) {

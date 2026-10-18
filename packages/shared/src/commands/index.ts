@@ -1,15 +1,24 @@
 import type { GameState } from '../sim/state.ts';
 import { terraformHandler, type TerraformCommand } from './terraform.ts';
+import {
+  buildTrackHandler,
+  removeTrackHandler,
+  type BuildTrackCommand,
+  type RemoveTrackCommand,
+} from './track.ts';
 import type { CommandContext, CommandHandler, CommandEffects } from './types.ts';
 
 export * from './types.ts';
 export * from './terraform.ts';
+export * from './track.ts';
 
-export type Command = TerraformCommand;
+export type Command = TerraformCommand | BuildTrackCommand | RemoveTrackCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
   terraform: terraformHandler,
+  buildTrack: buildTrackHandler,
+  removeTrack: removeTrackHandler,
 };
 
 export type CommandResult =

@@ -1,3 +1,4 @@
+import { COSTS } from '../economy/costs.ts';
 import { MAX_HEIGHT, TileType } from '../world/constants.ts';
 import { reclassifyTile } from '../world/terrain.ts';
 import { fail, isInt, type CommandHandler } from './types.ts';
@@ -16,7 +17,7 @@ export interface TerraformCommand {
   level?: number;
 }
 
-export const TERRAFORM_COST_PER_CORNER = 400;
+export const TERRAFORM_COST_PER_CORNER = COSTS.terraformCorner;
 const MAX_RECT = 64;
 const MAX_CHANGED_CORNERS = 20_000;
 

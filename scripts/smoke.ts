@@ -8,7 +8,7 @@
  * Uses an installed Chrome (CHROME_PATH to override). Run with Node (Playwright's pipe
  * transport does not work under Bun on Windows).
  */
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { chromium, type Page } from 'playwright-core';
@@ -53,6 +53,8 @@ try {
   await a.getByText('Connected').waitFor({ timeout: 10_000 });
   await a.getByPlaceholder('Player name').fill('Alice');
   await a.screenshot({ path: `${outDir}/01-lobby.png` });
+  await a.locator('label.field', { hasText: 'Seed' }).locator('input').fill('424242');
+  await a.locator('label.field', { hasText: 'Sea level' }).locator('input').fill('0');
   await a.getByRole('button', { name: 'Create game' }).click();
   await a.getByText('Allow autosaves?').waitFor({ timeout: 30_000 });
   check(true, 'host sees autosave consent prompt');
@@ -83,6 +85,48 @@ try {
   check(moneyBefore !== moneyAfter, `terraforming cost money (${moneyBefore} → ${moneyAfter})`);
   await a.screenshot({ path: `${outDir}/03-terraformed.png` });
 
+  // Level a known area via the command API (track needs suitable slopes), then lay a
+  // straight line and a diagonal staircase by dragging the real rail tool between tiles.
+  type Hook = {
+    spawn: { x: number; y: number };
+    view(v: object): void;
+    tileToScreen(x: number, y: number): { x: number; y: number };
+    command(cmd: object): Promise<{ ok: boolean; error?: string }>;
+  };
+  const hook = <T>(fn: (h: Hook, arg: never) => T, arg?: unknown) =>
+    a.evaluate(([f, x]) => new Function('h', 'arg', `return (${f})(h, arg)`)((window as unknown as { transportsim: Hook }).transportsim, x), [fn.toString(), arg] as const) as Promise<T>;
+  const spawn = await hook((h) => h.spawn);
+  const sx = spawn.x;
+  const sy = spawn.y;
+  const level = await hook(
+    (h, s: { x: number; y: number }) =>
+      h.command({ type: 'terraform', x0: s.x - 14, y0: s.y - 8, x1: s.x + 14, y1: s.y + 10, mode: 'level', level: 4 }),
+    { x: sx, y: sy },
+  );
+  check(level.ok, `level area via command API${level.ok ? '' : `: ${level.error}`}`);
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y, yaw: 0.35, pitch: 1.05, distance: 34 }), { x: sx, y: sy });
+  await a.waitForTimeout(2500);
+  const dragTiles = async (x0: number, y0: number, x1: number, y1: number) => {
+    const p0 = await hook((h, t: number[]) => h.tileToScreen(t[0]!, t[1]!), [x0, y0]);
+    const p1 = await hook((h, t: number[]) => h.tileToScreen(t[0]!, t[1]!), [x1, y1]);
+    await a.mouse.move(p0.x, p0.y);
+    await a.mouse.down();
+    await a.mouse.move(p1.x, p1.y, { steps: 10 });
+    await a.mouse.up();
+    await a.waitForTimeout(800);
+  };
+  await a.keyboard.press('Digit4');
+  const beforeRail = await a.locator('.money').innerText();
+  await dragTiles(sx - 10, sy - 4, sx + 10, sy - 4);
+  await dragTiles(sx - 8, sy, sx - 2, sy + 6);
+  await a.waitForTimeout(1200);
+  const afterRail = await a.locator('.money').innerText();
+  check(beforeRail !== afterRail, `building track with the rail tool cost money (${beforeRail} → ${afterRail})`);
+  if (beforeRail === afterRail) console.log('  toasts:', await a.locator('.toast').allInnerTexts());
+  await a.keyboard.press('Escape');
+  await a.waitForTimeout(1500);
+  await a.screenshot({ path: `${outDir}/03b-track.png` });
+
   // Second player joins by code
   const code = (await a.getByTitle('Copy game code').innerText()).trim();
   await b.goto(`http://localhost:${PORT}/`);
@@ -103,6 +147,7 @@ try {
   check((await a.locator('.chat-log').innerText()).includes('Hello from Bob'), 'chat reaches host');
 
   // Manual save lands in host IndexedDB
+  const savedMoney = await a.locator('.money').innerText();
   await a.getByRole('button', { name: '💾 Save' }).click();
   await a.getByText('Game saved to this browser').waitFor({ timeout: 10_000 });
   check(true, 'manual save stored in host browser');
@@ -127,7 +172,7 @@ try {
   await a2.locator('canvas').waitFor({ timeout: 15_000 });
   await a2.waitForTimeout(2500);
   const resumedMoney = await a2.locator('.money').innerText();
-  check(resumedMoney === moneyAfter, `resumed game keeps company money (${resumedMoney})`);
+  check(resumedMoney === savedMoney, `resumed game keeps company money (${resumedMoney})`);
   await a2.screenshot({ path: `${outDir}/06-resumed.png` });
 } catch (e) {
   failed = true;
@@ -139,7 +184,7 @@ try {
 } finally {
   await browser.close();
   // With shell: true, kill() only ends the shell; take down the whole tree on Windows.
-  if (process.platform === 'win32') spawn('taskkill', ['/pid', String(server.pid), '/T', '/F']);
+  if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(server.pid), '/T', '/F']);
   else server.kill();
 }
 console.log(failed ? 'SMOKE FAILED' : 'SMOKE OK');

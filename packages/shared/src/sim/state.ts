@@ -30,6 +30,8 @@ export class GameState {
   readonly companies = new Map<number, Company>();
   readonly players = new Map<number, Player>();
   private nextPlayerId = 1;
+  /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
+  trackVersion = 0;
 
   constructor(settings: GameSettings, map: GameMap, date?: number) {
     this.settings = settings;
@@ -71,6 +73,20 @@ export class GameState {
       if (c.loan > 0) c.money -= Math.round((c.loan * 0.04) / 12);
     }
   }
+
+  // ---- rail network hooks (filled in by the train/signal systems) -------------
+
+  onTrackChanged(): void {
+    this.trackVersion++;
+  }
+
+  /** Whether any train currently occupies this track piece. */
+  isPieceOccupied(_tile: number, _piece: number): boolean {
+    return false;
+  }
+
+  /** Remove signals on the given pieces of a tile (track is being removed). */
+  removeSignalsOn(_tile: number, _pieceBits: number): void {}
 
   // ---- players & companies -------------------------------------------------
 

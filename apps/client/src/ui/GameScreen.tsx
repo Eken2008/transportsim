@@ -1,6 +1,7 @@
 import { COMPANY_COLORS, GAME_SPEEDS, formatDate, type GameSpeed } from '@transportsim/shared';
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
+import { installDebugHook } from '../render/debugHook.ts';
 import { GameRenderer } from '../render/gameRenderer.ts';
 import { useApp, type ToolId } from '../store.ts';
 import { formatMoney } from './format.ts';
@@ -18,13 +19,17 @@ export function GameScreen() {
     const spawn = useApp.getState().room?.spawn;
     if (spawn) r.lookAt(spawn.x + 0.5, spawn.y + 0.5);
     r.onStats = setStats;
-    return () => r.dispose();
+    const removeHook = installDebugHook(r);
+    return () => {
+      removeHook();
+      r.dispose();
+    };
   }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
-      const tools: Record<string, ToolId> = { Digit1: 'raise', Digit2: 'lower', Digit3: 'level' };
+      const tools: Record<string, ToolId> = Object.fromEntries(TOOLS.map((t) => ['Digit' + t.key, t.id]));
       if (tools[e.code]) {
         const t = tools[e.code]!;
         useApp.setState((s) => ({ tool: s.tool === t ? null : t }));
@@ -153,17 +158,20 @@ function HostBanner() {
   );
 }
 
-const TOOLS: { id: ToolId; icon: string; label: string; key: string }[] = [
-  { id: 'raise', icon: '⛰', label: 'Raise land (drag for area)', key: '1' },
-  { id: 'lower', icon: '⛏', label: 'Lower land (drag for area)', key: '2' },
-  { id: 'level', icon: '▭', label: 'Level land (drag an area)', key: '3' },
+const TOOLS: { id: ToolId; icon: string; label: string; key: string; group: number }[] = [
+  { id: 'raise', icon: '⛰', label: 'Raise land (drag for area)', key: '1', group: 0 },
+  { id: 'lower', icon: '⛏', label: 'Lower land (drag for area)', key: '2', group: 0 },
+  { id: 'level', icon: '▭', label: 'Level land (drag an area)', key: '3', group: 0 },
+  { id: 'rail', icon: '🛤', label: 'Build railway (drag; Ctrl removes)', key: '4', group: 1 },
+  { id: 'removeRail', icon: '✂', label: 'Remove railway', key: '5', group: 1 },
 ];
 
 function Toolbar() {
   const tool = useApp((s) => s.tool);
   return (
     <div className="panel toolbar" role="toolbar" aria-label="Build tools">
-      {TOOLS.map((t) => (
+      {TOOLS.map((t, i) => [
+        i > 0 && TOOLS[i - 1]!.group !== t.group ? <div className="sep" key={'sep' + i} /> : null,
         <button
           key={t.id}
           className={`tool-btn ${tool === t.id ? 'active' : ''}`}
@@ -174,12 +182,9 @@ function Toolbar() {
         >
           <span style={{ fontSize: 20 }}>{t.icon}</span>
           <span className="key">{t.key}</span>
-        </button>
-      ))}
+        </button>,
+      ])}
       <div className="sep" />
-      <button className="tool-btn" disabled data-tip="Railways — coming next" aria-label="Railways (coming soon)">
-        <span style={{ fontSize: 20 }}>🛤</span>
-      </button>
       <button className="tool-btn" disabled data-tip="Roads — planned" aria-label="Roads (planned)">
         <span style={{ fontSize: 20 }}>🛣</span>
       </button>
@@ -283,7 +288,10 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>-</kbd> zoom
       </div>
       <div>
-        <kbd>1</kbd> raise · <kbd>2</kbd> lower · <kbd>3</kbd> level · <kbd>Esc</kbd> deselect tool
+        <kbd>1</kbd> raise · <kbd>2</kbd> lower · <kbd>3</kbd> level land
+      </div>
+      <div>
+        <kbd>4</kbd> railway (drag; hold <kbd>Ctrl</kbd> to remove) · <kbd>5</kbd> remove railway · <kbd>Esc</kbd> deselect
       </div>
       <div>
         <kbd>Space</kbd> pause (host)

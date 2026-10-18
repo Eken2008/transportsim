@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
 
-export type ToolId = 'raise' | 'lower' | 'level';
+export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail';
 
 export interface Toast {
   id: number;

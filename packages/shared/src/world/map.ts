@@ -18,6 +18,8 @@ export const TILE_LAYERS = {
   owner: Uint8Array,
   /** Type-specific payload (trees/ground for Clear, water kind for Water, ...). */
   data: Uint16Array,
+  /** Track piece bits 0-5 (see rail/track.ts) on Rail, Station and Depot tiles. */
+  track: Uint8Array,
 } satisfies Record<string, TypedArrayCtor>;
 
 export type LayerName = keyof typeof TILE_LAYERS;
@@ -132,12 +134,14 @@ export class GameMap {
     this.layers.type[i] = TileType.Clear;
     this.layers.owner[i] = OWNER_NONE;
     this.layers.data[i] = (Math.min(trees, MAX_TREES) & 0x7) | ((ground & 0x7) << 3);
+    this.layers.track[i] = 0;
   }
 
   setWater(i: number): void {
     this.layers.type[i] = TileType.Water;
     this.layers.owner[i] = OWNER_NONE;
     this.layers.data[i] = 0;
+    this.layers.track[i] = 0;
   }
 
   chunkIndex(cx: number, cy: number): number {

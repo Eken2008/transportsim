@@ -2,6 +2,7 @@ import { CHUNK_SIZE, HEIGHT_SCALE, MAX_HEIGHT } from '@transportsim/shared';
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { buildTerrainGeometry, buildWaterGeometry, type Lod } from './terrainMesh.ts';
+import { buildTrackGeometry } from './trackMesh.ts';
 import { buildTrees } from './trees.ts';
 
 interface ChunkView {
@@ -137,6 +138,12 @@ export class ChunkManager {
       water.renderOrder = 1;
       water.matrixAutoUpdate = false;
       group.add(water);
+    }
+    const trackGeo = buildTrackGeometry(map, cx, cy, lod);
+    if (trackGeo) {
+      const track = new THREE.Mesh(trackGeo, this.terrainMaterial);
+      track.matrixAutoUpdate = false;
+      group.add(track);
     }
     if (lod <= 2) for (const t of buildTrees(map, cx, cy, lod >= 1)) group.add(t);
     this.root.add(group);

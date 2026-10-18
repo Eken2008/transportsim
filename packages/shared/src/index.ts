@@ -7,6 +7,8 @@ export * from './sim/settings.ts';
 export * from './sim/date.ts';
 export * from './sim/state.ts';
 export * from './company/company.ts';
+export * from './rail/track.ts';
+export * from './economy/costs.ts';
 export * from './commands/index.ts';
 export * from './protocol/messages.ts';
 export * from './protocol/codec.ts';
