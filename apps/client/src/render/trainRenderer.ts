@@ -19,7 +19,7 @@ import {
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { UNIT_MODELS } from './trainModels.ts';
-import { TRACK_LIFT, curvePoint, type TrackCurves } from './trackCurves.ts';
+import { TRACK_LIFT, curveParamAt, curvePoint, type TrackCurves } from './trackCurves.ts';
 
 /** Height of the rail head above the terrain surface. */
 const RAIL_TOP = 0.088;
@@ -42,8 +42,9 @@ function segWorld(map: GameMap, s: number, d: number, out: THREE.Vector3): void 
   const tile = segTile(s);
   const td = segTd(s);
   if (curves && !isSpanTd(td)) {
-    const t = Math.min(1, Math.max(0, d / pieceLength(tdPiece(td))));
-    curvePoint(curves.get(tile, td >> 1), td & 1 ? 1 - t : t, out);
+    const c = curves.get(tile, td >> 1);
+    const f = Math.min(1, Math.max(0, d / pieceLength(tdPiece(td))));
+    curvePoint(c, curveParamAt(c, td & 1 ? 1 - f : f), out);
     out.y += RAIL_TOP - TRACK_LIFT;
     return;
   }

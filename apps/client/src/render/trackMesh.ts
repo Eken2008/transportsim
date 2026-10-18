@@ -21,7 +21,7 @@ import { SIGNAL_POST_HEIGHT, signalPlacement } from './signalGeometry.ts';
 import { addBridge, addHeadFoundation, addTunnelPortal } from './structureMesh.ts';
 import { addCrossingFurniture } from './crossings.ts';
 import type { Lod } from './terrainMesh.ts';
-import { TRACK_LIFT, curvePoint, curveTangent, straightCurve, type PieceCurve, type TrackCurves } from './trackCurves.ts';
+import { TRACK_LIFT, curveParamAt, curvePoint, curveTangent, straightCurve, type PieceCurve, type TrackCurves } from './trackCurves.ts';
 
 const BALLAST = lin('#8f877c');
 const BALLAST_FAR = lin('#6d655c');
@@ -72,10 +72,10 @@ function sections(c: PieceCurve): Section[] {
   const chord = _t.subVectors(c.p3, c.p0);
   const len = chord.length();
   const dev = (q: THREE.Vector3) => _pt.subVectors(q, c.p0).cross(chord).length() / Math.max(len, 1e-6);
-  const n = dev(c.p1) < 0.003 && dev(c.p2) < 0.003 ? 1 : 6;
+  // Bends happen near the ends (short handles), so sample densely there.
+  const ts = dev(c.p1) < 0.003 && dev(c.p2) < 0.003 ? [0, 1] : [0, 0.03, 0.07, 0.12, 0.2, 0.5, 0.8, 0.88, 0.93, 0.97, 1];
   const out: Section[] = [];
-  for (let i = 0; i <= n; i++) {
-    const t = i / n;
+  for (const t of ts) {
     const p = curvePoint(c, t, new THREE.Vector3());
     const tan = curveTangent(c, t, _lat);
     out.push({ p, lat: new THREE.Vector3(-tan.z, 0, tan.x).normalize() });
@@ -108,7 +108,7 @@ export function addPieceCurve(g: GeoBuilder, c: PieceCurve, lod: Lod): void {
     const n = Math.max(3, Math.round(len / 0.14));
     g.color(SLEEPER);
     for (let i = 0; i < n; i++) {
-      const t = (i + 0.5) / n;
+      const t = curveParamAt(c, (i + 0.5) / n);
       curvePoint(c, t, _p).setY(_p.y + 0.03);
       const tan = curveTangent(c, t, _t);
       const half = _q.set(-tan.z, 0, tan.x).normalize().multiplyScalar(0.16);

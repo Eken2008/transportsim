@@ -20,6 +20,11 @@ import * as THREE from 'three';
 
 /** Height of the ballast base above the terrain. */
 export const TRACK_LIFT = 0.012;
+/**
+ * Bézier handle length as a fraction of the piece length. Short handles keep each piece
+ * straight and only round off a small zone where pieces meet at an angle.
+ */
+const JOINT_ROUNDING = 0.16;
 
 /**
  * A track piece drawn as a cubic Bézier from its first edge (PIECE_EDGES[p][0]) to its second.
@@ -30,6 +35,8 @@ export interface PieceCurve {
   p1: THREE.Vector3;
   p2: THREE.Vector3;
   p3: THREE.Vector3;
+  /** Cumulative arc length at t = i / LUT_STEPS, for even spacing along the curve. */
+  lut?: Float32Array;
 }
 
 
@@ -157,13 +164,38 @@ export class TrackCurves {
     const t3 = this.tangent(tile, piece, e1);
     c = {
       p0,
-      p1: p0.clone().addScaledVector(t0, len / 3),
-      p2: p3.clone().addScaledVector(t3, -len / 3),
+      p1: p0.clone().addScaledVector(t0, len * JOINT_ROUNDING),
+      p2: p3.clone().addScaledVector(t3, -len * JOINT_ROUNDING),
       p3,
     };
     this.cache.set(key, c);
     return c;
   }
+}
+
+const LUT_STEPS = 24;
+const _lp = new THREE.Vector3();
+const _lq = new THREE.Vector3();
+
+/** Curve parameter at a fraction (0..1) of the curve's arc length. */
+export function curveParamAt(c: PieceCurve, frac: number): number {
+  if (!c.lut) {
+    const lut = new Float32Array(LUT_STEPS + 1);
+    curvePoint(c, 0, _lp);
+    for (let i = 1; i <= LUT_STEPS; i++) {
+      curvePoint(c, i / LUT_STEPS, _lq);
+      lut[i] = lut[i - 1]! + _lq.distanceTo(_lp);
+      _lp.copy(_lq);
+    }
+    c.lut = lut;
+  }
+  const lut = c.lut;
+  const target = Math.min(1, Math.max(0, frac)) * lut[LUT_STEPS]!;
+  let i = 1;
+  while (i < LUT_STEPS && lut[i]! < target) i++;
+  const a = lut[i - 1]!;
+  const b = lut[i]!;
+  return (i - 1 + (b > a ? (target - a) / (b - a) : 0)) / LUT_STEPS;
 }
 
 /** Point on a curve at parameter t (0 = first edge). */

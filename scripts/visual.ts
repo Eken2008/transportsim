@@ -38,6 +38,7 @@ try {
   await page.getByPlaceholder('Player name').fill('Viz');
   await page.locator('label.field', { hasText: 'Seed' }).locator('input').fill('424242');
   await page.locator('label.field', { hasText: 'Sea level' }).locator('input').fill('0');
+  await page.locator('label.field', { hasText: 'Economy' }).locator('select').selectOption('easy');
   await page.getByRole('button', { name: 'Create game' }).click();
   await page.getByRole('button', { name: 'Not now' }).click({ timeout: 30_000 });
 
@@ -50,7 +51,7 @@ try {
   let oy = 0;
   search: for (let cy = 40; cy < 470; cy += 37) {
     for (let cx = 40; cx < 470; cx += 37) {
-      const r = await run({ type: 'terraform', x0: cx - 16, y0: cy - 12, x1: cx + 16, y1: cy + 12, mode: 'level', level: 4 });
+      const r = await run({ type: 'terraform', x0: cx - 16, y0: cy - 12, x1: cx + 16, y1: cy + 24, mode: 'level', level: 4 });
       if (r.ok) {
         ox = cx;
         oy = cy;
@@ -80,6 +81,30 @@ try {
   const hillPieces: number[] = [];
   for (let x = 13; x <= 22; x++) hillPieces.push(ox + x, oy + 2, X);
   console.log('hill track', await run({ type: 'buildTrack', pieces: hillPieces }));
+
+  // Tool-drawn case, like a player would: two parallel lines, then a route from below to the far one.
+  const tileToScreen = (x: number, y: number) =>
+    page.evaluate(([tx, ty]) => (window as unknown as { transportsim: { tileToScreen(x: number, y: number): { x: number; y: number } } }).transportsim.tileToScreen(tx!, ty!), [x, y]);
+  const drag = async (x0: number, y0: number, x1: number, y1: number) => {
+    const a = await tileToScreen(x0, y0);
+    const b = await tileToScreen(x1, y1);
+    await page.mouse.move(a.x, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x, b.y, { steps: 12 });
+    await page.waitForTimeout(300);
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+  };
+  await view({ x: ox, y: oy + 13, yaw: 0, pitch: 1.35, distance: 26 });
+  await page.waitForTimeout(2000);
+  await page.keyboard.press('Digit4');
+  await drag(ox - 8, oy + 10, ox + 8, oy + 10);
+  await drag(ox - 8, oy + 12, ox + 8, oy + 12);
+  await drag(ox - 1, oy + 18, ox + 2, oy + 10);
+  await page.keyboard.press('Escape');
+  await view({ x: ox + 0.5, y: oy + 12.5, yaw: 0, pitch: 1.4, distance: 7 });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${outDir}/tool-junction.png` });
 
   await view({ x: ox - 2, y: oy + 1, yaw: 0.4, pitch: 1.1, distance: 9 });
   await page.waitForTimeout(3000);
