@@ -1,4 +1,4 @@
-import { CHUNK_SIZE, HEIGHT_SCALE, MAX_HEIGHT } from '@transportsim/shared';
+import { CHUNK_SIZE, COMPANY_COLORS, HEIGHT_SCALE, MAX_HEIGHT } from '@transportsim/shared';
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { buildTerrainGeometry, buildWaterGeometry, type Lod } from './terrainMesh.ts';
@@ -143,7 +143,7 @@ export class ChunkManager {
     }
     const infra = new GeoBuilder();
     addRoads(infra, map, cx, cy);
-    addTrack(infra, map, cx, cy, lod);
+    addTrack(infra, map, cx, cy, lod, (owner) => this.companyColor(owner));
     const infraGeo = infra.build();
     if (infraGeo) {
       const mesh = new THREE.Mesh(infraGeo, this.terrainMaterial);
@@ -154,6 +154,16 @@ export class ChunkManager {
     if (lod <= 2) for (const t of buildTrees(map, cx, cy, lod >= 1)) group.add(t);
     this.root.add(group);
     this.views.set(id, { cx, cy, lod, group, builtRev: this.dataRev[id]!, lastWanted: now });
+  }
+
+  private colorCache = new Map<string, THREE.Color>();
+
+  private companyColor(owner: number): THREE.Color {
+    const c = this.world.state.companies.get(owner);
+    const hex = c ? COMPANY_COLORS[c.color % COMPANY_COLORS.length]! : '#888888';
+    let col = this.colorCache.get(hex);
+    if (!col) this.colorCache.set(hex, (col = new THREE.Color(hex)));
+    return col;
   }
 
   private disposeView(id: number, view: ChunkView): void {

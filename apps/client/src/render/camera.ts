@@ -18,7 +18,7 @@ interface Drag {
 /**
  * Tilted orbit camera around a ground target. Right-drag pans (grab), middle-drag or
  * Alt+right-drag rotates/tilts, wheel zooms toward the cursor, WASD/arrows pan,
- * Q/E rotate, R/F tilt.
+ * Q/E rotate, PageUp/PageDown tilt.
  */
 export class CameraController {
   readonly camera: THREE.PerspectiveCamera;
@@ -159,8 +159,8 @@ export class CameraController {
     }
     if (k.has('KeyQ')) this.yaw += dt * 1.6;
     if (k.has('KeyE')) this.yaw -= dt * 1.6;
-    if (k.has('KeyR')) this.pitch = clamp(this.pitch + dt, MIN_PITCH, MAX_PITCH);
-    if (k.has('KeyF')) this.pitch = clamp(this.pitch - dt, MIN_PITCH, MAX_PITCH);
+    if (k.has('PageUp')) this.pitch = clamp(this.pitch + dt, MIN_PITCH, MAX_PITCH);
+    if (k.has('PageDown')) this.pitch = clamp(this.pitch - dt, MIN_PITCH, MAX_PITCH);
     if (k.has('Equal') || k.has('NumpadAdd')) this.distance = clamp(this.distance * (1 - dt * 1.5), MIN_DIST, MAX_DIST);
     if (k.has('Minus') || k.has('NumpadSubtract')) this.distance = clamp(this.distance * (1 + dt * 1.5), MIN_DIST, MAX_DIST);
 

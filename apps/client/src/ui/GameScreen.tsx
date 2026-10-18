@@ -1,4 +1,11 @@
-import { COMPANY_COLORS, GAME_SPEEDS, formatDate, type GameSpeed } from '@transportsim/shared';
+import {
+  COMPANY_COLORS,
+  GAME_SPEEDS,
+  MAX_PLATFORMS,
+  MAX_PLATFORM_LENGTH,
+  formatDate,
+  type GameSpeed,
+} from '@transportsim/shared';
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
 import { installDebugHook } from '../render/debugHook.ts';
@@ -33,6 +40,8 @@ export function GameScreen() {
       if (tools[e.code]) {
         const t = tools[e.code]!;
         useApp.setState((s) => ({ tool: s.tool === t ? null : t }));
+      } else if (e.code === 'KeyR' && useApp.getState().tool === 'station') {
+        useApp.setState((s) => ({ stationOpts: { ...s.stationOpts, axis: s.stationOpts.axis === 0 ? 1 : 0 } }));
       } else if (e.code === 'Slash' || e.key === '?') setShowHelp((v) => !v);
       else if (e.code === 'Space' && useApp.getState().room?.isHost) {
         e.preventDefault();
@@ -50,6 +59,7 @@ export function GameScreen() {
       <TopBar onHelp={() => setShowHelp((v) => !v)} />
       <HostBanner />
       {showHelp && <Help onClose={() => setShowHelp(false)} />}
+      <StationOptions />
       <Toolbar />
       <Chat />
       <StatusBar fps={stats.fps} chunks={stats.chunks} />
@@ -164,6 +174,9 @@ const TOOLS: { id: ToolId; icon: string; label: string; key: string; group: numb
   { id: 'level', icon: '▭', label: 'Level land (drag an area)', key: '3', group: 0 },
   { id: 'rail', icon: '🛤', label: 'Build railway (drag; Ctrl removes)', key: '4', group: 1 },
   { id: 'removeRail', icon: '✂', label: 'Remove railway', key: '5', group: 1 },
+  { id: 'station', icon: '🚉', label: 'Build station (R rotates)', key: '6', group: 1 },
+  { id: 'depot', icon: '🏚', label: 'Build train depot', key: '7', group: 1 },
+  { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', group: 2 },
 ];
 
 function Toolbar() {
@@ -280,8 +293,8 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>A</kbd>
         <kbd>S</kbd>
         <kbd>D</kbd> / arrows move · <kbd>Q</kbd>
-        <kbd>E</kbd> rotate · <kbd>R</kbd>
-        <kbd>F</kbd> tilt
+        <kbd>E</kbd> rotate · <kbd>PgUp</kbd>
+        <kbd>PgDn</kbd> tilt
       </div>
       <div>
         <kbd>Scroll</kbd> / <kbd>+</kbd>
@@ -291,7 +304,10 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>1</kbd> raise · <kbd>2</kbd> lower · <kbd>3</kbd> level land
       </div>
       <div>
-        <kbd>4</kbd> railway (drag; hold <kbd>Ctrl</kbd> to remove) · <kbd>5</kbd> remove railway · <kbd>Esc</kbd> deselect
+        <kbd>4</kbd> railway (drag; hold <kbd>Ctrl</kbd> to remove) · <kbd>5</kbd> remove railway
+      </div>
+      <div>
+        <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
       </div>
       <div>
         <kbd>Space</kbd> pause (host)
@@ -323,6 +339,37 @@ function AutosavePrompt() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Stepper({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+  return (
+    <div className="stepper">
+      <span className="muted">{label}</span>
+      <button className="ghost" disabled={value <= min} onClick={() => onChange(value - 1)} aria-label={"Fewer " + label.toLowerCase()}>
+        −
+      </button>
+      <b className="mono">{value}</b>
+      <button className="ghost" disabled={value >= max} onClick={() => onChange(value + 1)} aria-label={"More " + label.toLowerCase()}>
+        +
+      </button>
+    </div>
+  );
+}
+
+function StationOptions() {
+  const tool = useApp((s) => s.tool);
+  const opts = useApp((s) => s.stationOpts);
+  if (tool !== 'station') return null;
+  const set = (patch: Partial<typeof opts>) => useApp.setState({ stationOpts: { ...opts, ...patch } });
+  return (
+    <div className="panel tool-options">
+      <Stepper label="Platforms" value={opts.platforms} min={1} max={MAX_PLATFORMS} onChange={(v) => set({ platforms: v })} />
+      <Stepper label="Length" value={opts.length} min={1} max={MAX_PLATFORM_LENGTH} onChange={(v) => set({ length: v })} />
+      <button onClick={() => set({ axis: opts.axis === 0 ? 1 : 0 })} title="Rotate (R)">
+        ⟲ {opts.axis === 0 ? 'East–west' : 'North–south'}
+      </button>
     </div>
   );
 }

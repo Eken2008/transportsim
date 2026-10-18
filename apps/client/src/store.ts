@@ -3,7 +3,13 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
 
-export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail';
+export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze';
+
+export interface StationOptions {
+  axis: 0 | 1;
+  platforms: number;
+  length: number;
+}
 
 export interface Toast {
   id: number;
@@ -51,6 +57,7 @@ export interface AppState {
   closedReason: string | null;
   saves: SaveRecord[];
   busy: string | null;
+  stationOpts: StationOptions;
 }
 
 export const useApp = create<AppState>(() => ({
@@ -69,6 +76,7 @@ export const useApp = create<AppState>(() => ({
   closedReason: null,
   saves: [],
   busy: null,
+  stationOpts: { axis: 0, platforms: 2, length: 5 },
 }));
 
 let toastId = 0;

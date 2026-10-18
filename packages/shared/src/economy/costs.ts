@@ -5,4 +5,8 @@ export const COSTS = {
   railPiece: 250,
   railRemove: 40,
   levelCrossing: 600,
+  stationTile: 700,
+  stationRemove: 150,
+  depot: 1800,
+  depotRemove: 300,
 } as const;

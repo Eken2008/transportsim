@@ -1,4 +1,5 @@
 import type { Company } from '../company/company.ts';
+import type { Station } from '../rail/station.ts';
 import { recountTowns, type Town } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
@@ -21,6 +22,8 @@ export interface Snapshot {
   layers: Record<LayerName, LayerArray>;
   companies: Company[];
   towns: Town[];
+  stations?: Station[];
+  nextStationId?: number;
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -38,6 +41,8 @@ export function takeSnapshot(state: GameState): Snapshot {
     layers,
     companies: [...state.companies.values()],
     towns: [...state.towns.values()],
+    stations: [...state.stations.values()],
+    nextStationId: state.nextStationId,
   };
 }
 
@@ -99,6 +104,31 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
     });
   }
   recountTowns(map, state.towns.values());
+  for (const s of Array.isArray(snap.stations) ? snap.stations : []) {
+    if (!s || typeof s.id !== 'number' || s.id < 0 || s.id > 0xffff) continue;
+    const waiting: Record<number, number> = {};
+    let total = 0;
+    for (const [k, v] of Object.entries(s.waiting ?? {})) {
+      const n = num(v, 0);
+      if (n > 0) {
+        waiting[Number(k)] = n;
+        total += n;
+      }
+    }
+    state.stations.set(s.id, {
+      id: s.id,
+      name: String(s.name ?? 'Station').slice(0, 48),
+      owner: num(s.owner, 0),
+      x: num(s.x, 0), y: num(s.y, 0), x0: num(s.x0, 0), y0: num(s.y0, 0), x1: num(s.x1, 0), y1: num(s.y1, 0),
+      tiles: num(s.tiles, 0),
+      townId: typeof s.townId === 'number' ? s.townId : null,
+      builtDays: num(s.builtDays, state.date),
+      waiting,
+      waitingTotal: total,
+      rating: num(s.rating, 175),
+    });
+  }
+  state.nextStationId = Math.max(num(snap.nextStationId, 0), ...[...state.stations.keys()].map((k) => k + 1));
   return state;
 }
 

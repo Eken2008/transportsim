@@ -2,9 +2,11 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
 import { useApp, type ToolId } from '../store.ts';
+import { BulldozeTool, DepotTool, StationTool } from '../tools/placeTools.ts';
 import { RailTool } from '../tools/railTool.ts';
 import { TerraformTool } from '../tools/terraformTool.ts';
 import type { Modifiers, Tool } from '../tools/tool.ts';
+import { AreaGhost } from './areaGhost.ts';
 import { CameraController } from './camera.ts';
 import { ChunkManager } from './chunkManager.ts';
 import { Cursor } from './cursor.ts';
@@ -24,6 +26,7 @@ export class GameRenderer {
   readonly cursor: Cursor;
   readonly ghost: TrackGhost;
   readonly labels: LabelLayer;
+  readonly area: AreaGhost;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly world: ClientWorld;
@@ -59,6 +62,8 @@ export class GameRenderer {
     this.chunks = new ChunkManager(world, (ids) => client.subscribe(ids));
     this.cursor = new Cursor(world.map);
     this.ghost = new TrackGhost(world.map);
+    this.area = new AreaGhost(world.map);
+    this.scene.add(this.area.mesh);
     this.labels = new LabelLayer(canvas.parentElement!, world);
     this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
     client.resubscribe = () => this.chunks.resubscribe();
@@ -102,7 +107,15 @@ export class GameRenderer {
     const ro = new ResizeObserver(() => this.resize());
     ro.observe(canvas);
     this.disposers.push(() => ro.disconnect());
-    this.disposers.push(useApp.subscribe((s, prev) => s.tool !== prev.tool && this.setTool(s.tool)));
+    this.disposers.push(
+      useApp.subscribe((s, prev) => {
+        if (s.tool !== prev.tool) this.setTool(s.tool);
+        else if (s.stationOpts !== prev.stationOpts) {
+          this.tool?.invalidate?.();
+          this.hoverDirty = true;
+        }
+      }),
+    );
     this.setTool(useApp.getState().tool);
     this.resize();
     this.loop();
@@ -122,8 +135,27 @@ export class GameRenderer {
     this.toolDown = false;
     this.ghost.hide();
     this.cursor.hide();
-    if (id === 'rail' || id === 'removeRail') this.tool = new RailTool(this.ghost, id === 'removeRail');
-    else this.tool = id ? new TerraformTool(id, this.cursor) : null;
+    this.area.hide();
+    switch (id) {
+      case null:
+        this.tool = null;
+        break;
+      case 'rail':
+      case 'removeRail':
+        this.tool = new RailTool(this.ghost, id === 'removeRail');
+        break;
+      case 'station':
+        this.tool = new StationTool(this.area);
+        break;
+      case 'depot':
+        this.tool = new DepotTool(this.area);
+        break;
+      case 'bulldoze':
+        this.tool = new BulldozeTool(this.area);
+        break;
+      default:
+        this.tool = new TerraformTool(id, this.cursor);
+    }
     this.canvas.style.cursor = id ? 'crosshair' : 'default';
     this.hoverDirty = true;
   }
@@ -188,6 +220,7 @@ export class GameRenderer {
     this.chunks.dispose();
     this.ghost.dispose();
     this.labels.dispose();
+    this.area.dispose();
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();
   }

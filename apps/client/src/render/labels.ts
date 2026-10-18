@@ -1,4 +1,4 @@
-import { HEIGHT_SCALE } from '@transportsim/shared';
+import { COMPANY_COLORS, HEIGHT_SCALE } from '@transportsim/shared';
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 
@@ -12,6 +12,7 @@ interface LabelItem {
   sub: string;
   importance: number;
   kind: 'town' | 'station';
+  color?: string;
 }
 
 const _v = new THREE.Vector3();
@@ -24,7 +25,7 @@ export class LabelLayer {
   readonly el: HTMLDivElement;
   private nodes = new Map<string, HTMLDivElement>();
   private items: LabelItem[] = [];
-  private rev = -1;
+  private rev = '';
 
   constructor(
     parent: HTMLElement,
@@ -37,8 +38,9 @@ export class LabelLayer {
   }
 
   private refresh(): void {
-    this.rev = this.world.townsRev;
-    this.items = [...this.world.state.towns.values()].map((t) => ({
+    this.rev = this.revKey();
+    const state = this.world.state;
+    const towns: LabelItem[] = [...state.towns.values()].map((t) => ({
       key: `t${t.id}`,
       x: t.x + 0.5,
       y: t.y + 0.5,
@@ -48,6 +50,21 @@ export class LabelLayer {
       importance: Math.log10(Math.max(10, t.population)),
       kind: 'town',
     }));
+    const stations: LabelItem[] = [...state.stations.values()].map((s) => {
+      const company = state.companies.get(s.owner);
+      return {
+        key: `s${s.id}`,
+        x: (s.x0 + s.x1 + 1) / 2,
+        y: (s.y0 + s.y1 + 1) / 2,
+        lift: 0.9,
+        title: s.name,
+        sub: s.waitingTotal > 0 ? `${s.waitingTotal} waiting` : '',
+        importance: 2.2,
+        kind: 'station',
+        color: company ? COMPANY_COLORS[company.color % COMPANY_COLORS.length] : '#888',
+      };
+    });
+    this.items = [...towns, ...stations];
     const keep = new Set(this.items.map((i) => i.key));
     for (const [k, n] of this.nodes) {
       if (!keep.has(k)) {
@@ -66,11 +83,12 @@ export class LabelLayer {
       }
       n.firstElementChild!.textContent = item.title;
       n.lastElementChild!.textContent = item.sub;
+      if (item.color) n.style.setProperty('--company', item.color);
     }
   }
 
   update(camera: THREE.PerspectiveCamera, width: number, height: number, distance: number): void {
-    if (this.rev !== this.world.townsRev) this.refresh();
+    if (this.rev !== this.revKey()) this.refresh();
     const map = this.world.map;
     const maxDist = distance * 6 + 60;
     const camPos = camera.position;
@@ -90,6 +108,10 @@ export class LabelLayer {
       const sy = ((1 - _v.y) / 2) * height;
       n.style.transform = `translate(-50%, -100%) translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px)`;
     }
+  }
+
+  private revKey(): string {
+    return `${this.world.townsRev}:${this.world.stationsRev}`;
   }
 
   dispose(): void {

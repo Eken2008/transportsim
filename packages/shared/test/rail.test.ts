@@ -147,3 +147,54 @@ describe('track commands', () => {
     }
   });
 });
+
+describe('stations and depots', () => {
+  test('build a station, extend it, and name it after the nearest town', () => {
+    const { state, map, A, B } = setup();
+    state.towns.set(0, { id: 0, name: 'Testford', x: 20, y: 20, population: 100, houses: 5 });
+    const r = executeCommand(state, A, { type: 'buildStation', x: 10, y: 10, axis: 0, platforms: 2, length: 4 });
+    expect(r.ok).toBe(true);
+    expect(state.stations.size).toBe(1);
+    const st = [...state.stations.values()][0]!;
+    expect(st.name).toBe('Testford');
+    expect(st.tiles).toBe(8);
+    expect(map.type(13, 11)).toBe(TileType.Station);
+    expect(map.layers.track[map.tileIndex(13, 11)]).toBe(1 << Piece.X);
+    // Adjacent platform joins the same station
+    expect(executeCommand(state, A, { type: 'buildStation', x: 10, y: 12, axis: 0, platforms: 1, length: 4 }).ok).toBe(true);
+    expect(state.stations.size).toBe(1);
+    expect(st.tiles).toBe(12);
+    // A separate station gets a distinct name; other companies can't join ours
+    expect(executeCommand(state, B, { type: 'buildStation', x: 10, y: 14, axis: 0, platforms: 1, length: 3 }).ok).toBe(true);
+    expect(state.stations.size).toBe(2);
+    const names = [...state.stations.values()].map((s) => s.name);
+    expect(new Set(names).size).toBe(2);
+  });
+
+  test('stations need level ground and can convert straight track', () => {
+    const { state, map, A } = setup();
+    map.heights[map.cornerIndex(31, 30)] = 3;
+    expect(executeCommand(state, A, { type: 'buildStation', x: 28, y: 30, axis: 0, platforms: 1, length: 4 }).ok).toBe(false);
+    executeCommand(state, A, { type: 'buildTrack', pieces: [5, 30, Piece.X, 6, 30, Piece.X, 7, 30, Piece.SW] });
+    expect(executeCommand(state, A, { type: 'buildStation', x: 5, y: 30, axis: 0, platforms: 1, length: 2 }).ok).toBe(true);
+    expect(executeCommand(state, A, { type: 'buildStation', x: 7, y: 30, axis: 0, platforms: 1, length: 1 }).ok).toBe(false);
+  });
+
+  test('depots and clearing an area', () => {
+    const { state, map, A, B } = setup();
+    expect(executeCommand(state, A, { type: 'buildDepot', x: 3, y: 3, exit: Edge.E }).ok).toBe(true);
+    expect(map.type(3, 3)).toBe(TileType.Depot);
+    expect(map.layers.track[map.tileIndex(3, 3)]).toBe(1 << Piece.X);
+    executeCommand(state, A, { type: 'buildTrack', pieces: [4, 3, Piece.X, 5, 3, Piece.X] });
+    executeCommand(state, A, { type: 'buildStation', x: 6, y: 3, axis: 0, platforms: 1, length: 3 });
+    expect(state.stations.size).toBe(1);
+    // Someone else can't bulldoze our stuff
+    expect(executeCommand(state, B, { type: 'clearArea', x0: 3, y0: 3, x1: 8, y1: 3 }).ok).toBe(false);
+    const v = state.trackVersion;
+    expect(executeCommand(state, A, { type: 'clearArea', x0: 3, y0: 3, x1: 8, y1: 3 }).ok).toBe(true);
+    for (let x = 3; x <= 8; x++) expect(map.type(x, 3)).toBe(TileType.Clear);
+    expect(state.stations.size).toBe(0);
+    expect(state.removedStations.size).toBe(1);
+    expect(state.trackVersion).toBeGreaterThan(v);
+  });
+});

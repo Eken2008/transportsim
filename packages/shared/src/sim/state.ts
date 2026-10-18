@@ -1,4 +1,5 @@
 import { COMPANY_COLORS, MAX_COMPANIES, type Company } from '../company/company.ts';
+import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
 import { GameMap } from '../world/map.ts';
 import { generateTerrain } from '../world/terrain.ts';
@@ -31,6 +32,11 @@ export class GameState {
   readonly companies = new Map<number, Company>();
   readonly players = new Map<number, Player>();
   readonly towns = new Map<number, Town>();
+  readonly stations = new Map<number, Station>();
+  nextStationId = 0;
+  /** Stations changed/removed since the last sync flush (server broadcasts these). */
+  readonly dirtyStations = new Set<number>();
+  readonly removedStations = new Set<number>();
   private nextPlayerId = 1;
   /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
   trackVersion = 0;
@@ -91,6 +97,21 @@ export class GameState {
 
   /** Remove signals on the given pieces of a tile (track is being removed). */
   removeSignalsOn(_tile: number, _pieceBits: number): void {}
+
+  /** Whether any vehicle is parked in (or heading into) the depot on this tile. */
+  depotHasVehicles(_tile: number): boolean {
+    return false;
+  }
+
+  markStationDirty(id: number): void {
+    this.dirtyStations.add(id);
+  }
+
+  deleteStation(id: number): void {
+    this.stations.delete(id);
+    this.dirtyStations.delete(id);
+    this.removedStations.add(id);
+  }
 
   // ---- players & companies -------------------------------------------------
 

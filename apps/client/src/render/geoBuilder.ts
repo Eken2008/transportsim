@@ -63,19 +63,31 @@ export class GeoBuilder {
     this.quad(v(x0, y0, z0), v(x0, y0, z1), v(x0, y1, z1), v(x0, y1, z0)); // -x
   }
 
-  /** Gable roof over [x0,x1]×[z0,z1] starting at height y, ridge along X, `rise` high. */
-  gable(x0: number, z0: number, x1: number, z1: number, y: number, rise: number, overhang = 0.04): void {
-    const v = (x: number, yy: number, z: number) => new THREE.Vector3(x, yy, z);
+  /** Gable roof over [x0,x1]×[z0,z1] starting at height y, `rise` high. Ridge along X (or Z). */
+  gable(x0: number, z0: number, x1: number, z1: number, y: number, rise: number, overhang = 0.04, alongZ = false): void {
+    // For a Z ridge, build the X-ridge roof in swapped coordinates and mirror it back
+    // (swapping x/z flips handedness, so the triangle order is reversed to keep faces outward).
+    const v = alongZ
+      ? (x: number, yy: number, z: number) => new THREE.Vector3(z, yy, x)
+      : (x: number, yy: number, z: number) => new THREE.Vector3(x, yy, z);
+    if (alongZ) [x0, z0, x1, z1] = [z0, x0, z1, x1];
+    const tri = alongZ
+      ? (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => this.tri(a, c, b)
+      : (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => this.tri(a, b, c);
+    const quad = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3) => {
+      tri(a, b, c);
+      tri(a, c, d);
+    };
     const a = x0 - overhang;
     const b = x1 + overhang;
     const zm = (z0 + z1) / 2;
     const top = y + rise;
     const n = z0 - overhang;
     const s = z1 + overhang;
-    this.quad(v(a, y, s), v(b, y, s), v(b, top, zm), v(a, top, zm)); // south slope
-    this.quad(v(b, y, n), v(a, y, n), v(a, top, zm), v(b, top, zm)); // north slope
-    this.tri(v(b, y, s), v(b, y, n), v(b, top, zm)); // east gable
-    this.tri(v(a, y, n), v(a, y, s), v(a, top, zm)); // west gable
+    quad(v(a, y, s), v(b, y, s), v(b, top, zm), v(a, top, zm)); // south slope
+    quad(v(b, y, n), v(a, y, n), v(a, top, zm), v(b, top, zm)); // north slope
+    tri(v(b, y, s), v(b, y, n), v(b, top, zm)); // east gable
+    tri(v(a, y, n), v(a, y, s), v(a, top, zm)); // west gable
   }
 
   /** Four-sided pyramid (spire) over a square base. */

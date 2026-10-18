@@ -514,3 +514,47 @@ input[type='range'] {
   opacity: 0.85;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
+.label.station {
+  flex-direction: row;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 8px 2px 6px;
+  border-radius: 6px;
+  background: rgba(14, 20, 28, 0.82);
+  border-left: 3px solid var(--company, #888);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.label.station b {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+}
+.label.station span {
+  font-size: 11px;
+  color: var(--accent);
+}
+.label.station span:empty {
+  display: none;
+}
+.tool-options {
+  position: absolute;
+  left: 50%;
+  bottom: 100px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.stepper b {
+  min-width: 22px;
+  text-align: center;
+}
+.stepper button {
+  padding: 2px 9px;
+}

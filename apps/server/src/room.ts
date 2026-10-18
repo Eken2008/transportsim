@@ -145,6 +145,7 @@ export class Room {
       spawn: this.spawnFor(player),
     });
     this.send(session, { t: 'towns', towns: [...this.state.towns.values()], full: true });
+    this.send(session, { t: 'stations', stations: [...this.state.stations.values()], removed: [], full: true });
 
     if (isHost && this.hostCloseTimer) {
       clearTimeout(this.hostCloseTimer);
@@ -306,6 +307,13 @@ export class Room {
     if (this.globalDirty) {
       this.globalDirty = false;
       this.broadcast({ t: 'global', global: this.globalState() });
+    }
+    const st = this.state;
+    if (st.dirtyStations.size > 0 || st.removedStations.size > 0) {
+      const stations = [...st.dirtyStations].map((id) => st.stations.get(id)).filter((s) => s !== undefined);
+      this.broadcast({ t: 'stations', stations, removed: [...st.removedStations], full: false });
+      st.dirtyStations.clear();
+      st.removedStations.clear();
     }
     const versions = this.state.map.chunkVersions;
     for (const s of this.sessions) {

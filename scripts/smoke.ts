@@ -135,8 +135,28 @@ try {
   const afterRail = await a.locator('.money').innerText();
   check(beforeRail !== afterRail, `building track with the rail tool cost money (${beforeRail} → ${afterRail})`);
   if (beforeRail === afterRail) console.log('  toasts:', await a.locator('.toast').allInnerTexts());
+  // Station over part of the straight line (2 platforms × 5), depot at its west end.
+  const clickTile = async (x: number, y: number) => {
+    const p = await hook((h, t: number[]) => h.tileToScreen(t[0]!, t[1]!), [x, y]);
+    await a.mouse.move(p.x, p.y, { steps: 3 });
+    await a.waitForTimeout(300);
+    await a.mouse.down();
+    await a.mouse.up();
+    await a.waitForTimeout(800);
+  };
+  await a.keyboard.press('Digit6');
+  const beforeStation = await a.locator('.money').innerText();
+  await clickTile(sx - 2, sy - 4);
+  await a.keyboard.press('Digit7');
+  await clickTile(sx - 11, sy - 4);
+  await a.waitForTimeout(1200);
+  const afterStation = await a.locator('.money').innerText();
+  check(beforeStation !== afterStation, `building a station and depot cost money (${beforeStation} → ${afterStation})`);
+  check((await a.locator('.label.station').count()) >= 1, 'station label shown');
+  if (beforeStation === afterStation) console.log('  toasts:', await a.locator('.toast').allInnerTexts());
   await a.keyboard.press('Escape');
-  await a.waitForTimeout(1500);
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 4, y: s.y - 3, yaw: 0.7, pitch: 0.7, distance: 16 }), { x: sx, y: sy });
+  await a.waitForTimeout(2500);
   await a.screenshot({ path: `${outDir}/03b-track.png` });
 
   // Second player joins by code
