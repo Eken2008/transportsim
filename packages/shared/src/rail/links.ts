@@ -158,8 +158,9 @@ const isCorner = (p: number) => p >= 2 && p <= 5;
 /**
  * Would linking piece `p` (on `tile`, across edge `e`) to piece `q` make a 90° bend through a
  * corner piece? Corner pieces are short, so straight → corner → perpendicular straight is a
- * right angle in half a tile; that never connects. (Two 45° turns either side of a straight
- * piece — diagonal, straight, diagonal — are a normal curve and do connect.)
+ * right angle in half a tile; that never connects. Nor does a switch whose branches are 90°
+ * apart (e.g. a straight with one diagonal leaving each way). Two 45° turns either side of a
+ * straight piece — diagonal, straight, diagonal — are a normal curve and do connect.
  */
 export function makesRightAngle(map: GameMap, tile: number, p: number, e: Edge, q: number): boolean {
   const n = neighbourTile(map, tile, e);
@@ -179,6 +180,17 @@ export function makesRightAngle(map: GameMap, tile: number, p: number, e: Edge, 
     for (const s of linkedAcross(map, n, q, qe)) {
       if (turnSteps(headingOut(p, e), headingIn(s, OPPOSITE_EDGE[qe])) > 1) return true;
     }
+  }
+  // Branches at this joint: tracks splitting from (or merging into) the same track must stay
+  // within 45° of each other, or the two routes through the switch would be a right angle apart.
+  const hp = headingOut(p, e);
+  for (const p2 of EDGE_PIECES[e]!) {
+    if (p2 === p || !hasPiece(map.layers.track[tile]!, p2) || !isLinked(map, tile, p2, e, q)) continue;
+    if (turnSteps(hp, headingOut(p2, e)) > 1) return true;
+  }
+  const hq = headingIn(q, opp);
+  for (const q2 of linkedAcross(map, tile, p, e)) {
+    if (q2 !== q && turnSteps(hq, headingIn(q2, opp)) > 1) return true;
   }
   return false;
 }

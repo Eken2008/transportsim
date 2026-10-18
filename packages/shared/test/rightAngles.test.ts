@@ -96,3 +96,64 @@ describe('no 90° connections', () => {
     }
   });
 });
+
+describe('switch branches', () => {
+  /**
+   * The joint is the east edge of (19, 20). Green: a line from the west ending there. Black: a
+   * diagonal passing through it heading south-east. Red: a diagonal leaving it north-east.
+   */
+  function world() {
+    const state = new GameState({ ...DEFAULT_SETTINGS, mapWidth: 128, mapHeight: 128 }, new GameMap(128, 128));
+    const map = state.map;
+    map.heights.fill(2);
+    for (let i = 0; i < map.width * map.height; i++) map.setClear(i, 0, 0);
+    const pl = state.addPlayer('A', true);
+    const c = state.foundCompany(pl)!;
+    c.money = 1e9;
+    const run = (pieces: number[]) => executeCommand(state, { playerId: pl.id, companyId: c.id }, { type: 'buildTrack', pieces });
+    const green = () => run(Array.from({ length: 10 }, (_, k) => [10 + k, 20, Piece.X]).flat());
+    const black = () => run([18, 19, Piece.NE, 19, 19, Piece.SW, 19, 20, Piece.NE, 20, 20, Piece.SW, 20, 21, Piece.NE, 21, 21, Piece.SW]);
+    const red = () => run([20, 20, Piece.NW, 20, 19, Piece.SE, 21, 19, Piece.NW, 21, 18, Piece.SE]);
+    const reach = (x: number, y: number, td: number) => {
+      const start = seg(map.tileIndex(x, y), td);
+      const seen = new Set([start]);
+      const todo = [start];
+      while (todo.length) {
+        for (const n of nextSegments(map, todo.pop()!, c.id)) {
+          if (seen.has(n)) continue;
+          seen.add(n);
+          todo.push(n);
+        }
+      }
+      return seen;
+    };
+    const has = (set: Set<number>, x: number, y: number) => [...set].some((s) => Math.floor(s / 16) === map.tileIndex(x, y));
+    return { green, black, red, reach, has };
+  }
+
+  test('built green, black, red: red does not connect (it would branch 90° from black)', () => {
+    const w = world();
+    w.green();
+    w.black();
+    w.red();
+    const fromGreen = w.reach(10, 20, trackdir(Piece.X, 0));
+    expect(w.has(fromGreen, 21, 21)).toBe(true); // green joins black heading south-east
+    expect(w.has(fromGreen, 21, 18)).toBe(false); // ...but not red
+    // Coming down red towards the joint leads nowhere.
+    const fromRed = w.reach(21, 18, trackdir(Piece.SE, 1));
+    expect(w.has(fromRed, 15, 20) || w.has(fromRed, 18, 19) || w.has(fromRed, 21, 21)).toBe(false);
+  });
+
+  test('built green, red, black: green joins red; black passes through without connecting', () => {
+    const w = world();
+    w.green();
+    w.red();
+    w.black();
+    const fromGreen = w.reach(10, 20, trackdir(Piece.X, 0));
+    expect(w.has(fromGreen, 21, 18)).toBe(true);
+    expect(w.has(fromGreen, 21, 21)).toBe(false);
+    const alongBlack = w.reach(18, 19, trackdir(Piece.NE, 0));
+    expect(w.has(alongBlack, 21, 21)).toBe(true);
+    expect(w.has(alongBlack, 15, 20) || w.has(alongBlack, 21, 18)).toBe(false);
+  });
+});
