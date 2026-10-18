@@ -13,6 +13,13 @@
         "typescript-eslint": "^8.18.2",
       },
     },
+    "apps/server": {
+      "name": "@transportsim/server",
+      "version": "0.1.0",
+      "dependencies": {
+        "@transportsim/shared": "workspace:*",
+      },
+    },
     "packages/shared": {
       "name": "@transportsim/shared",
       "version": "0.1.0",
@@ -62,6 +69,8 @@
     "@msgpackr-extract/msgpackr-extract-linux-x64": ["@msgpackr-extract/msgpackr-extract-linux-x64@3.0.4", "", { "os": "linux", "cpu": "x64" }, "sha512-8TNXMEjJc3QEy7R/x1INhgiU+XakDAFUzBhaz7+Rbrs8NH5UQeHQxxmzsSBJGyV6I1jW79undiQm8tOI+D+8FQ=="],
 
     "@msgpackr-extract/msgpackr-extract-win32-x64": ["@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4", "", { "os": "win32", "cpu": "x64" }, "sha512-CmCXPQrkbwExx3j946/PtHWHbYJiCRBRDl4BlkRQcJB/YOwQxJRTpoo7aTsortjgoJ1x7opzTSxn7C+ASSLVjQ=="],
+
+    "@transportsim/server": ["@transportsim/server@workspace:apps/server"],
 
     "@transportsim/shared": ["@transportsim/shared@workspace:packages/shared"],
 
