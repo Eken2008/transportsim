@@ -265,7 +265,7 @@ try {
   // Catchment from the station window
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y - 4, yaw: 0.35, pitch: 1.0, distance: 30 }), { x: sx, y: sy });
   await a.waitForTimeout(1500);
-  await clickTile(sx, sy - 4);
+  await clickTile(sx, sy - 3); // second platform: the running train never covers it
   const stationWin = a.locator('.window', { hasText: 'Catchment' });
   await stationWin.getByRole('button', { name: 'Show catchment area' }).click();
   await a.waitForTimeout(800);
