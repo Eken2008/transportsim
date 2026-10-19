@@ -22,6 +22,7 @@ import { closeWindow, openWindow, toast, useApp, windowKey, type GameWindow } fr
 import { formatMoney } from './format.ts';
 import { catchmentRect, residentsIn } from '../game/catchment.ts';
 import { CompanyWindow } from './CompanyWindow.tsx';
+import { OrdersEditor } from './OrdersEditor.tsx';
 import { NewsWindow } from './NewsWindow.tsx';
 import { FinancesWindow, LeagueWindow } from './FinancesWindow.tsx';
 import { GameInfoWindow } from './GameInfoWindow.tsx';
@@ -150,7 +151,9 @@ export function trainStatus(t: TrainInfo): string {
   if (t.toDepot) return 'Heading for depot';
   const o = t.orders[t.orderIndex];
   if (!o) return 'No orders';
-  return o.kind === 'station' ? `Heading to ${stationName(o.station)}` : 'Heading for depot';
+  if (o.kind === 'station') return `Heading to ${stationName(o.station)}`;
+  if (o.kind === 'waypoint') return `Heading via ${client.world?.state.waypoints.get(o.waypoint)?.name ?? 'a waypoint'}`;
+  return o.kind === 'depot' ? 'Heading for a depot service' : 'Waiting for a usable order';
 }
 
 function useTrain(id: number): TrainInfo | undefined {
@@ -161,7 +164,6 @@ function useTrain(id: number): TrainInfo | undefined {
 function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   useTick(400);
   const t = useTrain(w.id);
-  const ordersFor = useApp((s) => s.ordersFor);
   const my = useMyRole();
   const mine = my.companyId === t?.owner && roleAllows(my.role, 'operate');
   const canBuild = mine && roleAllows(my.role, 'build');
@@ -175,8 +177,6 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   const stats = trainStats(t.units);
   const motion = client.world?.motions.get(t.id)?.m;
   const aboard = cargoCount(t);
-  const editing = ordersFor === t.id;
-  const setOrders = (orders: TrainInfo['orders']) => act({ type: 'setOrders', id: t.id, orders });
 
   return (
     <Win w={w} title={t.name} width={360}>
@@ -238,49 +238,11 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
         </div>
       )}
       <ConsistEditor t={t} mine={canBuild} />
-      <h4>Orders</h4>
-      {t.orders.length === 0 && <p className="muted">No orders yet. Add the stations this train should serve.</p>}
-      <ol className="orders">
-        {t.orders.map((o, i) => (
-          <li key={i} className={i === t.orderIndex ? 'current' : ''}>
-            <span className="order-name">
-              {o.kind === 'station' ? stationName(o.station) : 'Go to depot'}
-              {o.kind === 'station' && <PlatformWarning station={o.station} length={stats.length} />}
-            </span>
-            {mine && o.kind === 'station' && (
-              <label className="row small" title="Wait until full before leaving">
-                <input
-                  type="checkbox"
-                  checked={!!o.fullLoad}
-                  onChange={(e) => setOrders(t.orders.map((x, k) => (k === i && x.kind === 'station' ? { ...x, fullLoad: e.target.checked } : x)))}
-                />
-                full load
-              </label>
-            )}
-            {mine && (
-              <>
-                <button className="ghost small" disabled={i === 0} aria-label="Move up" onClick={() => setOrders(swap(t.orders, i, i - 1))}>
-                  ↑
-                </button>
-                <button className="ghost small" aria-label="Remove order" onClick={() => setOrders(t.orders.filter((_, k) => k !== i))}>
-                  ✕
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-      </ol>
-      {mine && (
-        <button
-          className={editing ? 'primary' : ''}
-          style={{ width: '100%' }}
-          onClick={() =>
-            editing ? useApp.setState({ ordersFor: null, tool: null }) : useApp.setState({ ordersFor: t.id, tool: 'orders' })
-          }
-        >
-          {editing ? 'Done adding stations' : '+ Add stations (click them on the map)'}
-        </button>
-      )}
+      <OrdersEditor
+        t={t}
+        mine={mine}
+        warn={(o) => (o.kind === 'station' ? <PlatformWarning station={o.station} length={stats.length} /> : null)}
+      />
     </Win>
   );
 }
@@ -296,12 +258,6 @@ function PlatformWarning({ station, length }: { station: number; length: number 
       ⚠ longer than the platform
     </span>
   );
-}
-
-function swap<T>(a: T[], i: number, j: number): T[] {
-  const out = a.slice();
-  [out[i], out[j]] = [out[j]!, out[i]!];
-  return out;
 }
 
 function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {

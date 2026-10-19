@@ -32,7 +32,8 @@ import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
 import { signalKindOf, type SignalKind } from '../commands/signals.ts';
 import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
-import { PASSENGER_MASS, cargoCount, trainStats, type Train, type TrainMotion, type TrainStats } from './train.ts';
+import { PASSENGER_MASS, cargoCount, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
+import { advanceOrder, peekNextOrder } from './orders.ts';
 
 /** km/h corresponding to 1 tile per second. Sets the game's sense of scale. */
 export const KMH_PER_TILE_PER_S = 28;
@@ -606,6 +607,7 @@ export class RailSystem {
     t.pos = 0;
     t.depot = -1;
     t.pbs = false;
+    t.departedAt = this.state.tick;
     this.occupy(t, s);
     this.state.dirtyTrains.add(t.id);
   }
@@ -696,6 +698,7 @@ export class RailSystem {
     if (t.speed < 0.05 && limit < 0.5) t.speed = 0;
 
     this.advance(t, (t.speed / KMH_PER_TILE_PER_S) * DT);
+    this.passWaypoint(t);
 
     if (t.speed === 0 && t.status === 'running') this.whenStopped(t);
   }
@@ -821,13 +824,21 @@ export class RailSystem {
     if (!atEnd) return; // waiting behind something; keep the route
 
     const tile = segTile(head);
-    if (t.toDepot && map.layers.type[tile] === TileType.Depot) {
+    const order = t.orders[t.orderIndex];
+    if (map.layers.type[tile] === TileType.Depot && (t.toDepot || order?.kind === 'depot')) {
+      const parkHere = t.toDepot;
       this.enterDepot(t, tile);
+      if (!parkHere && order) {
+        // A depot order: get serviced and carry on with the next order.
+        this.recordArrival(t, order);
+        advanceOrder(this.state, t);
+        t.status = 'running';
+      }
       return;
     }
-    const order = t.orders[t.orderIndex];
     if (!t.toDepot && order?.kind === 'station' && map.layers.type[tile] === TileType.Station && map.layers.data[tile] === order.station) {
       t.status = 'loading';
+      this.recordArrival(t, order);
       // A train longer than its platform takes longer to load (up to three times as long).
       let covered = 0;
       for (const s of t.path) {
@@ -836,6 +847,8 @@ export class RailSystem {
       }
       const length = this.statsOf(t).length;
       t.loadTicks = Math.round(DWELL_TICKS * Math.min(3, Math.max(1, length / Math.max(0.5, covered))));
+      // Timetabled wait: stay at least this long.
+      if (order.wait) t.loadTicks = Math.max(t.loadTicks, Math.round(order.wait * TICKS_PER_DAY));
       t.lastStation = order.station;
       this.state.dirtyTrains.add(t.id);
       this.onArrive?.(t, order.station);
@@ -859,35 +872,71 @@ export class RailSystem {
     t.depot = tile;
     t.toDepot = false;
     t.routeFor = '';
+    t.lastService = this.state.date;
+    this.onService?.(t);
     this.state.dirtyTrains.add(t.id);
   }
+
+  /** Called when a train is serviced in a depot (reliability is restored there). */
+  onService: ((t: Train) => void) | null = null;
 
   private depart(t: Train): void {
     t.status = 'running';
     this.state.dirtyTrains.add(t.id);
-    if (t.orders.length > 0) t.orderIndex = (t.orderIndex + 1) % t.orders.length;
-    t.routeFor = '';
+    advanceOrder(this.state, t);
+    t.departedAt = this.state.tick;
     t.replanAt = 0;
     this.plan(t);
+  }
+
+  /** Timetable bookkeeping on reaching an order: autofill its travel time, or note lateness. */
+  private recordArrival(t: Train, o: Order): void {
+    if (o.kind === 'jump' || t.departedAt === undefined) return;
+    const actual = Math.round(((this.state.tick - t.departedAt) / TICKS_PER_DAY) * 10) / 10;
+    if (t.autofill) o.travel = Math.max(0.1, actual);
+    else if (o.travel) t.lateness = Math.round((actual - o.travel) * 10) / 10;
+    this.state.dirtyTrains.add(t.id);
+  }
+
+  /** Waypoints are passed without stopping: the next order starts as the head reaches one. */
+  private passWaypoint(t: Train): void {
+    const o = t.orders[t.orderIndex];
+    if (o?.kind !== 'waypoint' || t.toDepot || t.path.length === 0) return;
+    const wp = this.state.waypoints.get(o.waypoint);
+    if (!wp || segTile(t.path[0]!) !== wp.tile) return;
+    this.recordArrival(t, o);
+    advanceOrder(this.state, t);
+    t.departedAt = this.state.tick;
   }
 
   private targetKey(t: Train): string | null {
     if (t.toDepot) return 'depot';
     const o = t.orders[t.orderIndex];
     if (!o) return null;
-    return o.kind === 'station' ? `s${o.station}` : 'depot';
+    if (o.kind === 'station') return `s${o.station}`;
+    if (o.kind === 'waypoint') return `w${o.waypoint}`;
+    return o.kind === 'depot' ? 'depot' : null;
   }
 
   private goalFor(t: Train): PathGoal | null {
-    const map = this.state.map;
+    if (t.toDepot) return this.goalForOrder(t, { kind: 'depot' });
     const o = t.orders[t.orderIndex];
-    if (t.toDepot || o?.kind === 'depot') {
+    return o ? this.goalForOrder(t, o) : null;
+  }
+
+  private goalForOrder(t: Train, o: Order): PathGoal | null {
+    const map = this.state.map;
+    if (o.kind === 'depot') {
       const depots = [...this.state.depots].filter((d) => map.layers.owner[d] === t.owner);
       return depots.length ? depotGoal(map, depots) : null;
     }
-    if (o?.kind === 'station') {
+    if (o.kind === 'station') {
       const st = this.state.stations.get(o.station);
       return st ? stationGoal(map, st.id, st) : null;
+    }
+    if (o.kind === 'waypoint') {
+      const wp = this.state.waypoints.get(o.waypoint);
+      return wp ? depotGoal(map, [wp.tile]) : null;
     }
     return null;
   }
@@ -925,6 +974,19 @@ export class RailSystem {
       t.replanAt = this.state.tick + REPLAN_DELAY;
       return;
     }
+    // Run on through waypoints to the order after them, so trains don't brake for waypoints.
+    let o = t.toDepot ? undefined : t.orders[t.orderIndex];
+    const saved = t.orderIndex;
+    for (let k = 0; k < 4 && o?.kind === 'waypoint' && path.length > 0; k++) {
+      t.orderIndex = peekNextOrder(this.state, t);
+      const next = t.orders[t.orderIndex];
+      const g = next ? this.goalForOrder(t, next) : null;
+      const more = g ? findPath(map, path[path.length - 1]!, g, { access, penalty }) : null;
+      if (!more) break;
+      path.push(...more);
+      o = next;
+    }
+    t.orderIndex = saved;
     extendThroughPlatform(map, path, access);
     t.route = path;
   }

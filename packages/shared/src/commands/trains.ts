@@ -3,7 +3,14 @@ import { isElectrified } from '../rail/railTypes.ts';
 import { ymdFromDays } from '../sim/date.ts';
 import { TileType } from '../world/constants.ts';
 import { isAvailable, railVehicle } from '../vehicles/catalog.ts';
-import { trainStats, type Order, type Train } from '../vehicles/train.ts';
+import { JUMP_CONDITIONS, trainStats, type Order, type Train } from '../vehicles/train.ts';
+import { advanceOrder, settleOrders } from '../vehicles/orders.ts';
+
+/** A timetable duration in days (0.1 resolution, up to a year), or undefined. */
+function days(v: unknown): number | undefined {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return undefined;
+  return Math.min(365, Math.round(v * 10) / 10);
+}
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
 export const MAX_UNITS = 24;
@@ -17,7 +24,7 @@ export interface BuyTrainCommand {
   units: string[];
 }
 
-export type TrainActionKind = 'start' | 'stop' | 'toDepot' | 'reverse' | 'sell' | 'skip';
+export type TrainActionKind = 'start' | 'stop' | 'toDepot' | 'reverse' | 'sell' | 'skip' | 'autofill';
 
 export interface TrainActionCommand {
   type: 'trainAction';
@@ -134,13 +141,14 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
           ok: true,
           cost: 0,
           commit() {
-            t.orderIndex = (t.orderIndex + 1) % t.orders.length;
-            t.routeFor = '';
+            advanceOrder(state, t);
             if (t.status === 'loading') t.loadTicks = 0;
             done();
             return noEffects();
           },
         };
+      case 'autofill':
+        return { ok: true, cost: 0, commit: () => ((t.autofill = !t.autofill), done(), noEffects()) };
       case 'sell': {
         if (t.status !== 'depot') return fail('Trains can only be sold inside a depot');
         const refund = resaleValue(t.value, (state.date - t.builtDays) / 365);
@@ -173,18 +181,32 @@ export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
     if (!t || t.owner !== ctx.companyId) return fail('Not your train');
     if (!Array.isArray(cmd.orders) || cmd.orders.length > MAX_ORDERS) return fail(`At most ${MAX_ORDERS} orders`);
     const orders: Order[] = [];
+    const n = cmd.orders.length;
     for (const o of cmd.orders) {
+      const travel = days(o?.kind !== 'jump' ? o?.travel : undefined);
       if (o?.kind === 'station') {
         const st = isInt(o.station) ? state.stations.get(o.station) : undefined;
         if (!st) return fail('Unknown station');
         if (!state.canUseStation(ctx.companyId!, st)) return fail(`${st.name} belongs to another company`);
-        orders.push({ kind: 'station', station: st.id, fullLoad: o.fullLoad === true || undefined });
+        orders.push({ kind: 'station', station: st.id, fullLoad: o.fullLoad === true || undefined, wait: days(o.wait), travel });
+      } else if (o?.kind === 'waypoint') {
+        const wp = isInt(o.waypoint) ? state.waypoints.get(o.waypoint) : undefined;
+        if (!wp) return fail('Unknown waypoint');
+        if (!state.accessFor(ctx.companyId!).uses[wp.owner]) return fail(`${wp.name} is on another company's track`);
+        orders.push({ kind: 'waypoint', waypoint: wp.id, travel });
       } else if (o?.kind === 'depot') {
-        orders.push({ kind: 'depot' });
+        orders.push({ kind: 'depot', travel });
+      } else if (o?.kind === 'jump') {
+        if (!isInt(o.to) || o.to < 0 || o.to >= n) return fail('A jump must go to an order in the list');
+        if (!JUMP_CONDITIONS.includes(o.cond)) return fail('Invalid condition');
+        const op = o.op === 'ge' ? 'ge' : 'lt';
+        const value = typeof o.value === 'number' && Number.isFinite(o.value) ? Math.max(0, Math.min(1000, o.value)) : 0;
+        orders.push({ kind: 'jump', to: o.to, cond: o.cond, op, value });
       } else {
         return fail('Invalid order');
       }
     }
+    if (orders.length > 0 && orders.every((o) => o.kind === 'jump')) return fail('Add a station, waypoint or depot to jump to');
     return {
       ok: true,
       cost: 0,
@@ -194,6 +216,7 @@ export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
         // Keep heading to the same station if it's still in the list.
         const same = current?.kind === 'station' ? orders.findIndex((o) => o.kind === 'station' && o.station === current.station) : -1;
         t.orderIndex = same >= 0 ? same : 0;
+        settleOrders(state, t);
         t.routeFor = '';
         state.dirtyTrains.add(t.id);
         return noEffects();

@@ -26,6 +26,9 @@ export class ClientWorld {
   townsRev = 0;
   /** Bumped when stations change. */
   stationsRev = 0;
+  /** Bumped when the waypoint list changes. */
+  waypointsRev = 0;
+  private waypointsKey = '';
   /** All trains (details), and the latest motion sample for trains near our view. */
   readonly trains = new Map<number, TrainInfo>();
   trainsRev = 0;
@@ -86,6 +89,13 @@ export class ClientWorld {
     s.players.clear();
     for (const p of g.players) s.players.set(p.id, p);
     s.setAgreements(g.agreements);
+    const key = JSON.stringify(g.waypoints ?? []);
+    if (key !== this.waypointsKey) {
+      this.waypointsKey = key;
+      this.waypointsRev++;
+      s.waypoints.clear();
+      for (const w of g.waypoints ?? []) s.waypoints.set(w.id, w);
+    }
   }
 
   applyTowns(towns: Town[], full: boolean): void {

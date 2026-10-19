@@ -224,6 +224,7 @@ const TOOLS: ToolDef[] = [
   { id: 'depot', icon: '🏚', label: 'Train depot', key: '7', menu: 'rail' },
   { id: 'bridge', icon: '🌉', label: 'Bridge (drag end to end)', key: 'B', menu: 'rail' },
   { id: 'tunnel', icon: '⛰️', label: 'Tunnel (click a slope into a hill)', key: 'N', menu: 'rail' },
+  { id: 'waypoint', icon: '📍', label: 'Waypoint (click straight track; click again to remove)', key: 'P', menu: 'rail' },
   { id: 'convert', icon: '⚡', label: 'Convert track type (drag an area)', key: 'V', menu: 'rail' },
   { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', menu: 'main' },
 ];

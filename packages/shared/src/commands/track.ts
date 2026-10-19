@@ -1,6 +1,7 @@
 import { COSTS } from '../economy/costs.ts';
 import { PIECE_COUNT, Piece, hasPiece, isDiagonal, pieceFitsSlope } from '../rail/track.ts';
 import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
+import { WAYPOINT_FLAG } from '../rail/waypoint.ts';
 import type { GameState } from '../sim/state.ts';
 import { HEAD_BRIDGE, HEAD_TUNNEL, structuresAt } from '../rail/structures.ts';
 import { linkPlaced, pendingLinks, unlinkPieces } from '../rail/links.ts';
@@ -81,6 +82,7 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
         if (map.layers.owner[i] !== company) return fail(`Track belongs to another company ${at(x, y)}`);
         if (map.layers.data[i]! & CROSSING_FLAG) return fail(`Can't add track to a level crossing ${at(x, y)}`);
         if (map.layers.signals[i]) return fail(`Remove the signals before adding a junction ${at(x, y)}`);
+        if (map.layers.data[i]! & WAYPOINT_FLAG) return fail(`Remove the waypoint before adding a junction ${at(x, y)}`);
       } else if (type === TileType.Road) {
         const road = map.layers.data[i]! & 0xf;
         const okX = p === Piece.X && road === (ROAD_N | ROAD_S);

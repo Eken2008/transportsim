@@ -950,6 +950,45 @@ details.rating .kv {
   color: var(--accent);
 }
 
+/* Orders */
+ol.orders li {
+  flex-wrap: wrap;
+}
+ol.orders .order-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+ol.orders .order-detail {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 2px 0 2px 24px;
+  color: var(--muted);
+}
+ol.orders .order-detail input[type='number'] {
+  padding: 2px 4px;
+}
+ol.orders .order-detail select {
+  padding: 2px 4px;
+}
+ol.orders li.kind-jump .order-name,
+ol.orders li.kind-waypoint .order-name {
+  font-style: italic;
+}
+.active-text {
+  color: var(--accent);
+}
+.label.waypoint b {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
 /* Signal options */
 .tool-options.wrap {
   flex-wrap: wrap;

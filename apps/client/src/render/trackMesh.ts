@@ -8,6 +8,7 @@ import {
   PIECE_EDGES,
   TileType,
   SIGNAL_ONE_WAY,
+  WAYPOINT_FLAG,
   signalKindOf,
   depotExit,
   hasPiece,
@@ -49,6 +50,7 @@ const PATH_HEAD = lin('#23395b');
 const ENTRY_CAP = lin('#f2c94c');
 const EXIT_CAP = lin('#3e8ede');
 const PATH_CAP = lin('#f2f2f2');
+const WAYPOINT_WHITE = lin('#f4f4f4');
 const _foot = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
@@ -209,6 +211,7 @@ export function addTrack(
         addPieceCurve(g, curve, lod, railType);
         if (wires) addCatenary(g, curve, type === TileType.Station || !!head);
       }
+      if (type === TileType.Rail && map.layers.data[i]! & WAYPOINT_FLAG && lod <= 1) addWaypointMarker(g, map, x, y, hasPiece(bits, 0));
       const sig = map.layers.signals[i]!;
       if (sig && lod <= 1) {
         for (let td = 0; td < 12; td++) {
@@ -233,6 +236,20 @@ export function addTrack(
         }
       }
     }
+  }
+}
+
+/** Waypoint: a post with a black-and-white board on each side of the track. */
+function addWaypointMarker(g: GeoBuilder, map: GameMap, x: number, y: number, alongX: boolean): void {
+  const h = map.cornerHeight(x, y) * HEIGHT_SCALE;
+  for (const side of [-1, 1]) {
+    const px = alongX ? x + 0.5 : x + 0.5 + side * 0.33;
+    const pz = alongX ? y + 0.5 + side * 0.33 : y + 0.5;
+    g.color(SIGNAL_POST).aabb(px - 0.015, h, pz - 0.015, px + 0.015, h + 0.32, pz + 0.015);
+    const wx = alongX ? 0.09 : 0.012;
+    const wz = alongX ? 0.012 : 0.09;
+    g.color(WAYPOINT_WHITE).aabb(px - wx, h + 0.26, pz - wz, px + wx, h + 0.36, pz + wz);
+    g.color(SIGNAL_HEAD).aabb(px - wx * 0.5, h + 0.27, pz - wz * 0.5, px + wx * 0.5, h + 0.35, pz + wz * 0.5);
   }
 }
 

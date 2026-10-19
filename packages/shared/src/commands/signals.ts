@@ -64,6 +64,7 @@ export const setSignalHandler: CommandHandler<SetSignalCommand> = {
     if (map.layers.owner[i] !== ctx.companyId) return fail('Track belongs to another company');
     if (map.layers.data[i]! & CROSSING_FLAG) return fail("Signals can't go on a level crossing");
     if (map.layers.data[i]! & 0x600) return fail("Signals can't go on a bridge or tunnel end");
+    if (map.layers.data[i]! & 0x800) return fail("Signals can't go on a waypoint");
     const bits = map.layers.track[i]!;
     if (!hasPiece(bits, piece)) return fail('No track there');
     if (dirs !== 0 && (bits & ~(1 << piece) & ~PARALLEL[piece]!) !== 0) {

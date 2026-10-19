@@ -489,6 +489,7 @@ export class Room {
       companies: [...this.state.companies.values()],
       players: [...this.state.players.values()],
       agreements: [...this.state.agreements.values()],
+      waypoints: [...this.state.waypoints.values()],
     };
   }
 

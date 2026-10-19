@@ -1,6 +1,7 @@
 import type { Command } from '../commands/index.ts';
 import type { Company } from '../company/company.ts';
 import type { Agreement } from '../company/sharing.ts';
+import type { Waypoint } from '../rail/waypoint.ts';
 import type { GameSettings, ServerLimits } from '../sim/settings.ts';
 import type { Player } from '../sim/state.ts';
 import type { NewsItem } from '../news/news.ts';
@@ -36,6 +37,7 @@ export interface GlobalState {
   companies: Company[];
   players: Player[];
   agreements: Agreement[];
+  waypoints: Waypoint[];
 }
 
 export type ChatChannel = 'all' | 'company';

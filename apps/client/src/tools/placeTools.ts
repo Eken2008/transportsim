@@ -4,6 +4,7 @@ import {
   OPPOSITE_EDGE,
   PIECE_EDGES,
   TileType,
+  WAYPOINT_FLAG,
   hasPiece,
   type Command,
 } from '@transportsim/shared';
@@ -157,6 +158,17 @@ export class DepotTool extends PreviewTool {
       else if (connecting.length > 1 && !connecting.includes(exit)) exit = connecting[0]!;
     }
     return { tiles: [{ x, y }], cmd: { type: 'buildDepot', x, y, exit, railType: useApp.getState().railType } as Command, arrow: { x, y, edge: exit } };
+  }
+}
+
+/** Click plain straight track to make it a waypoint; click a waypoint to remove it. */
+export class WaypointTool extends PreviewTool {
+  protected describe(hit: TerrainHit) {
+    const map = client.world?.map;
+    const i = map ? map.tileIndex(hit.tileX, hit.tileY) : -1;
+    const isWaypoint = !!map && map.layers.type[i] === TileType.Rail && (map.layers.data[i]! & WAYPOINT_FLAG) !== 0;
+    const type = isWaypoint ? 'removeWaypoint' : 'buildWaypoint';
+    return { tiles: [{ x: hit.tileX, y: hit.tileY }], cmd: { type, x: hit.tileX, y: hit.tileY } as Command, color: isWaypoint ? DEMOLISH : OK };
   }
 }
 

@@ -1,8 +1,27 @@
 import { railVehicle } from './catalog.ts';
 
+/** What a conditional order looks at: load (% full), age (years), reliability (%), or a due service. */
+export type JumpCondition = 'always' | 'load' | 'age' | 'reliability' | 'service';
+export const JUMP_CONDITIONS: readonly JumpCondition[] = ['always', 'load', 'age', 'reliability', 'service'];
+
+/** Go to order `to` if the condition holds (`op` compares with `value`), else to the next order. */
+export interface JumpOrder {
+  kind: 'jump';
+  to: number;
+  cond: JumpCondition;
+  op?: 'lt' | 'ge';
+  value?: number;
+}
+
+/**
+ * Orders. Timetables: `wait` is the least time (days) to spend at a station, `travel` the
+ * scheduled time (days) to get to an order from the previous one.
+ */
 export type Order =
-  | { kind: 'station'; station: number; fullLoad?: boolean }
-  | { kind: 'depot' };
+  | { kind: 'station'; station: number; fullLoad?: boolean; wait?: number; travel?: number }
+  | { kind: 'waypoint'; waypoint: number; travel?: number }
+  | { kind: 'depot'; travel?: number }
+  | JumpOrder;
 
 export type TrainStatus =
   /** Parked inside a depot. */
@@ -61,6 +80,16 @@ export interface Train {
   lastStation: number;
   /** Passed a path signal (and no block signal since): may only enter pieces reserved for it. */
   pbs?: boolean;
+  /** Tick it left its previous order (timetable). */
+  departedAt?: number;
+  /** Days late (negative: early) at its last timetabled order. */
+  lateness?: number;
+  /** Record travel times into the timetable as it runs. */
+  autofill?: boolean;
+  /** Day of the last service at a depot. */
+  lastService?: number;
+  /** 0..1, drops between services (breakdowns). */
+  reliability?: number;
 }
 
 export interface TrainStats {

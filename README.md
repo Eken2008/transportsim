@@ -8,7 +8,8 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
 > - **Stations and depots:** multi-platform stations and depots.
 > - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.
-> - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort and gradients; pathfinding, orders and full load; reversing at termini.
+> - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort, gradients and curve, bridge and track speed limits; pathfinding and reversing at termini.
+> - **Orders:** stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
 > - **Passengers:** destination-based passengers with payment by distance and journey time.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
 > - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table. Three quarters in the red means bankruptcy.
@@ -75,6 +76,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `6` / `7`                                        | Station (`R` rotates) / depot                                 |
 | `9`                                              | Signals: click places, turns round, removes; kinds block, entry, exit, combo (pre-signals) and path; one-way; reservation overlay |
 | `B` / `N`                                        | Bridge (drag end to end) / tunnel (click a slope into a hill) |
+| `P`                                              | Waypoint: click straight track (click again to remove); trains pass through without stopping |
 | `V`                                              | Convert track type (drag an area); the rail tools choose standard, electrified or high-speed track |
 | `8`                                              | Bulldoze an area                                             |
 | Click                                            | Open a depot, station (show its catchment) or train (rearrange vehicles in a depot) |

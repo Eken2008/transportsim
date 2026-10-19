@@ -11,7 +11,7 @@ interface LabelItem {
   title: string;
   sub: string;
   importance: number;
-  kind: 'town' | 'station';
+  kind: 'town' | 'station' | 'waypoint';
   color?: string;
 }
 
@@ -64,7 +64,18 @@ export class LabelLayer {
         color: company ? COMPANY_COLORS[company.color % COMPANY_COLORS.length] : '#888',
       };
     });
-    this.items = [...towns, ...stations];
+    const w = this.world.map.width;
+    const waypoints: LabelItem[] = [...state.waypoints.values()].map((wp) => ({
+      key: `w${wp.id}`,
+      x: (wp.tile % w) + 0.5,
+      y: Math.floor(wp.tile / w) + 0.5,
+      lift: 0.6,
+      title: wp.name,
+      sub: '',
+      importance: 1.2,
+      kind: 'waypoint',
+    }));
+    this.items = [...towns, ...stations, ...waypoints];
     const keep = new Set(this.items.map((i) => i.key));
     for (const [k, n] of this.nodes) {
       if (!keep.has(k)) {
@@ -111,7 +122,7 @@ export class LabelLayer {
   }
 
   private revKey(): string {
-    return `${this.world.townsRev}:${this.world.stationsRev}`;
+    return `${this.world.townsRev}:${this.world.stationsRev}:${this.world.waypointsRev}`;
   }
 
   dispose(): void {

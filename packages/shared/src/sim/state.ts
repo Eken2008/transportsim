@@ -17,6 +17,7 @@ import {
 import { demolishTile, refreshStations } from '../commands/station.ts';
 import { OWNER_NONE, TileType } from '../world/constants.ts';
 import type { Agreement } from '../company/sharing.ts';
+import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
 import { ELECTRIC_TYPES } from '../rail/railTypes.ts';
 import { isSpanTd } from '../rail/track.ts';
 import { segTd, segTile, type TrackAccess } from '../rail/network.ts';
@@ -77,6 +78,8 @@ export class GameState {
   private nextPlayerId = 1;
   /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
   trackVersion = 0;
+  readonly waypoints = new Map<number, Waypoint>();
+  nextWaypointId = 0;
   /** Track sharing agreements by id. */
   readonly agreements = new Map<number, Agreement>();
   nextAgreementId = 1;
@@ -410,8 +413,30 @@ export class GameState {
     this.sharingTicks.clear();
   }
 
+  /** Remove a waypoint; trains drop their orders for it. */
+  deleteWaypoint(id: number): void {
+    const wp = this.waypoints.get(id);
+    if (!wp) return;
+    this.waypoints.delete(id);
+    const { type, data } = this.map.layers;
+    if (type[wp.tile] === TileType.Rail) data[wp.tile] = data[wp.tile]! & ~WAYPOINT_FLAG;
+    for (const t of this.trains.values()) {
+      const keep = t.orders.filter((o) => o.kind !== 'waypoint' || o.waypoint !== id);
+      if (keep.length === t.orders.length) continue;
+      t.orders = keep;
+      t.orderIndex = keep.length ? Math.min(t.orderIndex, keep.length - 1) : 0;
+      t.routeFor = '';
+      this.dirtyTrains.add(t.id);
+    }
+  }
+
   onTrackChanged(): void {
     this.trackVersion++;
+    // Waypoints whose track went away go with it.
+    const { type, data } = this.map.layers;
+    for (const wp of [...this.waypoints.values()]) {
+      if (type[wp.tile] !== TileType.Rail || !(data[wp.tile]! & WAYPOINT_FLAG)) this.deleteWaypoint(wp.id);
+    }
   }
 
   /** Whether any train currently occupies this track piece. */

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
 import { useApp, type ToolId } from '../store.ts';
-import { BulldozeTool, ConvertTool, DepotTool, StationTool } from '../tools/placeTools.ts';
+import { BulldozeTool, ConvertTool, DepotTool, StationTool, WaypointTool } from '../tools/placeTools.ts';
 import { RailTool } from '../tools/railTool.ts';
 import { TerraformTool } from '../tools/terraformTool.ts';
 import type { Modifiers, Tool } from '../tools/tool.ts';
@@ -219,6 +219,9 @@ export class GameRenderer {
         break;
       case 'convert':
         this.tool = new ConvertTool(this.area);
+        break;
+      case 'waypoint':
+        this.tool = new WaypointTool(this.area);
         break;
       case 'orders':
         this.tool = new OrdersTool(this.area);

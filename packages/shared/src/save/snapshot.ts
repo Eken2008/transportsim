@@ -8,6 +8,8 @@ import { recountTowns, type Town } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
+import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
+import { JUMP_CONDITIONS } from '../vehicles/train.ts';
 import { emptyInfrastructure, sanitizeFinances } from '../economy/finance.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
 import { GameState } from '../sim/state.ts';
@@ -37,6 +39,8 @@ export interface Snapshot {
   nextNewsId?: number;
   agreements?: Agreement[];
   nextAgreementId?: number;
+  waypoints?: Waypoint[];
+  nextWaypointId?: number;
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -62,6 +66,8 @@ export function takeSnapshot(state: GameState): Snapshot {
     nextNewsId: state.nextNewsId,
     agreements: [...state.agreements.values()],
     nextAgreementId: state.nextAgreementId,
+    waypoints: [...state.waypoints.values()],
+    nextWaypointId: state.nextWaypointId,
   };
 }
 
@@ -180,6 +186,12 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   for (const c of state.companies.values()) if (!c.value) c.value = state.companyValue(c);
   state.setAgreements(sanitizeAgreements(snap.agreements, new Set(state.companies.keys())));
   state.nextAgreementId = Math.max(num(snap.nextAgreementId, 1), ...[...state.agreements.keys()].map((k) => k + 1));
+  for (const w of Array.isArray(snap.waypoints) ? snap.waypoints : []) {
+    if (!w || typeof w.id !== 'number' || typeof w.tile !== 'number') continue;
+    if (map.layers.type[w.tile] !== TileType.Rail || !(map.layers.data[w.tile]! & WAYPOINT_FLAG)) continue;
+    state.waypoints.set(w.id, { id: w.id, name: String(w.name ?? 'Waypoint').slice(0, 48), owner: num(w.owner, 0), tile: w.tile });
+  }
+  state.nextWaypointId = Math.max(num(snap.nextWaypointId, 0), ...[...state.waypoints.keys()].map((k) => k + 1));
   state.news.push(...sanitizeNews(snap.news));
   state.nextNewsId = Math.max(num(snap.nextNewsId, 1), ...state.news.map((n) => n.id + 1));
   state.nextStationId = Math.max(num(snap.nextStationId, 0), ...[...state.stations.keys()].map((k) => k + 1));
@@ -231,7 +243,12 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
     pos: num(t.pos, 0),
     speed: num(t.speed, 0),
     orders: (Array.isArray(t.orders) ? t.orders : []).filter(
-      (o) => o && (o.kind === 'depot' || (o.kind === 'station' && typeof o.station === 'number')),
+      (o) =>
+        o &&
+        (o.kind === 'depot' ||
+          (o.kind === 'station' && typeof o.station === 'number') ||
+          (o.kind === 'waypoint' && typeof o.waypoint === 'number') ||
+          (o.kind === 'jump' && typeof o.to === 'number' && JUMP_CONDITIONS.includes(o.cond))),
     ),
     orderIndex: num(t.orderIndex, 0),
     toDepot: t.toDepot === true,
@@ -246,5 +263,10 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
     profitLastYear: num(t.profitLastYear, 0),
     lastStation: num(t.lastStation, -1),
     pbs: t.pbs === true,
+    departedAt: typeof t.departedAt === 'number' ? t.departedAt : undefined,
+    lateness: typeof t.lateness === 'number' ? t.lateness : undefined,
+    autofill: t.autofill === true || undefined,
+    lastService: typeof t.lastService === 'number' ? t.lastService : undefined,
+    reliability: typeof t.reliability === 'number' ? Math.max(0, Math.min(1, t.reliability)) : undefined,
   };
 }
