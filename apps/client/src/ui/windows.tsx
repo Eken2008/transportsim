@@ -4,11 +4,14 @@ import {
   cargoCount,
   isAvailable,
   railVehicle,
+  ratingParts,
+  ratingPercent,
   roleAllows,
   segTile,
   trainStats,
   ymdFromDays,
   type CompanyRole,
+  type Station,
   type TrainInfo,
 } from '@transportsim/shared';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -385,13 +388,20 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
         <b>{company?.name ?? '—'}</b>
         <span>Platforms</span>
         <b className="mono">{st.tiles} tiles</b>
-        <span>Rating</span>
-        <b className="mono">{Math.round((st.rating / 255) * 100)}%</b>
         <span>Waiting</span>
         <b className="mono">{st.waitingTotal} passengers</b>
         <span>Catchment</span>
         <b className="mono">{client.world ? residentsIn(client.world.map, catchmentRect(client.world.map, st)).toLocaleString('en-GB') : 0} residents</b>
+        {st.share !== undefined && st.share < 1 && (
+          <>
+            <span>Share</span>
+            <b className="mono" title="Other stations cover some of the same houses; the better rated a station, the more passengers it gets">
+              {Math.round(st.share * 100)}% <span className="muted">(competing stations nearby)</span>
+            </b>
+          </>
+        )}
       </div>
+      <RatingBreakdown st={st} />
       <CatchmentToggle id={st.id} />
       {waiting.length > 0 && (
         <ul className="plain small">
@@ -412,6 +422,48 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
         </div>
       ))}
     </Win>
+  );
+}
+
+function RatingBreakdown({ st }: { st: Station }) {
+  const date = useApp((s) => s.global?.date ?? 0);
+  const p = ratingParts(st, date);
+  const part = (v: number) => <b className={`mono ${v < 0 ? 'neg' : ''}`}>{v > 0 ? `+${v}` : v}</b>;
+  const now = ratingPercent(st.rating);
+  const target = ratingPercent(p.target);
+  return (
+    <details className="rating">
+      <summary>
+        <span>Rating</span>
+        <span className="rating-bar" aria-hidden>
+          <span style={{ width: `${now}%` }} />
+        </span>
+        <b className="mono">{now}%</b>
+        {target !== now && <span className="muted small mono">{target > now ? '↗' : '↘'} {target}%</span>}
+      </summary>
+      <div className="kv small">
+        <span>Last train called</span>
+        <span>
+          {st.lastPickup === undefined ? 'never' : p.days === 0 ? 'today' : `${p.days} day${p.days === 1 ? '' : 's'} ago`} {part(p.pickup)}
+        </span>
+        <span>Passengers waiting</span>
+        <span>
+          {st.waitingTotal} {part(p.waiting)}
+        </span>
+        <span>Its top speed</span>
+        <span>
+          {p.speedKmh === null ? '—' : `${p.speedKmh} km/h`} {part(p.speed)}
+        </span>
+        <span>Its age</span>
+        <span>
+          {p.ageYears === null ? '—' : `${p.ageYears} years`} {part(p.age)}
+        </span>
+      </div>
+      <p className="muted small" style={{ margin: '6px 0 0' }}>
+        The rating moves a little each day towards {target}%. Frequent, fast, modern trains and short queues raise it; a
+        higher rating brings more passengers.
+      </p>
+    </details>
   );
 }
 

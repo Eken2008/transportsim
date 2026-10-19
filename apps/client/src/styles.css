@@ -896,3 +896,45 @@ table.ledger tr.total td {
   border-top: 1px solid var(--line-strong);
   font-weight: 600;
 }
+
+/* Station rating */
+details.rating {
+  margin-top: 10px;
+}
+details.rating summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+details.rating summary::-webkit-details-marker {
+  display: none;
+}
+details.rating summary::before {
+  content: '▸';
+  color: var(--muted);
+  width: 10px;
+}
+details.rating[open] summary::before {
+  content: '▾';
+}
+details.rating summary > span:nth-child(1) {
+  color: var(--muted);
+  width: 70px;
+}
+.rating-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.rating-bar span {
+  display: block;
+  height: 100%;
+  background: var(--ok);
+}
+details.rating .kv {
+  margin-top: 8px;
+}

@@ -299,6 +299,8 @@ try {
   await stationWin.getByRole('button', { name: 'Show catchment area' }).click();
   await a.waitForTimeout(800);
   check((await stationWin.innerText()).includes('residents'), 'station window shows catchment residents');
+  await stationWin.locator('details.rating summary').click();
+  check((await stationWin.innerText()).includes('Last train called'), 'station window explains its rating');
   await a.screenshot({ path: `${outDir}/04c-catchment.png` });
   await stationWin.getByRole('button', { name: 'Hide catchment area' }).click();
   // Rearrange a parked train's vehicles

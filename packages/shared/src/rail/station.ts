@@ -27,6 +27,11 @@ export interface Station {
   lastPickup?: number;
   /** Day the first train called here. */
   firstArrival?: number;
+  /** Top speed (km/h) and age (years) of the last train that called (rating parts). */
+  lastSpeed?: number;
+  lastVehicleAge?: number;
+  /** Fraction of the catchment's residents this station draws from (0..1), after competition. */
+  share?: number;
 }
 
 /** Catchment radius around rail station tiles. */

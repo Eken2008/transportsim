@@ -147,6 +147,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       waitingTotal: total,
       rating: num(s.rating, 175),
       lastPickup: typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
+      lastSpeed: typeof s.lastSpeed === 'number' ? s.lastSpeed : undefined,
+      lastVehicleAge: typeof s.lastVehicleAge === 'number' ? s.lastVehicleAge : undefined,
       // Saves from before first-arrival news: stations that had trains already count as served.
       firstArrival: typeof s.firstArrival === 'number' ? s.firstArrival : typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
     });

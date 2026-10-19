@@ -3,6 +3,7 @@ import type { GameState } from '../sim/state.ts';
 import { houseType } from '../town/houses.ts';
 import { TileType } from '../world/constants.ts';
 import { Random } from '../util/random.ts';
+import { RATING_STEP, ratingParts } from './rating.ts';
 import type { Train } from '../vehicles/train.ts';
 
 /** Money per passenger per tile of (Manhattan) distance, for a prompt journey. */
@@ -32,8 +33,10 @@ export interface IncomeEvent {
  * get paid by distance and journey time, and load passengers for their other stops.
  */
 export class PassengerSystem {
-  /** Station id → residents in its catchment (shared houses split between stations). */
+  /** Station id → residents in its catchment. */
   private catchmentPop = new Map<number, number>();
+  /** Station id → residents it draws passengers from (houses split between competing stations). */
+  private sharePop = new Map<number, number>();
   /** Station id → stations reachable by a direct train service. */
   private links = new Map<number, number[]>();
   private rng: Random;
@@ -48,7 +51,16 @@ export class PassengerSystem {
     return this.catchmentPop.get(stationId) ?? 0;
   }
 
-  /** Recompute catchments and service links (cheap enough to do daily). */
+  /** Residents the station draws passengers from, after competition with other stations. */
+  share(stationId: number): number {
+    return this.sharePop.get(stationId) ?? 0;
+  }
+
+  /**
+   * Recompute catchments, service links and shares (cheap enough to do daily). A house covered by
+   * several served stations splits its residents between them in proportion to their ratings;
+   * stations no train serves yet don't compete.
+   */
   refresh(): void {
     const map = this.state.map;
     const cover = new Map<number, number[]>();
@@ -69,7 +81,7 @@ export class PassengerSystem {
     }
     this.catchmentPop.clear();
     for (const [i, ids] of cover) {
-      const pop = houseType(map.layers.data[i]!).population / ids.length;
+      const pop = houseType(map.layers.data[i]!).population;
       for (const id of ids) this.catchmentPop.set(id, (this.catchmentPop.get(id) ?? 0) + pop);
     }
 
@@ -84,6 +96,28 @@ export class PassengerSystem {
     }
     this.links.clear();
     for (const [a, set] of links) this.links.set(a, [...set].filter((b) => (this.catchmentPop.get(b) ?? 0) > 0));
+
+    this.sharePop.clear();
+    for (const [i, ids] of cover) {
+      const served = ids.filter((id) => (this.links.get(id)?.length ?? 0) > 0);
+      const total = served.reduce((s, id) => s + Math.max(1, this.state.stations.get(id)!.rating), 0);
+      if (total === 0) continue;
+      const pop = houseType(map.layers.data[i]!).population;
+      for (const id of served) {
+        const w = Math.max(1, this.state.stations.get(id)!.rating) / total;
+        this.sharePop.set(id, (this.sharePop.get(id) ?? 0) + pop * w);
+      }
+    }
+    for (const st of this.state.stations.values()) {
+      // Only served stations with residents compete; anything else counts as a full share.
+      const pop = this.catchmentPop.get(st.id) ?? 0;
+      const served = (this.links.get(st.id)?.length ?? 0) > 0;
+      const share = pop > 0 && served ? Math.round(((this.sharePop.get(st.id) ?? 0) / pop) * 100) / 100 : 1;
+      if (st.share !== share) {
+        st.share = share;
+        this.state.markStationDirty(st.id);
+      }
+    }
   }
 
   /** Daily: generate passengers, let excess give up, update ratings. */
@@ -91,7 +125,7 @@ export class PassengerSystem {
     this.refresh();
     for (const st of this.state.stations.values()) {
       this.updateRating(st);
-      const pop = this.catchmentPop.get(st.id) ?? 0;
+      const pop = this.sharePop.get(st.id) ?? 0;
       const dests = this.links.get(st.id) ?? [];
       let changed = false;
       // Passengers for destinations no longer served drift away.
@@ -129,14 +163,9 @@ export class PassengerSystem {
   }
 
   private updateRating(st: Station): void {
-    const days = this.state.date - (st.lastPickup ?? st.builtDays);
-    let target = 170;
-    if (days <= 7) target += 45;
-    target -= Math.min(110, Math.max(0, days - 7) * 3);
-    target -= Math.min(60, st.waitingTotal / 25);
-    target = Math.max(20, Math.min(255, target));
+    const { target } = ratingParts(st, this.state.date);
     const before = st.rating;
-    st.rating += Math.sign(target - st.rating) * Math.min(6, Math.abs(target - st.rating));
+    st.rating += Math.sign(target - st.rating) * Math.min(RATING_STEP, Math.abs(target - st.rating));
     if (Math.round(before) !== Math.round(st.rating)) this.state.markStationDirty(st.id);
   }
 
@@ -144,6 +173,11 @@ export class PassengerSystem {
   arrive(t: Train, stationId: number): void {
     const st = this.state.stations.get(stationId);
     if (!st) return;
+    // The last train to call sets the speed and age parts of the rating.
+    st.lastPickup = this.state.date;
+    st.lastSpeed = this.state.rail.statsOf(t).maxSpeed;
+    st.lastVehicleAge = Math.floor(((this.state.date - t.builtDays) / 365) * 10) / 10;
+    this.state.markStationDirty(st.id);
     if (st.firstArrival === undefined) {
       st.firstArrival = this.state.date;
       const owner = this.state.companies.get(t.owner)?.name ?? 'A company';
