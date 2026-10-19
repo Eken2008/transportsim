@@ -144,6 +144,14 @@ export class PassengerSystem {
   arrive(t: Train, stationId: number): void {
     const st = this.state.stations.get(stationId);
     if (!st) return;
+    if (st.firstArrival === undefined) {
+      st.firstArrival = this.state.date;
+      const owner = this.state.companies.get(t.owner)?.name ?? 'A company';
+      this.state.addNews('station', `Citizens celebrate! The first train arrives at ${st.name} (${owner})`, {
+        company: t.owner,
+        tile: st.y * this.state.map.width + st.x,
+      });
+    }
     let income = 0;
     const keep = [];
     for (const p of t.cargo) {

@@ -4,6 +4,7 @@ import {
   executeCommand,
   roleAllows,
   type Command,
+  type ChatChannel,
   type CommandResult,
   type GameSettings,
   type GameSpeed,
@@ -146,6 +147,16 @@ class AppClient {
       case 'chat':
         useApp.setState((s) => ({ chat: [...s.chat.slice(-199), m] }));
         return;
+      case 'news':
+        useApp.setState((s) => {
+          const known = new Set((m.full ? [] : s.news).map((n) => n.id));
+          const fresh = m.items.filter((n) => !known.has(n.id));
+          return {
+            news: [...(m.full ? [] : s.news), ...fresh].slice(-100),
+            ticker: !m.full && fresh.length > 0 ? fresh[fresh.length - 1]! : s.ticker,
+          };
+        });
+        return;
       case 'pong':
         return;
     }
@@ -187,7 +198,7 @@ class AppClient {
     this.setWorld(null);
     for (const p of this.pending.values()) p({ ok: false, error: 'Left game' });
     this.pending.clear();
-    useApp.setState({ room: null, global: null, closedReason: reason, tool: null, hover: null, autosavePrompt: false, windows: [], ordersFor: null });
+    useApp.setState({ room: null, global: null, news: [], ticker: null, closedReason: reason, tool: null, hover: null, autosavePrompt: false, windows: [], ordersFor: null });
     this.conn.send({ t: 'listRooms' });
   }
 
@@ -282,8 +293,8 @@ class AppClient {
     this.conn.send({ t: 'requestSave', export: true });
   }
 
-  chat(text: string): void {
-    this.conn.send({ t: 'chat', text });
+  chat(text: string, channel: ChatChannel = 'all'): void {
+    this.conn.send({ t: 'chat', text, channel });
   }
 
   /** Local validation against the mirrored state (for cursor previews). */

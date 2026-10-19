@@ -100,6 +100,23 @@ function checkJoinRole(state: GameState, ctx: CommandContext, role: unknown): st
   return null;
 }
 
+function join(state: GameState, c: Company, name: string, role: CompanyRole, news = `${name} joins ${c.name}`): void {
+  const before = state.companyOfName(name);
+  state.addMember(c, name, role);
+  if (before && before !== c) newsIfEmpty(state, before);
+  state.addNews('company', news, { company: c.id });
+}
+
+function leave(state: GameState, c: Company, name: string): void {
+  state.removeMember(c, name);
+  state.addNews('company', `${name} leaves ${c.name}`, { company: c.id });
+  newsIfEmpty(state, c);
+}
+
+function newsIfEmpty(state: GameState, c: Company): void {
+  if (c.members.length === 0) state.addNews('company', `${c.name} has no members left; anyone can take it over`, { company: c.id });
+}
+
 export const foundCompanyHandler: CommandHandler<FoundCompanyCommand> = {
   needsCompany: false,
   plan(state, ctx, cmd) {
@@ -111,7 +128,10 @@ export const foundCompanyHandler: CommandHandler<FoundCompanyCommand> = {
     const colorErr = checkColor(state, cmd.color);
     if (colorErr) return fail(colorErr);
     if (state.companies.size >= MAX_COMPANY_SLOTS) return fail('No company slots left');
-    return ok(() => state.foundCompany(p, n.name, cmd.color));
+    return ok(() => {
+      const c = state.foundCompany(p, n.name, cmd.color);
+      if (c) state.addNews('company', `${p.name} founds ${c.name}`, { company: c.id });
+    });
   },
 };
 
@@ -122,9 +142,9 @@ export const joinCompanyHandler: CommandHandler<JoinCompanyCommand> = {
     const c = companyArg(state, cmd.company);
     if (!p || !c) return fail('No such company');
     if (memberOf(c, p.name)) return fail('You are already a member');
-    if (c.members.length === 0) return ok(() => state.addMember(c, p.name, 'owner'));
+    if (c.members.length === 0) return ok(() => join(state, c, p.name, 'owner', `${p.name} takes over ${c.name}`));
     const invite = c.invites.find((m) => m.name === p.name);
-    if (invite) return ok(() => state.addMember(c, p.name, invite.role));
+    if (invite) return ok(() => join(state, c, p.name, invite.role));
     if (c.members.length >= MAX_MEMBERS) return fail('That company is full');
     if (c.requests.includes(p.name)) return fail('You have already asked to join');
     if (c.requests.length >= MAX_PENDING) return fail('That company has too many open requests');
@@ -152,7 +172,7 @@ export const leaveCompanyHandler: CommandHandler<LeaveCompanyCommand> = {
   plan(state, ctx) {
     const p = playerOf(state, ctx)!;
     const c = state.companies.get(ctx.companyId!)!;
-    return ok(() => state.removeMember(c, p.name));
+    return ok(() => leave(state, c, p.name));
   },
 };
 
@@ -167,7 +187,7 @@ export const answerJoinHandler: CommandHandler<AnswerJoinCommand> = {
     const err = checkJoinRole(state, ctx, role);
     if (err) return fail(err);
     if (c.members.length >= MAX_MEMBERS) return fail('The company is full');
-    return ok(() => state.addMember(c, cmd.name, role));
+    return ok(() => join(state, c, cmd.name, role));
   },
 };
 
@@ -187,7 +207,7 @@ export const invitePlayerHandler: CommandHandler<InvitePlayerCommand> = {
     if (err) return fail(err);
     if (c.members.length >= MAX_MEMBERS) return fail('The company is full');
     // They asked already: inviting accepts the request.
-    if (c.requests.includes(cmd.name)) return ok(() => state.addMember(c, cmd.name, role));
+    if (c.requests.includes(cmd.name)) return ok(() => join(state, c, cmd.name, role));
     if (c.invites.some((m) => m.name === cmd.name)) return fail('Already invited');
     if (c.invites.length >= MAX_PENDING) return fail('Too many open invitations');
     return ok(() => c.invites.push({ name: cmd.name, role }));
@@ -206,7 +226,10 @@ export const setMemberRoleHandler: CommandHandler<SetMemberRoleCommand> = {
     if (m === me) return fail('Give another member the owner role to step down');
     if (m.role === cmd.role) return fail('They already have that role');
     return ok(() => {
-      if (cmd.role === 'owner') me.role = 'manager';
+      if (cmd.role === 'owner') {
+        me.role = 'manager';
+        state.addNews('company', `${m.name} is the new owner of ${c.name}`, { company: c.id });
+      }
       m.role = cmd.role;
     });
   },
@@ -220,7 +243,7 @@ export const removeMemberHandler: CommandHandler<RemoveMemberCommand> = {
     const m = memberOf(c, cmd.name);
     if (!m) return fail('Not a member');
     if (m.role === 'owner') return fail('Leave the company instead');
-    return ok(() => state.removeMember(c, cmd.name));
+    return ok(() => leave(state, c, cmd.name));
   },
 };
 
@@ -240,6 +263,7 @@ export const companySettingsHandler: CommandHandler<CompanySettingsCommand> = {
       if (err) return fail(err);
     }
     return ok(() => {
+      if (name !== c.name) state.addNews('company', `${c.name} is renamed ${name}`, { company: c.id });
       c.name = name;
       if (cmd.color !== undefined) c.color = cmd.color;
     });

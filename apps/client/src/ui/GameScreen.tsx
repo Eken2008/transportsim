@@ -11,7 +11,8 @@ import { useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
 import { installDebugHook } from '../render/debugHook.ts';
 import { availableBridges } from '../tools/structureTools.ts';
-import { WindowLayer } from './windows.tsx';
+import { WindowLayer, useMyRole } from './windows.tsx';
+import { NewsTicker } from './NewsWindow.tsx';
 import { GameRenderer } from '../render/gameRenderer.ts';
 import { openWindow, useApp, type ToolId } from '../store.ts';
 import { formatMoney } from './format.ts';
@@ -65,6 +66,7 @@ export function GameScreen() {
       <canvas ref={canvasRef} />
       <TopBar onHelp={() => setShowHelp((v) => !v)} />
       <HostBanner />
+      <NewsTicker />
       {showHelp && <Help onClose={() => setShowHelp(false)} />}
       <WindowLayer />
       <StationOptions />
@@ -140,8 +142,8 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         </button>
         {room.isHost && (
           <>
-            <button title="Save to this browser" onClick={() => client.requestSave()}>
-              💾 Save
+            <button title="Save to this browser" aria-label="💾 Save" onClick={() => client.requestSave()}>
+              💾<span className="lbl"> Save</span>
             </button>
             <label className="row" title="Autosave to this browser every in-game month">
               <input type="checkbox" checked={autosave} onChange={(e) => client.setAutosave(e.target.checked)} />
@@ -149,11 +151,14 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
             </label>
           </>
         )}
-        <button title="Download this game as a .tsave file" onClick={() => client.exportGame()}>
-          ⤓ Export
+        <button title="Download this game as a .tsave file" aria-label="⤓ Export" onClick={() => client.exportGame()}>
+          ⤓<span className="lbl"> Export</span>
         </button>
-        <button title="Your trains (T)" onClick={() => openWindow({ kind: 'trains', id: 0 })}>
-          🚆 Trains
+        <button title="Your trains (T)" aria-label="🚆 Trains" onClick={() => openWindow({ kind: 'trains', id: 0 })}>
+          🚆<span className="lbl"> Trains</span>
+        </button>
+        <button title="News" aria-label="📰 News" onClick={() => openWindow({ kind: 'news', id: 0 })}>
+          📰<span className="lbl"> News</span>
         </button>
         <button className="ghost" title="Controls (?)" onClick={onHelp}>
           ?
@@ -290,6 +295,9 @@ function SignalOptions() {
 
 function Chat() {
   const chat = useApp((s) => s.chat);
+  const inCompany = useMyRole().companyId !== null;
+  const [toCompany, setToCompany] = useState(false);
+  const channel = inCompany && toCompany ? 'company' : 'all';
   const [text, setText] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
@@ -306,7 +314,8 @@ function Chat() {
               {c.text}
             </div>
           ) : (
-            <div key={i}>
+            <div key={i} className={c.channel === 'company' ? 'company-line' : undefined}>
+              {c.channel === 'company' && <span className="chan">Company</span>}
               <b>{c.from}:</b> {c.text}
             </div>
           ),
@@ -315,14 +324,24 @@ function Chat() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (text.trim()) client.chat(text);
+          if (text.trim()) client.chat(text, channel);
           setText('');
         }}
       >
+        {inCompany && (
+          <button
+            type="button"
+            className={`ghost chan-btn ${channel === 'company' ? 'active' : ''}`}
+            title={channel === 'company' ? 'Talking to your company only (click for everyone)' : 'Talking to everyone (click for your company only)'}
+            onClick={() => setToCompany((v) => !v)}
+          >
+            {channel === 'company' ? 'Company' : 'All'}
+          </button>
+        )}
         <input
           value={text}
           maxLength={300}
-          placeholder="Say something… (Enter)"
+          placeholder={channel === 'company' ? 'To your company… (Enter)' : 'Say something… (Enter)'}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Escape' && (e.target as HTMLInputElement).blur()}
         />

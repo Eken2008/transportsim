@@ -378,7 +378,7 @@ input[type='range'] {
 }
 .banner {
   position: absolute;
-  top: 64px;
+  top: 112px;
   left: 50%;
   transform: translateX(-50%);
   padding: 10px 16px;
@@ -781,4 +781,81 @@ ol.consist .grip {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* News */
+.news-ticker {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(640px, calc(100% - 20px));
+  padding: 8px 14px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  border-color: rgba(88, 166, 255, 0.5);
+  cursor: pointer;
+  animation: ticker-in 0.25s ease-out;
+}
+@keyframes ticker-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+.news-list {
+  max-height: 420px;
+  overflow: auto;
+}
+.news-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.company-swatch.tiny {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  vertical-align: baseline;
+}
+
+/* Company chat */
+.chat-log .company-line {
+  color: #9fd3ff;
+}
+.chat-log .chan {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 4px;
+  margin-right: 5px;
+  border-radius: 3px;
+  background: rgba(88, 166, 255, 0.25);
+}
+.chat form .chan-btn {
+  font-size: 12px;
+  padding: 0 8px;
+  border-radius: 0;
+}
+.chat form .chan-btn.active {
+  color: #9fd3ff;
+}
+
+/* Top bar: keep labels on one line; icons only when narrow */
+.hud-box button,
+.hud-box b {
+  white-space: nowrap;
+}
+.company-btn b {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 1280px) {
+  .hud-box .lbl {
+    display: none;
+  }
 }

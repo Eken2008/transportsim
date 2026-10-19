@@ -2,6 +2,7 @@ import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, t
 import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
 import { PassengerSystem } from '../economy/passengers.ts';
+import { NEWS_HISTORY, type NewsItem, type NewsKind } from '../news/news.ts';
 import { RailSystem } from '../vehicles/railSystem.ts';
 import type { Train } from '../vehicles/train.ts';
 import { GameMap } from '../world/map.ts';
@@ -50,6 +51,11 @@ export class GameState {
   readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
   readonly passengers: PassengerSystem;
+  /** Recent news, oldest first. */
+  readonly news: NewsItem[] = [];
+  /** News since the last sync flush (server broadcasts these). */
+  readonly pendingNews: NewsItem[] = [];
+  nextNewsId = 1;
   private nextPlayerId = 1;
   /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
   trackVersion = 0;
@@ -160,6 +166,14 @@ export class GameState {
     this.stations.delete(id);
     this.dirtyStations.delete(id);
     this.removedStations.add(id);
+  }
+
+  addNews(kind: NewsKind, text: string, extra: { company?: number; tile?: number } = {}): NewsItem {
+    const item: NewsItem = { id: this.nextNewsId++, date: this.date, kind, text, ...extra };
+    this.news.push(item);
+    if (this.news.length > NEWS_HISTORY) this.news.splice(0, this.news.length - NEWS_HISTORY);
+    this.pendingNews.push(item);
+    return item;
   }
 
   // ---- players & companies -------------------------------------------------

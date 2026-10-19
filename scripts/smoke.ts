@@ -195,6 +195,13 @@ try {
   await a.waitForTimeout(800);
   await a.waitForTimeout(1500);
   await a.screenshot({ path: `${outDir}/03c-train.png` });
+  await a.getByRole('button', { name: '📰 News' }).click();
+  const newsWin = a.locator('.window', { hasText: 'News' }).last();
+  await a.waitForTimeout(300);
+  const newsText = await newsWin.innerText();
+  check(newsText.includes('Alice founds Alice Rail'), 'news window lists the company founding');
+  check(newsText.includes('first train arrives'), 'news reports the first train at a station');
+  await newsWin.locator('button[aria-label="Close"]').click();
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 1, y: s.y - 4, yaw: 0.7, pitch: 0.75, distance: 18 }), { x: sx, y: sy });
   await a.waitForTimeout(2500);
   await a.screenshot({ path: `${outDir}/03b-track.png` });
@@ -332,6 +339,12 @@ try {
   await b.keyboard.press('Enter');
   await a.waitForTimeout(500);
   check((await a.locator('.chat-log').innerText()).includes('Hello from Bob'), 'chat reaches host');
+  await b.getByRole('button', { name: 'All', exact: true }).click();
+  await b.getByPlaceholder(/To your company/).fill('Company only');
+  await b.keyboard.press('Enter');
+  await a.waitForTimeout(500);
+  check((await a.locator('.chat-log .company-line').innerText()).includes('Company only'), 'company chat reaches company members');
+  await b.screenshot({ path: `${outDir}/04f-chat.png` });
 
   // Manual save lands in host IndexedDB
   const savedMoney = await a.locator('.money').innerText();

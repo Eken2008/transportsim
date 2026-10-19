@@ -47,6 +47,7 @@ const MAX_CHUNKS_PER_FLUSH = 12;
 const MAX_COMMANDS_PER_SECOND = 40;
 const MAX_CATCHUP_STEPS = 60;
 const POS_INTERVAL_MS = 100;
+const NEWS_ON_JOIN = 50;
 
 export class Room {
   readonly id: string;
@@ -155,6 +156,7 @@ export class Room {
     this.send(session, { t: 'towns', towns: [...this.state.towns.values()], full: true });
     this.send(session, { t: 'stations', stations: [...this.state.stations.values()], removed: [], full: true });
     this.send(session, { t: 'trains', trains: [...this.state.trains.values()].map(trainInfo), removed: [], full: true });
+    this.send(session, { t: 'news', items: this.state.news.slice(-NEWS_ON_JOIN), full: true });
 
     if (isHost && this.hostCloseTimer) {
       clearTimeout(this.hostCloseTimer);
@@ -276,7 +278,15 @@ export class Room {
         return;
       case 'chat': {
         const text = String(msg.text ?? '').trim().slice(0, 300);
-        if (text) this.broadcast({ t: 'chat', from: session.name, text, at: Date.now() });
+        if (!text) return;
+        if (msg.channel === 'company') {
+          const company = session.player?.companyId;
+          if (company == null) return;
+          const line: ServerMessage = { t: 'chat', from: session.name, text, at: Date.now(), channel: 'company' };
+          for (const s of this.sessions) if (s.player?.companyId === company) this.send(s, line);
+          return;
+        }
+        this.broadcast({ t: 'chat', from: session.name, text, at: Date.now() });
         return;
       }
       default:
@@ -342,6 +352,7 @@ export class Room {
       st.dirtyTrains.clear();
       st.removedTrains.clear();
     }
+    if (st.pendingNews.length > 0) this.broadcast({ t: 'news', items: st.pendingNews.splice(0), full: false });
     const events = this.state.passengers.events;
     if (events.length > 0) {
       for (const ev of events) {

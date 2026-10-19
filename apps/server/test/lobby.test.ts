@@ -199,6 +199,32 @@ describe('lobby & rooms', () => {
     lobby.shutdown();
   });
 
+  test('news reaches everyone; company chat only reaches members', () => {
+    const lobby = new Lobby(CONFIG);
+    const { host, room } = hostGame(lobby);
+    const ally = client(lobby, 'Ally');
+    const rival = client(lobby, 'Rival');
+    ally.send({ t: 'joinRoom', roomId: room.id });
+    rival.send({ t: 'joinRoom', roomId: room.id });
+    expect(rival.conn.last('news')).toMatchObject({ full: true, items: [] });
+    host.send({ t: 'command', seq: 1, cmd: { type: 'foundCompany', name: 'Host Rail', color: 0 } });
+    room.flush();
+    expect(rival.conn.last('news')).toMatchObject({ full: false, items: [{ text: 'Host founds Host Rail' }] });
+    host.send({ t: 'command', seq: 2, cmd: { type: 'invitePlayer', name: 'Ally', role: 'operator' } });
+    ally.send({ t: 'command', seq: 1, cmd: { type: 'joinCompany', company: 0 } });
+    expect(ally.conn.last('commandResult')).toMatchObject({ ok: true });
+
+    for (const c of [host, ally, rival]) c.conn.inbox = [];
+    ally.send({ t: 'chat', text: 'secret plan', channel: 'company' });
+    expect(host.conn.last('chat')).toMatchObject({ from: 'Ally', text: 'secret plan', channel: 'company' });
+    expect(ally.conn.last('chat')?.text).toBe('secret plan');
+    expect(rival.conn.last('chat')).toBeUndefined();
+    // Without a company, company chat goes nowhere
+    rival.send({ t: 'chat', text: 'hello?', channel: 'company' });
+    expect(host.conn.last('chat')?.text).toBe('secret plan');
+    lobby.shutdown();
+  });
+
   test('rejects garbage and wrong protocol', () => {
     const lobby = new Lobby(CONFIG);
     const conn = new FakeConn();

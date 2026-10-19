@@ -25,6 +25,8 @@ export interface Station {
   rating: number;
   /** Day a train last picked up passengers here. */
   lastPickup?: number;
+  /** Day the first train called here. */
+  firstArrival?: number;
 }
 
 /** Catchment radius around rail station tiles. */

@@ -6,13 +6,14 @@ import type { Train } from '../vehicles/train.ts';
 import { TileType } from '../world/constants.ts';
 import { recountTowns, type Town } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
+import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
 import { GameState } from '../sim/state.ts';
 import { TICKS_PER_DAY, daysFromYmd } from '../sim/date.ts';
 import { GameMap, LAYER_NAMES, TILE_LAYERS, type LayerArray, type LayerName } from '../world/map.ts';
 
 export const SAVE_FORMAT = 'transportsim-save';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface Snapshot {
   format: typeof SAVE_FORMAT;
@@ -30,6 +31,8 @@ export interface Snapshot {
   nextStationId?: number;
   trains?: Train[];
   nextTrainId?: number;
+  news?: NewsItem[];
+  nextNewsId?: number;
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -51,6 +54,8 @@ export function takeSnapshot(state: GameState): Snapshot {
     nextStationId: state.nextStationId,
     trains: [...state.trains.values()],
     nextTrainId: state.nextTrainId,
+    news: state.news,
+    nextNewsId: state.nextNewsId,
   };
 }
 
@@ -137,6 +142,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       waitingTotal: total,
       rating: num(s.rating, 175),
       lastPickup: typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
+      // Saves from before first-arrival news: stations that had trains already count as served.
+      firstArrival: typeof s.firstArrival === 'number' ? s.firstArrival : typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
     });
   }
   if (!snap.layers?.links) linkAllByGeometry(map); // saves from before explicit links
@@ -150,6 +157,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   }
   state.nextTrainId = Math.max(num(snap.nextTrainId, 0), ...[...state.trains.keys()].map((k) => k + 1));
   state.rail.rebuildOccupancy();
+  state.news.push(...sanitizeNews(snap.news));
+  state.nextNewsId = Math.max(num(snap.nextNewsId, 1), ...state.news.map((n) => n.id + 1));
   state.nextStationId = Math.max(num(snap.nextStationId, 0), ...[...state.stations.keys()].map((k) => k + 1));
   return state;
 }

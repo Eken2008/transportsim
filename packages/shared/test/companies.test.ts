@@ -39,6 +39,7 @@ describe('companies', () => {
     const c = state.companies.get(players.Ann!.companyId!)!;
     expect(c).toMatchObject({ name: 'Ann Rail', color: 3, members: [{ name: 'Ann', role: 'owner' }] });
     expect(run('Ann', raise).ok).toBe(true);
+    expect(state.news.map((n) => n.text)).toEqual(['Ann founds Ann Rail']);
     // Names and colours are unique; one company per player
     expect(run('Bob', { type: 'foundCompany', name: 'ann rail', color: 4 }).ok).toBe(false);
     expect(run('Bob', { type: 'foundCompany', name: 'Bob Lines', color: 3 }).ok).toBe(false);
@@ -112,9 +113,12 @@ describe('companies', () => {
     must('Cid', { type: 'leaveCompany' });
     expect(c.members).toEqual([]);
 
+    expect(state.news.at(-1)?.text).toBe('Ann Rail has no members left; anyone can take it over');
+
     // Anyone can adopt it
     must('Dee', { type: 'joinCompany', company: c.id });
     expect(state.roleOf(players.Dee!.id, c.id)).toBe('owner');
+    expect(state.news.at(-1)).toMatchObject({ kind: 'company', company: c.id, text: 'Dee takes over Ann Rail' });
   });
 
   test('joining another company leaves the current one', () => {
@@ -140,6 +144,8 @@ describe('companies', () => {
     const limits = { maxPlayers: 15, maxMapSize: 256 };
     const restored = restoreSnapshot(encodeSnapshot(state), limits);
     expect(restored.addPlayer('Robert', false).companyId).toBe(0);
+    expect(restored.news.map((n) => n.text)).toEqual(state.news.map((n) => n.text));
+    expect(restored.nextNewsId).toBe(state.nextNewsId);
     expect(restored.companies.get(0)!.members).toEqual([
       { name: 'Ann', role: 'owner' },
       { name: 'Robert', role: 'manager' },

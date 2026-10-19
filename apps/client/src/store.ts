@@ -1,4 +1,4 @@
-import type { GameSettings, GlobalState, RoomSummary, ServerLimits } from '@transportsim/shared';
+import type { ChatChannel, GameSettings, GlobalState, NewsItem, RoomSummary, ServerLimits } from '@transportsim/shared';
 import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
@@ -22,6 +22,7 @@ export interface ChatLine {
   text: string;
   at: number;
   system?: boolean;
+  channel?: ChatChannel;
 }
 
 export interface RoomInfo {
@@ -53,6 +54,10 @@ export interface AppState {
   autosave: boolean;
   autosavePrompt: boolean;
   chat: ChatLine[];
+  /** News history, oldest first. */
+  news: NewsItem[];
+  /** The latest news item, shown briefly in the ticker. */
+  ticker: NewsItem | null;
   toasts: Toast[];
   tool: ToolId | null;
   hover: HoverInfo | null;
@@ -80,7 +85,8 @@ export type GameWindow =
   | { kind: 'depot'; id: number }
   | { kind: 'station'; id: number }
   | { kind: 'trains'; id: 0 }
-  | { kind: 'company'; id: 0 };
+  | { kind: 'company'; id: 0 }
+  | { kind: 'news'; id: 0 };
 
 export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
 
@@ -104,6 +110,8 @@ export const useApp = create<AppState>(() => ({
   autosave: false,
   autosavePrompt: false,
   chat: [],
+  news: [],
+  ticker: null,
   toasts: [],
   tool: null,
   hover: null,

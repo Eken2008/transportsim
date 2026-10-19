@@ -2,12 +2,13 @@ import type { Command } from '../commands/index.ts';
 import type { Company } from '../company/company.ts';
 import type { GameSettings, ServerLimits } from '../sim/settings.ts';
 import type { Player } from '../sim/state.ts';
+import type { NewsItem } from '../news/news.ts';
 import type { Town } from '../town/towns.ts';
 import type { Station } from '../rail/station.ts';
 import type { TrainInfo, TrainMotion } from '../vehicles/train.ts';
 import type { ChunkData } from '../world/chunks.ts';
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /** Game speed multiplier; 0 = paused. */
 export type GameSpeed = 0 | 1 | 2 | 4 | 8;
@@ -33,6 +34,8 @@ export interface GlobalState {
   players: Player[];
 }
 
+export type ChatChannel = 'all' | 'company';
+
 // ---- client → server --------------------------------------------------------
 
 export type ClientMessage =
@@ -49,7 +52,8 @@ export type ClientMessage =
   | { t: 'autosave'; enabled: boolean }
   /** Ask for a snapshot: kept in the host's browser, or (`export`) downloaded as a file by anyone. */
   | { t: 'requestSave'; export?: boolean }
-  | { t: 'chat'; text: string }
+  /** `company` sends to members of the sender's company only. */
+  | { t: 'chat'; text: string; channel?: ChatChannel }
   | { t: 'ping'; at: number };
 
 // ---- server → client --------------------------------------------------------
@@ -89,5 +93,7 @@ export type ServerMessage =
   | { t: 'hostStatus'; connected: boolean; closesAt?: number }
   | { t: 'autosaveStatus'; enabled: boolean }
   | { t: 'saveData'; kind: 'auto' | 'manual'; name: string; date: number; snapshot: Uint8Array; export?: boolean }
-  | { t: 'chat'; from: string; text: string; at: number; system?: boolean }
+  | { t: 'chat'; from: string; text: string; at: number; system?: boolean; channel?: ChatChannel }
+  /** News items; `full` replaces the client's history. */
+  | { t: 'news'; items: NewsItem[]; full: boolean }
   | { t: 'pong'; at: number };

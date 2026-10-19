@@ -85,6 +85,10 @@ describe('passengers', () => {
     expect(a.lastPickup).toBeGreaterThan(a.builtDays);
     // Every passenger aboard is headed for a stop in the train's orders.
     for (const p of train.cargo) expect([a.id, b.id]).toContain(p.dest);
+    // The first train at each station makes the news, once.
+    const firsts = state.news.filter((n) => n.kind === 'station');
+    expect(firsts.map((n) => n.text.includes(a.name) || n.text.includes(b.name))).toEqual([true, true]);
+    expect(a.firstArrival).toBeDefined();
   });
 
   test('full load waits until the train is full', () => {
