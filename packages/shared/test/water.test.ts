@@ -22,7 +22,7 @@ const TOWNHOUSE = HOUSE_TYPES.findIndex((h) => h.model === 'townhouse');
  * shore slope), rising to height 2 at x = 41 (x = 40 is a slope for a lock). Houses around
  * (24, 30) and (60, 30).
  */
-function world(startYear = 1950, accidents: 'off' | 'low' | 'realistic' = 'off') {
+function world(startYear = 1950, accidents: 'off' | 'low' | 'realistic' = 'off', seed = DEFAULT_SETTINGS.seed) {
   const map = new GameMap(128, 128);
   const cw = map.width + 1;
   for (let y = 0; y <= map.height; y++) {
@@ -35,7 +35,7 @@ function world(startYear = 1950, accidents: 'off' | 'low' | 'realistic' = 'off')
       else map.setClear(i, 0, 0);
     }
   }
-  const state = new GameState({ ...DEFAULT_SETTINGS, mapWidth: 128, mapHeight: 128, startYear, breakdowns: false, accidents }, map);
+  const state = new GameState({ ...DEFAULT_SETTINGS, mapWidth: 128, mapHeight: 128, startYear, breakdowns: false, accidents, seed }, map);
   for (const cx of [24, 60]) {
     for (let x = cx - 3; x <= cx + 3; x++) {
       for (const y of [32, 33]) {
@@ -133,8 +133,8 @@ describe('waterways', () => {
 
 describe('ships', () => {
   /** Docks at both towns on the canal, a depot by the sea end. */
-  function harbour(startYear = 1950, accidents: 'off' | 'low' | 'realistic' = 'off') {
-    const w = world(startYear, accidents);
+  function harbour(startYear = 1950, accidents: 'off' | 'low' | 'realistic' = 'off', seed?: number) {
+    const w = world(startYear, accidents, seed);
     waterway(w);
     const { state, run, map } = w;
     run({ type: 'buildDock', x: 24, y: 31 });
@@ -246,5 +246,26 @@ describe('ships', () => {
     expect(restored.shipDepots.size).toBe(1);
     for (let i = 0; i < TICKS_PER_DAY * 120; i++) restored.step();
     expect(r.profitThisYear + r.profitLastYear).toBeGreaterThan(0);
+  });
+
+  test('with accidents on, a ship that breaks down may founder and its wreck closes the water', () => {
+    let sunk = 0;
+    for (let seed = 1; seed < 12 && sunk === 0; seed++) {
+      const { state, run, days, a, b, buy } = harbour(1950, 'realistic', seed);
+      state.settings.breakdowns = true;
+      const ships = [buy(), buy(), buy()];
+      for (const s of ships) {
+        s.reliability = 0.05;
+        run({ type: 'setOrders', id: s.id, orders: [{ kind: 'station', station: a.id }, { kind: 'station', station: b.id }] });
+        run({ type: 'trainAction', id: s.id, action: 'start' });
+      }
+      days(250, () => {
+        if (sunk || ships.every((s) => state.trains.has(s.id))) return;
+        sunk++;
+        expect(state.news.some((n) => n.text.startsWith('Shipwreck!'))).toBe(true);
+        expect([...state.ships.wrecks.values()].some((until) => until > state.tick)).toBe(true);
+      });
+    }
+    expect(sunk).toBe(1);
   });
 });

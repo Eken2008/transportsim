@@ -62,6 +62,15 @@ export class IncidentSystem {
       }
       return;
     }
+    if (t.mode === 'water') {
+      // A ship that breaks down at sea may founder; its wreck closes the tile for a while.
+      if (rules && t.ship && this.rng.chance(rules === ACCIDENT_RULES.realistic ? 0.06 : 0.015)) {
+        const tile = this.tileOf(t);
+        this.state.ships.wrecks.set(tile, this.state.tick + rules.cleanupDays * TICKS_PER_DAY);
+        this.wreck([t], tile, `${t.name} founders after a breakdown${this.placeName(tile)}`, false);
+      }
+      return;
+    }
     if (t.mode === 'road') return;
     if (!rules || t.speed < 30 || !this.rng.chance(rules.brakeFailChance)) return;
     t.brakeFail = Math.round(TICKS_PER_DAY * 0.8);
@@ -98,8 +107,9 @@ export class IncidentSystem {
 
   private tileOf(t: Train): number {
     const w = this.state.map.width;
-    const x = Math.max(0, Math.min(w - 1, Math.floor(t.air?.x ?? 0)));
-    const y = Math.max(0, Math.min(this.state.map.height - 1, Math.floor(t.air?.y ?? 0)));
+    const at = t.air ?? t.ship;
+    const x = Math.max(0, Math.min(w - 1, Math.floor(at?.x ?? 0)));
+    const y = Math.max(0, Math.min(this.state.map.height - 1, Math.floor(at?.y ?? 0)));
     return y * w + x;
   }
 
@@ -133,7 +143,7 @@ export class IncidentSystem {
     }
     const people = aboard > 0 ? `; ${aboard} passengers were aboard` : '';
     const owners = [...byOwner.keys()].map((o) => state.companies.get(o)?.name).filter(Boolean);
-    const head = trains[0]!.mode === 'air' ? 'Air crash!' : 'Rail accident!';
+    const head = trains[0]!.mode === 'air' ? 'Air crash!' : trains[0]!.mode === 'water' ? 'Shipwreck!' : 'Rail accident!';
     state.addNews('accident', `${head} ${what}${people}. ${owners.join(' and ')} must pay compensation`, {
       company: trains[0]!.owner,
       tile,
