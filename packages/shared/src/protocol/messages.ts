@@ -41,6 +41,8 @@ export interface GlobalState {
   waypoints: Waypoint[];
   /** Tiles blocked by wreckage after an accident. */
   wrecks: number[];
+  /** Price levels (inflation). */
+  inflation: { costs: number; payments: number };
 }
 
 export type ChatChannel = 'all' | 'company';

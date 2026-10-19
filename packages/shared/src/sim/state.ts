@@ -2,6 +2,7 @@ import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, t
 import type { Station } from '../rail/station.ts';
 import { emptyTownStats, generateTowns, type Town } from '../town/towns.ts';
 import { growTown } from '../town/growth.ts';
+import { industryMonthly } from '../economy/industryChanges.ts';
 import { Random } from '../util/random.ts';
 import { CargoSystem } from '../economy/cargoSystem.ts';
 import { generateIndustries, type Industry } from '../economy/industries.ts';
@@ -11,6 +12,7 @@ import { COSTS } from '../economy/costs.ts';
 import {
   BANKRUPT_QUARTERS,
   LEDGER_QUARTERS,
+  LOAN_STEP,
   emptyInfrastructure,
   emptyLedger,
   quarterOf,
@@ -61,6 +63,9 @@ export class GameState {
   readonly players = new Map<number, Player>();
   readonly towns = new Map<number, Town>();
   readonly industries = new Map<number, Industry>();
+  /** Price levels: construction and running costs, and cargo payments (inflation). */
+  readonly inflation = { costs: 1, payments: 1 };
+  private industryRng: Random;
   /** Towns changed since the last sync flush. */
   readonly dirtyTowns = new Set<number>();
   private townRng: Random;
@@ -111,6 +116,7 @@ export class GameState {
     this.map = map;
     this.date = date ?? daysFromYmd(settings.startYear, 0, 1);
     this.townRng = new Random(settings.seed ^ 0x70e115);
+    this.industryRng = new Random(settings.seed ^ 0x1dc4a9);
     for (let o = 0; o < 256; o++) this.joins[o * 257] = 1;
     this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
     this.rail = new RailSystem(this);
@@ -175,6 +181,10 @@ export class GameState {
   }
 
   private onNewYear(): void {
+    if (this.settings.inflation) {
+      this.inflation.costs = Math.min(20, this.inflation.costs * 1.03);
+      this.inflation.payments = Math.min(20, this.inflation.payments * 1.025);
+    }
     for (const t of this.trains.values()) {
       t.profitLastYear = t.profitThisYear;
       t.profitThisYear = 0;
@@ -204,6 +214,7 @@ export class GameState {
       this.addMoney(c.id, -Math.round(this.cost(yearlyMaintenance(c.infrastructure)) / 12), 'property');
       c.value = this.companyValue(c);
     }
+    industryMonthly(this, this.industryRng, ymdFromDays(this.date).year);
     if (ymdFromDays(this.date).month % 3 === 0) this.onNewQuarter();
   }
 
@@ -667,6 +678,11 @@ export class GameState {
 
   /** Scale a base cost by economy difficulty. */
   cost(base: number): number {
-    return Math.round(base * ECONOMY[this.settings.economy].costFactor);
+    return Math.round(base * ECONOMY[this.settings.economy].costFactor * this.inflation.costs);
+  }
+
+  /** The most a company may borrow (rises with inflation, in loan steps). */
+  maxLoan(): number {
+    return Math.round((ECONOMY[this.settings.economy].maxLoan * this.inflation.costs) / LOAN_STEP) * LOAN_STEP;
   }
 }

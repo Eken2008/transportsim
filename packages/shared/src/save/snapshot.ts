@@ -48,6 +48,7 @@ export interface Snapshot {
   cargoPackets?: [number, StationPacket[]][];
   industries?: Industry[];
   nextIndustryId?: number;
+  inflation?: { costs: number; payments: number };
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -78,6 +79,7 @@ export function takeSnapshot(state: GameState): Snapshot {
     cargoPackets: [...state.cargo.packets.entries()],
     industries: [...state.industries.values()],
     nextIndustryId: state.nextIndustryId,
+    inflation: state.inflation,
   };
 }
 
@@ -167,8 +169,11 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       lastProduced: amounts(ind.lastProduced),
       lastTransported: amounts(ind.lastTransported),
       lastDelivered: amounts(ind.lastDelivered),
+      idleMonths: typeof ind.idleMonths === 'number' ? Math.max(0, Math.floor(ind.idleMonths)) : undefined,
     });
   }
+  state.inflation.costs = Math.max(1, Math.min(20, num(snap.inflation?.costs, 1)));
+  state.inflation.payments = Math.max(1, Math.min(20, num(snap.inflation?.payments, 1)));
   state.nextIndustryId = Math.max(num(snap.nextIndustryId, 0), ...[...state.industries.keys()].map((k) => k + 1));
   const savedPackets = new Map(Array.isArray(snap.cargoPackets) ? snap.cargoPackets : []);
   for (const s of Array.isArray(snap.stations) ? snap.stations : []) {

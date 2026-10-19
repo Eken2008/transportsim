@@ -60,9 +60,9 @@ export function GameInfoWindow({ w }: { w: GameWindow & { kind: 'game' } }) {
           {ACCIDENTS[s.accidents]} <span className="muted small">(level crossings with road vehicles arrive later)</span>
         </span>
         <span>Breakdowns</span>
-        <span>
-          {s.breakdowns ? 'On' : 'Off'}
-        </span>
+        <span>{s.breakdowns ? 'On' : 'Off'}</span>
+        <span>Inflation</span>
+        <span>{s.inflation ? 'On: costs +3% and payments +2.5% a year' : 'Off'}</span>
         <span>Date</span>
         <span className="mono">{global ? formatDate(global.date) : '—'}</span>
       </div>

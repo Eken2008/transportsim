@@ -508,6 +508,7 @@ export class Room {
       agreements: [...this.state.agreements.values()],
       waypoints: [...this.state.waypoints.values()],
       wrecks: this.state.rail.wreckTiles(),
+      inflation: { ...this.state.inflation },
     };
   }
 

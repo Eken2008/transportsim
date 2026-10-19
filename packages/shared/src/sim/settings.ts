@@ -18,6 +18,8 @@ export interface GameSettings {
   startYear: number;
   accidents: AccidentSeverity;
   breakdowns: boolean;
+  /** Costs rise 3% and payments 2.5% a year. */
+  inflation: boolean;
   economy: EconomyDifficulty;
   /** Player slots chosen by the host, clamped to the server's MAX_PLAYERS. */
   maxPlayers: number;
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   startYear: 1900,
   accidents: 'low',
   breakdowns: true,
+  inflation: false,
   economy: 'normal',
   maxPlayers: 8,
   isPublic: true,
@@ -74,6 +77,7 @@ export function sanitizeSettings(input: Partial<GameSettings>, limits: ServerLim
     startYear: Math.round(clamp(input.startYear, 1850, 2050, d.startYear)),
     accidents: oneOf(input.accidents, ['off', 'low', 'realistic'] as const, d.accidents),
     breakdowns: typeof input.breakdowns === 'boolean' ? input.breakdowns : d.breakdowns,
+    inflation: typeof input.inflation === 'boolean' ? input.inflation : d.inflation,
     economy: oneOf(input.economy, ['easy', 'normal', 'hard'] as const, d.economy),
     maxPlayers: Math.round(clamp(input.maxPlayers, 1, limits.maxPlayers, Math.min(d.maxPlayers, limits.maxPlayers))),
     isPublic: typeof input.isPublic === 'boolean' ? input.isPublic : d.isPublic,

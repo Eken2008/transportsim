@@ -247,6 +247,10 @@ function HostCard({ disabled, onBeforeHost, busy }: { disabled: boolean; onBefor
           <input type="checkbox" checked={s.breakdowns} onChange={(e) => set('breakdowns', e.target.checked)} />
           Vehicle breakdowns
         </label>
+        <label className="row" title="Costs rise 3% and payments 2.5% a year">
+          <input type="checkbox" checked={s.inflation} onChange={(e) => set('inflation', e.target.checked)} />
+          Inflation
+        </label>
         <label className="row">
           <input type="checkbox" checked={s.isPublic} onChange={(e) => set('isPublic', e.target.checked)} />
           List publicly

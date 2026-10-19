@@ -2,7 +2,7 @@
 
 A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from OpenTTD, Simutrans and Transport Fever. Players found transport companies, build rail, road, air and sea networks, and carry passengers and goods between towns and industries. They can compete with each other or cooperate.
 
-> Status: **M3 — advanced rail** is playable.
+> Status: **M4 — cargo and economy** is playable.
 >
 > - **World:** procedural terrain with towns, roads and houses that grow with good service; terraforming.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
@@ -13,7 +13,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Accidents:** with accidents on, trains only see so far ahead, so unsafe signalling crashes trains; brake failures pass red signals, and on realistic, overspeed derails trains. Wreckage blocks the line for a while.
 > - **Orders:** stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
 > - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, routed by cargodist (demand to every reachable destination, transfers between trains), paid per leg by distance and journey time.
-> - **Industries:** mines, forests, farms and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food.
+> - **Industries:** mines, forests, farms and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food. Served industries grow, neglected ones close, new ones open. Optional inflation.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
 > - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table. Three quarters in the red means bankruptcy.
 > - **Competition:** station ratings from service quality; stations that cover the same houses split them by rating.
@@ -21,7 +21,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Multiplayer:** live multiplayer sync, chat with a company channel, and a news feed. The host can rename the game, change slots and visibility, and remove players.
 > - **Saves:** host-only saves in the browser.
 >
-> See [docs/PLAN.md](docs/PLAN.md) for the roadmap. The full cargo economy (M4: cargodist, industries, town growth) comes next.
+> See [docs/PLAN.md](docs/PLAN.md) for the roadmap. Road vehicles (M5) come next.
 
 ## Quick start
 

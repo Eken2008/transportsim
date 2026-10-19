@@ -497,7 +497,7 @@ export class CargoSystem {
       // Each leg is paid to the company that carried it.
       const from = this.state.stations.get(p.at ?? p.src);
       const dist = from ? Math.abs(from.x - st.x) + Math.abs(from.y - st.y) : 0;
-      income += cargoPayment(p.cargo, p.n, dist, this.state.date - p.day);
+      income += Math.round(cargoPayment(p.cargo, p.n, dist, this.state.date - p.day) * this.state.inflation.payments);
       if (deliver) {
         this.deliverToIndustry(st, p.cargo, p.n);
         if (p.cargo === 'goods' || p.cargo === 'food') this.countForTown(st, p.cargo, p.n);

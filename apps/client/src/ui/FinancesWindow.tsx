@@ -10,6 +10,7 @@ import {
   sumLedgers,
   yearlyMaintenance,
 } from '@transportsim/shared';
+import { client } from '../net/client.ts';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
 import { Win, act, useMyRole } from './windows.tsx';
@@ -33,9 +34,10 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
     );
   }
   const econ = ECONOMY[settings.economy];
+  const maxLoan = client.world?.state.maxLoan() ?? econ.maxLoan;
   const canBorrow = my.companyId === c.id && roleAllows(my.role, 'build');
   const quarters = c.finances.slice(-4);
-  const maintenance = Math.round((yearlyMaintenance(c.infrastructure) * econ.costFactor) / 12);
+  const maintenance = Math.round((yearlyMaintenance(c.infrastructure) * econ.costFactor * (client.world?.state.inflation.costs ?? 1)) / 12);
   const yearTotal = ledgerTotal(sumLedgers(quarters));
   const repayAll = Math.min(c.loan, Math.floor(Math.max(0, c.money) / LOAN_STEP) * LOAN_STEP);
 
@@ -97,7 +99,7 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
         <Money v={c.money} />
         <span>Loan</span>
         <span className="mono">
-          {formatMoney(c.loan)} <span className="muted">of {formatMoney(econ.maxLoan)} at {(econ.interestRate * 100).toFixed(1)}% a year</span>
+          {formatMoney(c.loan)} <span className="muted">of {formatMoney(maxLoan)} at {(econ.interestRate * 100).toFixed(1)}% a year</span>
         </span>
         <span>Last 4 quarters</span>
         <Money v={yearTotal} />
@@ -106,13 +108,13 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
       </div>
       {canBorrow && (
         <div className="row wrap" style={{ marginTop: 10 }}>
-          <button disabled={c.loan + LOAN_STEP > econ.maxLoan} onClick={() => act({ type: 'loan', action: 'borrow', amount: LOAN_STEP })}>
+          <button disabled={c.loan + LOAN_STEP > maxLoan} onClick={() => act({ type: 'loan', action: 'borrow', amount: LOAN_STEP })}>
             Borrow {formatMoney(LOAN_STEP)}
           </button>
           <button disabled={c.loan < LOAN_STEP || c.money < LOAN_STEP} onClick={() => act({ type: 'loan', action: 'repay', amount: LOAN_STEP })}>
             Repay {formatMoney(LOAN_STEP)}
           </button>
-          <button disabled={c.loan >= econ.maxLoan} onClick={() => act({ type: 'loan', action: 'borrow', amount: econ.maxLoan - c.loan })}>
+          <button disabled={c.loan >= maxLoan} onClick={() => act({ type: 'loan', action: 'borrow', amount: maxLoan - c.loan })}>
             Borrow the most
           </button>
           <button disabled={repayAll === 0} onClick={() => act({ type: 'loan', action: 'repay', amount: repayAll })}>

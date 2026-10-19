@@ -92,6 +92,7 @@ export class ClientWorld {
     s.players.clear();
     for (const p of g.players) s.players.set(p.id, p);
     s.setAgreements(g.agreements);
+    if (g.inflation) Object.assign(s.inflation, g.inflation);
     const key = JSON.stringify(g.waypoints ?? []);
     if (key !== this.waypointsKey) {
       this.waypointsKey = key;

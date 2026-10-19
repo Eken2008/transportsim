@@ -1,5 +1,4 @@
 import { LOAN_STEP } from '../economy/finance.ts';
-import { ECONOMY } from '../sim/settings.ts';
 import { fail, isInt, type CommandHandler } from './types.ts';
 
 /** Borrow or repay `amount` (a multiple of LOAN_STEP). */
@@ -18,7 +17,7 @@ export const loanHandler: CommandHandler<LoanCommand> = {
     if (!isInt(amount) || amount <= 0 || amount % LOAN_STEP !== 0) return fail('Invalid amount');
     const noEffects = () => ({ dirtyChunks: new Set<number>() });
     if (cmd.action === 'borrow') {
-      const max = ECONOMY[state.settings.economy].maxLoan;
+      const max = state.maxLoan();
       if (c.loan + amount > max) return fail(`The bank lends at most £${max.toLocaleString('en-GB')}`);
       return { ok: true, cost: -amount, commit: () => ((c.loan += amount), noEffects()) };
     }

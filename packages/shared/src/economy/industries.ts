@@ -61,6 +61,8 @@ export interface Industry {
   lastProduced: CargoAmounts;
   lastTransported: CargoAmounts;
   lastDelivered: CargoAmounts;
+  /** Months in a row nobody took cargo from it or brought cargo to it. */
+  idleMonths?: number;
 }
 
 /** Fraction of last month's production that reached stations, 0..1. */
