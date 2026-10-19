@@ -1,4 +1,5 @@
 import { resaleValue } from '../economy/finance.ts';
+import { isElectrified } from '../rail/railTypes.ts';
 import { ymdFromDays } from '../sim/date.ts';
 import { TileType } from '../world/constants.ts';
 import { isAvailable, railVehicle } from '../vehicles/catalog.ts';
@@ -59,6 +60,9 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
       if (!isAvailable(v, year, state.settings.timeline)) return fail(`${v.name} is not available in ${year}`);
       if (k === 0 && v.kind !== 'loco') return fail('A train needs an engine at the front');
       cost += v.cost;
+    }
+    if (units.some((id) => railVehicle(id)?.traction === 'electric') && !isElectrified(map.layers.railType[depot]!)) {
+      return fail('Electric engines need an electrified depot');
     }
     const stats = trainStats(units.map((type) => ({ type })));
     if (stats.length > MAX_TRAIN_LENGTH) return fail(`Trains can be at most ${MAX_TRAIN_LENGTH} tiles long`);
@@ -226,6 +230,9 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
     }
     if (engines === 0) return fail('A train needs at least one engine');
     if (trainStats(units.map((type) => ({ type }))).length > MAX_TRAIN_LENGTH) return fail(`Trains can be at most ${MAX_TRAIN_LENGTH} tiles long`);
+    if (units.some((id) => railVehicle(id)?.traction === 'electric') && !isElectrified(state.map.layers.railType[t.depot]!)) {
+      return fail('Electric engines need an electrified depot');
+    }
     const age = (state.date - t.builtDays) / 365;
     const resale = Math.max(0.2, 0.85 - age * 0.04);
     let removed = 0;

@@ -39,6 +39,7 @@ try {
   await page.locator('label.field', { hasText: 'Seed' }).locator('input').fill('424242');
   await page.locator('label.field', { hasText: 'Sea level' }).locator('input').fill('0');
   await page.locator('label.field', { hasText: 'Economy' }).locator('select').selectOption('easy');
+  await page.locator('label.field', { hasText: 'Timeline' }).locator('select').selectOption('sandbox');
   await page.getByRole('button', { name: 'Create game' }).click();
   await page.getByRole('button', { name: 'Not now' }).click({ timeout: 30_000 });
   // Players start without a company: found one from the company window, then close it.
@@ -134,6 +135,12 @@ try {
   await view({ x: ox, y: oy, yaw: 0.5, pitch: 0.9, distance: 26 });
   await page.waitForTimeout(2000);
   await page.screenshot({ path: `${outDir}/overview.png` });
+  // Track types: electrify the west of the layout, high-speed track on the main line east.
+  console.log('electrify', await run({ type: 'convertRail', x0: ox - 14, y0: oy - 6, x1: ox + 3, y1: oy + 8, railType: 1 }));
+  console.log('high-speed', await run({ type: 'convertRail', x0: ox + 4, y0: oy, x1: ox + 12, y1: oy + 2, railType: 2 }));
+  await view({ x: ox - 4, y: oy + 1, yaw: 0.6, pitch: 0.7, distance: 9 });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${outDir}/catenary.png` });
 } finally {
   await browser.close();
   if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(server.pid), '/T', '/F']);

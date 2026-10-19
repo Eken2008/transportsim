@@ -17,6 +17,7 @@ import {
 import { demolishTile, refreshStations } from '../commands/station.ts';
 import { OWNER_NONE, TileType } from '../world/constants.ts';
 import type { Agreement } from '../company/sharing.ts';
+import { ELECTRIC_TYPES } from '../rail/railTypes.ts';
 import { isSpanTd } from '../rail/track.ts';
 import { segTd, segTile, type TrackAccess } from '../rail/network.ts';
 import { NEWS_HISTORY, type NewsItem, type NewsKind } from '../news/news.ts';
@@ -270,15 +271,16 @@ export class GameState {
 
   // ---- track sharing --------------------------------------------------------
 
-  /** Whose track `company`'s trains may use. */
-  accessFor(company: number): TrackAccess {
-    let a = this.accessCache.get(company);
+  /** Whose track `company`'s trains may use; electric trains only where it is electrified. */
+  accessFor(company: number, electric = false): TrackAccess {
+    const key = company * 2 + (electric ? 1 : 0);
+    let a = this.accessCache.get(key);
     if (!a) {
       const uses = new Uint8Array(256);
       uses[company] = 1;
       for (const ag of this.agreements.values()) if (ag.status === 'active' && ag.guest === company) uses[ag.host] = 1;
-      a = { uses, joins: this.joins };
-      this.accessCache.set(company, a);
+      a = { uses, joins: this.joins, types: electric ? ELECTRIC_TYPES : undefined };
+      this.accessCache.set(key, a);
     }
     return a;
   }

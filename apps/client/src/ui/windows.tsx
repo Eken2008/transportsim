@@ -3,6 +3,7 @@ import {
   RAIL_VEHICLES,
   cargoCount,
   isAvailable,
+  isElectrified,
   railVehicle,
   ratingParts,
   ratingPercent,
@@ -307,6 +308,7 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
   const x = map ? w.id % map.width : 0;
   const y = map ? Math.floor(w.id / map.width) : 0;
   const ours = map?.layers.owner[w.id] === company;
+  const powered = !!map && isElectrified(map.layers.railType[w.id]!);
   const mine = ours && roleAllows(my.role, 'build');
   const canStart = ours && roleAllows(my.role, 'operate');
 
@@ -333,8 +335,9 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
             <span>Engine</span>
             <select value={engine} onChange={(e) => setEngine(e.target.value)}>
               {engines.map((v) => (
-                <option key={v.id} value={v.id}>
+                <option key={v.id} value={v.id} disabled={v.traction === 'electric' && !powered}>
                   {v.name} — {v.maxSpeed} km/h, {v.power} kW, {formatMoney(v.cost)}
+                  {v.traction === 'electric' && !powered ? ' (needs an electrified depot)' : ''}
                 </option>
               ))}
             </select>

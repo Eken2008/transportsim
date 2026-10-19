@@ -27,6 +27,8 @@ export const TILE_LAYERS = {
   signals: Uint16Array,
   /** Town id + 1 for town-owned tiles (houses, town roads); 0 = none. */
   town: Uint16Array,
+  /** Track type of Rail, Station and Depot tiles (see rail/railTypes.ts). */
+  railType: Uint8Array,
 } satisfies Record<string, TypedArrayCtor>;
 
 export type LayerName = keyof typeof TILE_LAYERS;
@@ -145,6 +147,7 @@ export class GameMap {
     this.layers.town[i] = 0;
     this.layers.signals[i] = 0;
     this.layers.links[i] = 0;
+    this.layers.railType[i] = 0;
   }
 
   setWater(i: number): void {
@@ -155,6 +158,7 @@ export class GameMap {
     this.layers.town[i] = 0;
     this.layers.signals[i] = 0;
     this.layers.links[i] = 0;
+    this.layers.railType[i] = 0;
   }
 
   chunkIndex(cx: number, cy: number): number {

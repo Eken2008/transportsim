@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
 
-export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders' | 'signal' | 'bridge' | 'tunnel';
+export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders' | 'signal' | 'bridge' | 'tunnel' | 'convert';
 
 export interface StationOptions {
   axis: 0 | 1;
@@ -69,6 +69,8 @@ export interface AppState {
   bridgeType: number | null;
   /** Signal tool places one-way signals (no passing from behind). */
   signalOneWay: boolean;
+  /** Track type for new track, stations, depots, bridges, tunnels and conversion. */
+  railType: number;
   /** Kind of signal the signal tool places. */
   signalKind: SignalKind;
   /** Draw path reservations on the track. */
@@ -129,6 +131,7 @@ export const useApp = create<AppState>(() => ({
   bridgeType: null,
   signalOneWay: false,
   signalKind: 'block',
+  railType: 0,
   showReservations: false,
   catchmentFor: null,
   trainsRev: 0,

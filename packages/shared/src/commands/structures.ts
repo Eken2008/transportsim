@@ -19,6 +19,8 @@ export interface BuildBridgeCommand {
   x1: number;
   y1: number;
   bridgeType: number;
+  /** Track type of the bridge ends. */
+  railType?: number;
 }
 
 export interface BuildTunnelCommand {
@@ -27,7 +29,11 @@ export interface BuildTunnelCommand {
   y: number;
   /** Edge of the entrance tile the tunnel heads into. */
   dir: number;
+  /** Track type of the portals. */
+  railType?: number;
 }
+
+import { railTypeError } from '../rail/railTypes.ts';
 
 const dirBetween = (dx: number, dy: number): Edge => (dx > 0 ? Edge.E : dx < 0 ? Edge.W : dy > 0 ? Edge.S : Edge.N);
 
@@ -56,6 +62,9 @@ export const buildBridgeHandler: CommandHandler<BuildBridgeCommand> = {
     if (![x0, y0, x1, y1, bridgeType].every(isInt)) return fail('Invalid bridge');
     const kind = BRIDGE_TYPES[bridgeType];
     if (!kind) return fail('Unknown bridge type');
+    const railType = cmd.railType ?? 0;
+    const typeErr = railTypeError(state, railType);
+    if (typeErr) return fail(typeErr);
     const map = state.map;
     if (!map.inBounds(x0, y0) || !map.inBounds(x1, y1)) return fail('Out of bounds');
     if (x0 !== x1 && y0 !== y1) return fail('Bridges must be straight');
@@ -111,6 +120,7 @@ export const buildBridgeHandler: CommandHandler<BuildBridgeCommand> = {
           map.layers.owner[i] = company;
           map.layers.track[i] = 1 << piece;
           map.layers.data[i] = headData('bridge', d, bridgeType);
+          map.layers.railType[i] = railType;
           map.layers.signals[i] = 0;
           map.layers.town[i] = 0;
         }
@@ -139,6 +149,9 @@ export const buildTunnelHandler: CommandHandler<BuildTunnelCommand> = {
     const ca = map.tileCorners(x, y);
     const level = edgeHeight(ca, back);
     if (level < 0 || edgeHeight(ca, d) !== level + 1) return fail('Tunnels start on a slope rising into a hill');
+    const railType = cmd.railType ?? 0;
+    const typeErr = railTypeError(state, railType);
+    if (typeErr) return fail(typeErr);
     const company = ctx.companyId!;
     const a = map.tileIndex(x, y);
     let cost = 2 * COSTS.railPiece;
@@ -175,6 +188,7 @@ export const buildTunnelHandler: CommandHandler<BuildTunnelCommand> = {
           map.layers.owner[i] = company;
           map.layers.track[i] = 1 << piece;
           map.layers.data[i] = headData('tunnel', hd);
+          map.layers.railType[i] = railType;
           map.layers.signals[i] = 0;
           map.layers.town[i] = 0;
           const tx = i % map.width;

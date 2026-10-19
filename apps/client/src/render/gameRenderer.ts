@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
 import { useApp, type ToolId } from '../store.ts';
-import { BulldozeTool, DepotTool, StationTool } from '../tools/placeTools.ts';
+import { BulldozeTool, ConvertTool, DepotTool, StationTool } from '../tools/placeTools.ts';
 import { RailTool } from '../tools/railTool.ts';
 import { TerraformTool } from '../tools/terraformTool.ts';
 import type { Modifiers, Tool } from '../tools/tool.ts';
@@ -152,7 +152,8 @@ export class GameRenderer {
           s.stationOpts !== prev.stationOpts ||
           s.bridgeType !== prev.bridgeType ||
           s.signalOneWay !== prev.signalOneWay ||
-          s.signalKind !== prev.signalKind
+          s.signalKind !== prev.signalKind ||
+          s.railType !== prev.railType
         ) {
           this.tool?.invalidate?.();
           this.hoverDirty = true;
@@ -215,6 +216,9 @@ export class GameRenderer {
         break;
       case 'bulldoze':
         this.tool = new BulldozeTool(this.area);
+        break;
+      case 'convert':
+        this.tool = new ConvertTool(this.area);
         break;
       case 'orders':
         this.tool = new OrdersTool(this.area);

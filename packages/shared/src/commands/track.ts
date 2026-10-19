@@ -1,5 +1,6 @@
 import { COSTS } from '../economy/costs.ts';
 import { PIECE_COUNT, Piece, hasPiece, isDiagonal, pieceFitsSlope } from '../rail/track.ts';
+import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
 import type { GameState } from '../sim/state.ts';
 import { HEAD_BRIDGE, HEAD_TUNNEL, structuresAt } from '../rail/structures.ts';
 import { linkPlaced, pendingLinks, unlinkPieces } from '../rail/links.ts';
@@ -16,6 +17,8 @@ const MAX_PIECES = 512;
 export interface BuildTrackCommand {
   type: 'buildTrack';
   pieces: number[];
+  /** Track type for tiles that have no track yet (tiles with track keep theirs). Default standard. */
+  railType?: number;
 }
 
 export interface RemoveTrackCommand {
@@ -53,6 +56,9 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
     if (typeof parsed === 'string') return fail(parsed);
     const map = state.map;
     const company = ctx.companyId!;
+    const railType = cmd.railType ?? 0;
+    const typeErr = railTypeError(state, railType);
+    if (typeErr) return fail(typeErr);
     // Accumulate new bits per tile so several pieces on one tile validate together.
     const add = new Map<number, number>();
     let cost = 0;
@@ -87,7 +93,8 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
         return fail(`Object in the way ${at(x, y)}`);
       }
       add.set(i, pending | (1 << p));
-      cost += isDiagonal(p) ? Math.round(COSTS.railPiece * 0.75) : COSTS.railPiece;
+      const factor = RAIL_TYPES[type === TileType.Rail ? map.layers.railType[i]! : railType]!.costFactor;
+      cost += Math.round((isDiagonal(p) ? COSTS.railPiece * 0.75 : COSTS.railPiece) * factor);
     }
     // Pieces in this command connect to each other; loose ends connect to touching track.
     const placedTiles = parsed.map((q) => map.tileIndex(q.x, q.y));
@@ -108,6 +115,7 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
           } else if (type !== TileType.Rail) {
             map.layers.data[i] = 0;
           }
+          if (type !== TileType.Rail) map.layers.railType[i] = railType;
           map.layers.type[i] = TileType.Rail;
           map.layers.owner[i] = company;
           map.layers.track[i] = map.layers.track[i]! | bits;

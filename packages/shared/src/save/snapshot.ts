@@ -159,6 +159,13 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
     });
   }
   if (!snap.layers?.links) linkAllByGeometry(map); // saves from before explicit links
+  if (!snap.layers?.railType) {
+    // Saves from before track types: electrify all track so electric trains keep running.
+    for (let i = 0; i < map.layers.type.length; i++) {
+      const t = map.layers.type[i];
+      if (t === TileType.Rail || t === TileType.Station || t === TileType.Depot) map.layers.railType[i] = 1;
+    }
+  }
   for (let i = 0; i < map.layers.type.length; i++) {
     if (map.layers.type[i] === TileType.Depot) state.depots.add(i);
     if (map.layers.signals[i]) state.signalTiles.add(i);

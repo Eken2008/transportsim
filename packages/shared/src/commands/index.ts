@@ -47,6 +47,7 @@ import {
   type SetMemberRoleCommand,
 } from './company.ts';
 import { loanHandler, type LoanCommand } from './finance.ts';
+import { convertRailHandler, type ConvertRailCommand } from './convert.ts';
 import {
   answerSharingHandler,
   endSharingHandler,
@@ -68,6 +69,7 @@ export * from './structures.ts';
 export * from './company.ts';
 export * from './finance.ts';
 export * from './sharing.ts';
+export * from './convert.ts';
 
 export type Command =
   | TerraformCommand
@@ -95,7 +97,8 @@ export type Command =
   | LoanCommand
   | ProposeSharingCommand
   | AnswerSharingCommand
-  | EndSharingCommand;
+  | EndSharingCommand
+  | ConvertRailCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -125,6 +128,7 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   proposeSharing: proposeSharingHandler,
   answerSharing: answerSharingHandler,
   endSharing: endSharingHandler,
+  convertRail: convertRailHandler,
 };
 
 const PERMISSION_ERRORS = {

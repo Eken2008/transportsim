@@ -13,6 +13,7 @@ import { EDGE_DX, EDGE_DY, Piece, hasPiece } from '../rail/track.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { CROSSING_FLAG } from './track.ts';
 import type { GameState } from '../sim/state.ts';
+import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
 /** Build a rectangular rail station: `length` tiles along `axis`, `platforms` tracks side by side. */
@@ -24,6 +25,8 @@ export interface BuildStationCommand {
   axis: 0 | 1;
   platforms: number;
   length: number;
+  /** Track type of new platform tiles (track turned into platforms keeps its type). */
+  railType?: number;
 }
 
 /** Build a train depot whose open end faces `exit` (Edge N/E/S/W). */
@@ -32,6 +35,7 @@ export interface BuildDepotCommand {
   x: number;
   y: number;
   exit: number;
+  railType?: number;
 }
 
 /** Bulldoze own track, stations and depots, and trees, in a rectangle. */
@@ -54,6 +58,9 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
     if (length < 1 || length > MAX_PLATFORM_LENGTH) return fail(`Platforms can be 1–${MAX_PLATFORM_LENGTH} tiles long`);
     const map = state.map;
     const company = ctx.companyId!;
+    const railType = cmd.railType ?? 0;
+    const typeErr = railTypeError(state, railType);
+    if (typeErr) return fail(typeErr);
     const w = axis === 0 ? length : platforms;
     const h = axis === 0 ? platforms : length;
     if (!map.inBounds(x, y) || !map.inBounds(x + w - 1, y + h - 1)) return fail('Out of bounds');
@@ -123,6 +130,7 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
         }
         const dirtyChunks = new Set<number>();
         for (const i of tiles) {
+          if (map.layers.type[i] !== TileType.Rail) map.layers.railType[i] = railType;
           map.layers.type[i] = TileType.Station;
           map.layers.owner[i] = company;
           map.layers.data[i] = st.id;
@@ -159,12 +167,16 @@ export const buildDepotHandler: CommandHandler<BuildDepotCommand> = {
     if (map.layers.type[i] !== TileType.Clear) return fail('Object in the way');
     if (!map.isFlat(x, y)) return fail('Depots need flat ground');
     if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail("Depots can't go under a bridge");
-    const cost = COSTS.depot + map.treeCount(x, y) * COSTS.clearTree;
+    const railType = cmd.railType ?? 0;
+    const typeErr = railTypeError(state, railType);
+    if (typeErr) return fail(typeErr);
+    const cost = Math.round(COSTS.depot * RAIL_TYPES[railType]!.costFactor) + map.treeCount(x, y) * COSTS.clearTree;
     return {
       ok: true,
       cost: state.cost(cost),
       commit() {
         map.layers.type[i] = TileType.Depot;
+        map.layers.railType[i] = railType;
         map.layers.owner[i] = ctx.companyId!;
         map.layers.data[i] = exit;
         map.layers.track[i] = 1 << (exit === 1 || exit === 3 ? Piece.X : Piece.Y);
@@ -212,6 +224,7 @@ export function demolishTile(state: GameState, i: number, dirtyChunks: Set<numbe
       map.layers.owner[i] = OWNER_NONE;
       map.layers.data[i] = data & 0xf;
       map.layers.track[i] = 0;
+      map.layers.railType[i] = 0;
     } else {
       map.setClear(i, Ground.Rough, 0);
     }

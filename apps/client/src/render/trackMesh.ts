@@ -11,6 +11,7 @@ import {
   signalKindOf,
   depotExit,
   hasPiece,
+  isElectrified,
   headInfo,
   segHeights,
   trackdir,
@@ -27,6 +28,12 @@ import { TRACK_LIFT, curveParamAt, curvePoint, curveTangent, straightCurve, type
 const BALLAST = lin('#8f877c');
 const BALLAST_FAR = lin('#6d655c');
 const SLEEPER = lin('#5a4535');
+const SLEEPER_CONCRETE = lin('#a7a39b');
+const BALLAST_HS = lin('#9d9a94');
+const MAST = lin('#59606a');
+const WIRE = lin('#2b2e33');
+/** Contact wire height above the rails. */
+const WIRE_HEIGHT = 0.4;
 const RAIL = lin('#c3c7cc');
 const ROAD = lin('#5d6166');
 const PLATFORM = lin('#b9b4aa');
@@ -103,15 +110,16 @@ function sweep(g: GeoBuilder, secs: Section[], offset: number, half: number, bas
 }
 
 /** Append one track piece (ballast, sleepers, rails) following its curve. */
-export function addPieceCurve(g: GeoBuilder, c: PieceCurve, lod: Lod): void {
+export function addPieceCurve(g: GeoBuilder, c: PieceCurve, lod: Lod, railType = 0): void {
   const secs = sections(c);
-  g.color(lod >= 2 ? BALLAST_FAR : BALLAST);
+  const hs = railType === 2;
+  g.color(lod >= 2 ? BALLAST_FAR : hs ? BALLAST_HS : BALLAST);
   sweep(g, secs, 0, 0.21, 0, 0.03);
   if (lod >= 2) return;
   if (lod === 0) {
     const len = c.p0.distanceTo(c.p3);
     const n = Math.max(3, Math.round(len / 0.14));
-    g.color(SLEEPER);
+    g.color(hs ? SLEEPER_CONCRETE : SLEEPER);
     for (let i = 0; i < n; i++) {
       const t = curveParamAt(c, (i + 0.5) / n);
       curvePoint(c, t, _p).setY(_p.y + 0.03);
@@ -122,6 +130,29 @@ export function addPieceCurve(g: GeoBuilder, c: PieceCurve, lod: Lod): void {
   }
   g.color(RAIL);
   for (const side of [-1, 1]) sweep(g, secs, (side * GAUGE) / 2, 0.011, 0.05, 0.025);
+}
+
+/**
+ * Overhead line along a piece: the contact wire, and (unless `wireOnly`, e.g. under station
+ * canopies) a mast beside the middle of the piece with an arm over the track.
+ */
+function addCatenary(g: GeoBuilder, c: PieceCurve, wireOnly: boolean): void {
+  const n = 4;
+  g.color(WIRE);
+  for (let i = 0; i < n; i++) {
+    curvePoint(c, i / n, _a2);
+    curvePoint(c, (i + 1) / n, _b2);
+    g.box(_a2.setY(_a2.y + WIRE_HEIGHT), _b2.setY(_b2.y + WIRE_HEIGHT), 0.012, 0.012, false);
+  }
+  if (wireOnly) return;
+  curvePoint(c, 0.5, _p);
+  const tan = curveTangent(c, 0.5, _t);
+  const side = _q.set(-tan.z, 0, tan.x).normalize();
+  const fx = _p.x + side.x * 0.27;
+  const fz = _p.z + side.z * 0.27;
+  const top = _p.y + WIRE_HEIGHT + 0.06;
+  g.color(MAST).aabb(fx - 0.014, _p.y - 0.03, fz - 0.014, fx + 0.014, top, fz + 0.014);
+  g.box(_a2.set(fx, top - 0.02, fz), _b2.set(_p.x - side.x * 0.05, top - 0.02, _p.z - side.z * 0.05), 0.012, 0.012, false);
 }
 
 /** A straight piece between two points (bridge decks). */
@@ -170,9 +201,13 @@ export function addTrack(
         addDepot(g, map, x, y, depotExit(map.layers.data[i]!), companyColor(map.layers.owner[i]!));
         continue;
       }
+      const railType = map.layers.railType[i]!;
+      const wires = isElectrified(railType) && lod <= 1;
       for (let p = 0; p < PIECE_COUNT; p++) {
         if (!hasPiece(bits, p)) continue;
-        addPieceCurve(g, curves.get(i, p), lod);
+        const curve = curves.get(i, p);
+        addPieceCurve(g, curve, lod, railType);
+        if (wires) addCatenary(g, curve, type === TileType.Station || !!head);
       }
       const sig = map.layers.signals[i]!;
       if (sig && lod <= 1) {

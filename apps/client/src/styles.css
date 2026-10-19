@@ -939,6 +939,11 @@ details.rating .kv {
   margin-top: 8px;
 }
 
+/* Track type picker sits above other tool options */
+.tool-options.upper {
+  bottom: 212px;
+}
+
 /* Signal options */
 .tool-options.wrap {
   flex-wrap: wrap;

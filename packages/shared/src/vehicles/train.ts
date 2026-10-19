@@ -76,6 +76,8 @@ export interface TrainStats {
   maxSpeed: number;
   capacity: number;
   runningCost: number;
+  /** Has an electric engine: needs electrified track. */
+  electric: boolean;
 }
 
 /** Visual gap between coupled units (tiles). */
@@ -86,9 +88,11 @@ export const PASSENGER_MASS = 0.08;
 export function trainStats(units: readonly TrainUnit[]): TrainStats {
   let length = 0, mass = 0, power = 0, te = 0, capacity = 0, running = 0;
   let maxSpeed = Infinity;
+  let electric = false;
   for (const u of units) {
     const v = railVehicle(u.type);
     if (!v) continue;
+    electric ||= v.traction === 'electric';
     length += v.length / 16 + UNIT_GAP;
     mass += v.mass;
     power += v.power;
@@ -105,6 +109,7 @@ export function trainStats(units: readonly TrainUnit[]): TrainStats {
     maxSpeed: maxSpeed === Infinity ? 0 : maxSpeed,
     capacity,
     runningCost: running,
+    electric,
   };
 }
 

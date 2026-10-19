@@ -17,6 +17,7 @@ import { catchmentRect, rectTiles, residentsIn } from '../game/catchment.ts';
 const OK = '#7ee787';
 const BAD = '#ff5a5f';
 const DEMOLISH = '#ffa657';
+const CONVERT = '#f2c94c';
 
 /** Shared plumbing: preview a command for the hovered tile(s) and send it on click. */
 abstract class PreviewTool implements Tool {
@@ -125,7 +126,7 @@ export class StationTool extends PreviewTool {
     const h = axis === 0 ? platforms : length;
     const tiles: { x: number; y: number }[] = [];
     for (let y = hit.tileY; y < hit.tileY + h; y++) for (let x = hit.tileX; x < hit.tileX + w; x++) tiles.push({ x, y });
-    return { tiles, cmd: { type: 'buildStation', x: hit.tileX, y: hit.tileY, axis, platforms, length } as Command };
+    return { tiles, cmd: { type: 'buildStation', x: hit.tileX, y: hit.tileY, axis, platforms, length, railType: useApp.getState().railType } as Command };
   }
 }
 
@@ -155,15 +156,15 @@ export class DepotTool extends PreviewTool {
       if (connecting.length === 1) exit = connecting[0]!;
       else if (connecting.length > 1 && !connecting.includes(exit)) exit = connecting[0]!;
     }
-    return { tiles: [{ x, y }], cmd: { type: 'buildDepot', x, y, exit } as Command, arrow: { x, y, edge: exit } };
+    return { tiles: [{ x, y }], cmd: { type: 'buildDepot', x, y, exit, railType: useApp.getState().railType } as Command, arrow: { x, y, edge: exit } };
   }
 }
 
 /** Drag a rectangle to bulldoze your own track, stations, depots and trees. */
 export class BulldozeTool extends PreviewTool {
-  private start: { x: number; y: number } | null = null;
+  protected start: { x: number; y: number } | null = null;
 
-  protected describe(hit: TerrainHit) {
+  protected area(hit: TerrainHit) {
     const s = this.start ?? { x: hit.tileX, y: hit.tileY };
     const x0 = Math.min(s.x, hit.tileX);
     const x1 = Math.max(s.x, hit.tileX);
@@ -171,6 +172,11 @@ export class BulldozeTool extends PreviewTool {
     const y1 = Math.max(s.y, hit.tileY);
     const tiles: { x: number; y: number }[] = [];
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) tiles.push({ x, y });
+    return { x0, y0, x1, y1, tiles };
+  }
+
+  protected describe(hit: TerrainHit) {
+    const { x0, y0, x1, y1, tiles } = this.area(hit);
     return { tiles, cmd: { type: 'clearArea', x0, y0, x1, y1 } as Command, color: DEMOLISH };
   }
 
@@ -191,5 +197,13 @@ export class BulldozeTool extends PreviewTool {
   override cancel(): void {
     this.start = null;
     super.cancel();
+  }
+}
+
+/** Drag a rectangle to convert your track, stations and depots to the chosen track type. */
+export class ConvertTool extends BulldozeTool {
+  protected override describe(hit: TerrainHit) {
+    const { x0, y0, x1, y1, tiles } = this.area(hit);
+    return { tiles, cmd: { type: 'convertRail', x0, y0, x1, y1, railType: useApp.getState().railType } as Command, color: CONVERT };
   }
 }

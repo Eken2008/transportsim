@@ -40,7 +40,7 @@ export class BridgeTool implements Tool {
     const sx = Math.sign(x1 - x0);
     const sy = Math.sign(y1 - y0);
     for (let k = 0; k < n; k++) tiles.push({ x: x0 + sx * k, y: y0 + sy * k });
-    return { cmd: { type: 'buildBridge', x0, y0, x1, y1, bridgeType }, tiles };
+    return { cmd: { type: 'buildBridge', x0, y0, x1, y1, bridgeType, railType: useApp.getState().railType }, tiles };
   }
 
   onHover(hit: TerrainHit | null, _mods: Modifiers): void {
@@ -114,7 +114,7 @@ export class TunnelTool implements Tool {
     for (let dir = 0; dir < 4; dir++) {
       const inner = edgeHeight(c, dir as 0);
       const outer = edgeHeight(c, OPPOSITE_EDGE[dir as 0]);
-      if (inner >= 0 && outer >= 0 && inner === outer + 1) return { cmd: { type: 'buildTunnel', x: hit.tileX, y: hit.tileY, dir }, dir };
+      if (inner >= 0 && outer >= 0 && inner === outer + 1) return { cmd: { type: 'buildTunnel', x: hit.tileX, y: hit.tileY, dir, railType: useApp.getState().railType }, dir };
     }
     return null;
   }

@@ -42,12 +42,18 @@ export const pieceKey = (s: number) => Math.floor(s / 16) * 8 + ((s % 16) >> 1);
 export interface TrackAccess {
   uses: Uint8Array;
   joins: Uint8Array;
+  /** Rail types the train can run on (`types[railType] === 1`); all when absent. */
+  types?: Uint8Array;
 }
 export type Access = number | TrackAccess;
 
 export function mayEnter(access: Access, from: number, to: number): boolean {
   if (typeof access === 'number') return to === access;
   return access.uses[to] === 1 && access.joins[from * 256 + to] === 1;
+}
+
+function typeOk(access: Access, map: GameMap, tile: number): boolean {
+  return typeof access === 'number' || !access.types || access.types[map.layers.railType[tile]!] === 1;
 }
 
 export function isTrackTile(type: number): boolean {
@@ -78,7 +84,7 @@ export function nextSegments(map: GameMap, s: number, access: Access, out: numbe
   if (isSpanTd(td)) {
     const far = headInfo(map, n);
     if (far && far.dir === entry) {
-      if (!mayEnter(access, map.layers.owner[n]!, map.layers.owner[n]!)) return out;
+      if (!mayEnter(access, map.layers.owner[n]!, map.layers.owner[n]!) || !typeOk(access, map, n)) return out;
       const p = hasPiece(map.layers.track[n]!, 0) ? 0 : 1;
       out.push(n * 16 + trackdir(p, PIECE_EDGES[p]![0] === entry ? 0 : 1));
     } else {
@@ -95,7 +101,7 @@ export function nextSegments(map: GameMap, s: number, access: Access, out: numbe
   if (there && there.dir === entry) return out; // can't climb onto a bridge from below
 
   const type = map.layers.type[n]!;
-  if (!isTrackTile(type) || !mayEnter(access, map.layers.owner[tile]!, map.layers.owner[n]!)) return out;
+  if (!isTrackTile(type) || !mayEnter(access, map.layers.owner[tile]!, map.layers.owner[n]!) || !typeOk(access, map, n)) return out;
   if (type === TileType.Depot && entry !== depotExit(map.layers.data[n]!)) return out;
   // Only pieces explicitly linked to ours continue it.
   const bits = map.layers.track[n]!;

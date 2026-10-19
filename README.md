@@ -5,7 +5,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > Status: **M2 — companies and multiplayer depth** is playable.
 >
 > - **World:** procedural terrain with towns, roads and houses; terraforming.
-> - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels.
+> - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
 > - **Stations and depots:** multi-platform stations and depots.
 > - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.
 > - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort and gradients; pathfinding, orders and full load; reversing at termini.
@@ -75,6 +75,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `6` / `7`                                        | Station (`R` rotates) / depot                                 |
 | `9`                                              | Signals: click places, turns round, removes; kinds block, entry, exit, combo (pre-signals) and path; one-way; reservation overlay |
 | `B` / `N`                                        | Bridge (drag end to end) / tunnel (click a slope into a hill) |
+| `V`                                              | Convert track type (drag an area); the rail tools choose standard, electrified or high-speed track |
 | `8`                                              | Bulldoze an area                                             |
 | Click                                            | Open a depot, station (show its catchment) or train (rearrange vehicles in a depot) |
 | `T`                                              | Train list                                                   |

@@ -51,7 +51,8 @@ export class RailTool implements Tool {
   }
 
   private command(pieces: PlacedPiece[], remove: boolean): Command {
-    return { type: remove ? 'removeTrack' : 'buildTrack', pieces: pieces.flatMap((p) => [p.x, p.y, p.piece]) };
+    const flat = pieces.flatMap((p) => [p.x, p.y, p.piece]);
+    return remove ? { type: 'removeTrack', pieces: flat } : { type: 'buildTrack', pieces: flat, railType: useApp.getState().railType };
   }
 
   onHover(hit: TerrainHit | null, mods: Modifiers): void {

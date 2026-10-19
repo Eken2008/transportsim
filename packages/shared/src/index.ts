@@ -10,6 +10,7 @@ export * from './company/company.ts';
 export * from './company/sharing.ts';
 export * from './news/news.ts';
 export * from './rail/track.ts';
+export * from './rail/railTypes.ts';
 export * from './rail/station.ts';
 export * from './rail/network.ts';
 export * from './rail/links.ts';

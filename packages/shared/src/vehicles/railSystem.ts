@@ -21,6 +21,7 @@ import {
   OPPOSITE_EDGE,
   PIECE_EDGES,
   hasPiece,
+  isSpanTd,
   pieceLength,
   tdPiece,
 } from '../rail/track.ts';
@@ -28,6 +29,7 @@ import { TICKS_PER_DAY, TICKS_PER_SECOND } from '../sim/date.ts';
 import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
 import { signalKindOf, type SignalKind } from '../commands/signals.ts';
+import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
 import { PASSENGER_MASS, cargoCount, trainStats, type Train, type TrainMotion, type TrainStats } from './train.ts';
 
 /** km/h corresponding to 1 tile per second. Sets the game's sense of scale. */
@@ -96,6 +98,32 @@ export class RailSystem {
     let s = this.stats.get(t.id);
     if (!s) this.stats.set(t.id, (s = trainStats(t.units)));
     return s;
+  }
+
+  /** Whose track (and which track types) this train may use. */
+  accessOf(t: Train) {
+    return this.state.accessFor(t.owner, this.statsOf(t).electric);
+  }
+
+  /** Speed limit (km/h) of the track under a segment. */
+  segLimit(s: number): number {
+    if (isSpanTd(segTd(s))) return Infinity;
+    return RAIL_TYPE_SPEED[this.state.map.layers.railType[segTile(s)]!] ?? Infinity;
+  }
+
+  /** Highest speed allowed now by track limits under the train and (braking) ahead of it. */
+  private trackLimit(t: Train): number {
+    let lim = Infinity;
+    for (const s of t.path) lim = Math.min(lim, this.segLimit(s));
+    let d = segLength(t.path[0]!) - t.pos;
+    const horizon = brakingDistance(t.speed) + 1;
+    for (const s of t.route) {
+      if (d > horizon) break;
+      const l = this.segLimit(s);
+      if (l < t.speed) lim = Math.min(lim, Math.hypot(l, speedForDistance(d)));
+      d += segLength(s);
+    }
+    return lim;
   }
 
   /** The consist changed: recompute length, power and so on. */
@@ -470,7 +498,11 @@ export class RailSystem {
   // ---- control -----------------------------------------------------------------
 
   canStart(t: Train): string | null {
-    if (t.status === 'depot') return t.orders.length === 0 ? 'Give the train some orders first' : null;
+    if (t.status === 'depot') {
+      if (t.orders.length === 0) return 'Give the train some orders first';
+      if (this.statsOf(t).electric && !isElectrified(this.state.map.layers.railType[t.depot]!)) return 'Electric engines need an electrified depot';
+      return null;
+    }
     return t.status === 'stopped' ? null : 'Already running';
   }
 
@@ -494,7 +526,7 @@ export class RailSystem {
     const map = this.state.map;
     const s = depotExitSegment(map, t.depot);
     if (this.occupiedByOther(s, t.id)) return;
-    const beyond = nextSegments(map, s, this.state.accessFor(t.owner)).map((n) => this.blockOf.get(pieceKey(n)));
+    const beyond = nextSegments(map, s, this.accessOf(t)).map((n) => this.blockOf.get(pieceKey(n)));
     if (beyond.some((b) => b !== undefined && this.blockBusy(b, t.id))) return;
     for (const b of beyond) if (b !== undefined) this.claims.set(b, t.id);
     t.path = [s];
@@ -579,7 +611,7 @@ export class RailSystem {
     const stats = this.statsOf(t);
     const stopAt = this.stopDistance(t, brakingDistance(t.speed) + 2);
     // Brake for the stop point, but creep the last bit so trains reach it exactly.
-    let limit = Math.min(stats.maxSpeed, Math.max(speedForDistance(stopAt), stopAt > 0.01 ? CREEP_KMH : 0));
+    let limit = Math.min(stats.maxSpeed, this.trackLimit(t), Math.max(speedForDistance(stopAt), stopAt > 0.01 ? CREEP_KMH : 0));
     if (t.status === 'stopped') limit = 0;
 
     if (t.speed > limit) {
@@ -632,7 +664,7 @@ export class RailSystem {
     for (let i = 0; i < t.route.length; i++) {
       const s = t.route[i]!;
       if (d > horizon) return d;
-      if (!segmentsConnect(map, prev, s, this.state.accessFor(t.owner))) return d; // route went stale
+      if (!segmentsConnect(map, prev, s, this.accessOf(t))) return d; // route went stale
       if (this.signalFacing(prev)) {
         const kind = this.signalKind(prev);
         pbs = kind === 'path';
@@ -670,7 +702,7 @@ export class RailSystem {
       const next = t.route[0];
       if (
         next === undefined ||
-        !segmentsConnect(map, head, next, this.state.accessFor(t.owner)) ||
+        !segmentsConnect(map, head, next, this.accessOf(t)) ||
         this.occupiedByOther(next, t.id) ||
         !this.mayEnter(t, head, next)
       ) {
@@ -797,7 +829,7 @@ export class RailSystem {
       const r = this.reserved.get(pieceKey(s));
       return r !== undefined && r !== t.id ? 4 : 0;
     };
-    const access = this.state.accessFor(t.owner);
+    const access = this.accessOf(t);
     let path = findPath(map, t.path[0]!, goal, { access, penalty });
     if (!path && t.speed < 0.5) {
       // Try the other way round: plan from the tail segment, reversed.

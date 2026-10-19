@@ -5,6 +5,9 @@ import {
   MAX_PLATFORMS,
   MAX_PLATFORM_LENGTH,
   SIGNAL_KINDS,
+  RAIL_TYPES,
+  availableRailTypes,
+  ymdFromDays,
   formatDate,
   type GameSpeed,
   type SignalKind,
@@ -80,6 +83,7 @@ export function GameScreen() {
       <StationOptions />
       <SignalOptions />
       <BridgeOptions />
+      <RailTypeOptions />
       <Toolbar />
       <Chat />
       <StatusBar fps={stats.fps} chunks={stats.chunks} />
@@ -220,6 +224,7 @@ const TOOLS: ToolDef[] = [
   { id: 'depot', icon: '🏚', label: 'Train depot', key: '7', menu: 'rail' },
   { id: 'bridge', icon: '🌉', label: 'Bridge (drag end to end)', key: 'B', menu: 'rail' },
   { id: 'tunnel', icon: '⛰️', label: 'Tunnel (click a slope into a hill)', key: 'N', menu: 'rail' },
+  { id: 'convert', icon: '⚡', label: 'Convert track type (drag an area)', key: 'V', menu: 'rail' },
   { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', menu: 'main' },
 ];
 
@@ -498,6 +503,37 @@ function StationOptions() {
       <button onClick={() => set({ axis: opts.axis === 0 ? 1 : 0 })} title="Rotate (R)">
         ⟲ {opts.axis === 0 ? 'East–west' : 'North–south'}
       </button>
+    </div>
+  );
+}
+
+const RAIL_TOOLS: ToolId[] = ['rail', 'station', 'depot', 'bridge', 'tunnel', 'convert'];
+
+function RailTypeOptions() {
+  const tool = useApp((s) => s.tool);
+  const chosen = useApp((s) => s.railType);
+  const date = useApp((s) => s.global?.date);
+  const timeline = useApp((s) => s.room?.settings.timeline ?? 'era');
+  if (!tool || !RAIL_TOOLS.includes(tool)) return null;
+  const types = availableRailTypes(date ? ymdFromDays(date).year : 1900, timeline);
+  const upper = tool === 'station' || tool === 'bridge';
+  return (
+    <div className={`panel tool-options ${upper ? 'upper' : ''}`} role="radiogroup" aria-label="Track type">
+      <span className="muted">{tool === 'convert' ? 'Convert to' : 'Track'}</span>
+      <div className="seg">
+        {types.map((i) => (
+          <button
+            key={i}
+            className={chosen === i ? 'primary' : ''}
+            aria-pressed={chosen === i}
+            title={`${RAIL_TYPES[i]!.name}: up to ${RAIL_TYPES[i]!.maxSpeed} km/h${RAIL_TYPES[i]!.electrified ? ', electrified' : ''}, ${RAIL_TYPES[i]!.costFactor}× cost`}
+            onClick={() => useApp.setState({ railType: i })}
+          >
+            {RAIL_TYPES[i]!.electrified ? '⚡ ' : ''}
+            {RAIL_TYPES[i]!.name}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
