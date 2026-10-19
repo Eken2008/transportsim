@@ -19,6 +19,10 @@ const GLASS = lin('#2c3a48');
 const RED = lin('#8e2b22');
 const CREAM = lin('#efe6cf');
 const BRASS = lin('#c9a24a');
+const LOAD = lin('#3a3633');
+const TIMBER = lin('#7a5230');
+const TANK = lin('#30343a');
+const SLAT = lin('#6b4a2e');
 
 const W = 0.135; // half width
 const FLOOR = 0.035;
@@ -112,6 +116,69 @@ function build(model: UnitModel): UnitGeo {
       d.color(DARK).aabb(-0.08, 0.06, -W - 0.004, 0.08, 0.26, W + 0.004); // doors
       break;
     }
+    case 'openwagon': {
+      bogies(d, [-0.28, 0.28]);
+      d.color(DARK).aabb(-0.5, FLOOR, -W, 0.5, FLOOR + 0.03, W); // floor
+      body.aabb(-0.5, FLOOR + 0.03, -W, 0.5, 0.2, -W + 0.02);
+      body.aabb(-0.5, FLOOR + 0.03, W - 0.02, 0.5, 0.2, W);
+      body.aabb(-0.5, FLOOR + 0.03, -W, -0.48, 0.2, W);
+      body.aabb(0.48, FLOOR + 0.03, -W, 0.5, 0.2, W);
+      d.color(LOAD).aabb(-0.47, 0.12, -W + 0.02, 0.47, 0.19, W - 0.02); // load
+      break;
+    }
+    case 'hopper': {
+      bogies(d, [-0.32, 0.32]);
+      const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+      // Sloping hopper ends over a short underframe
+      body.aabb(-0.42, 0.1, -W, 0.42, 0.3, W);
+      body.quad(v(-0.5, 0.3, -W), v(-0.5, 0.3, W), v(-0.42, 0.1, W), v(-0.42, 0.1, -W));
+      body.quad(v(0.42, 0.1, -W), v(0.42, 0.1, W), v(0.5, 0.3, W), v(0.5, 0.3, -W));
+      d.color(DARK).aabb(-0.2, FLOOR, -W * 0.6, 0.2, 0.1, W * 0.6); // discharge chutes
+      d.color(LOAD).aabb(-0.45, 0.3, -W + 0.015, 0.45, 0.32, W - 0.015);
+      break;
+    }
+    case 'boxvan': {
+      bogies(d, [-0.3, 0.3]);
+      body.aabb(-0.5, FLOOR, -W, 0.5, 0.3, W);
+      d.color(ROOF);
+      const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+      d.quad(v(-0.5, 0.3, W), v(0.5, 0.3, W), v(0.5, 0.34, 0), v(-0.5, 0.34, 0));
+      d.quad(v(0.5, 0.3, -W), v(-0.5, 0.3, -W), v(-0.5, 0.34, 0), v(0.5, 0.34, 0));
+      d.color(DARK).aabb(-0.1, 0.06, -W - 0.004, 0.1, 0.27, W + 0.004); // sliding doors
+      break;
+    }
+    case 'tanker': {
+      bogies(d, [-0.3, 0.3]);
+      d.color(DARK).aabb(-0.5, FLOOR, -W * 0.85, 0.5, FLOOR + 0.04, W * 0.85);
+      d.color(TANK).cylinderX(-0.47, 0.47, 0.18, 0, 0.11, 12);
+      d.color(TANK).cylinderY(0, 0, 0.29, 0.33, 0.035, 8); // dome
+      body.aabb(-0.47, 0.17, -0.112, 0.47, 0.19, 0.112); // livery band
+      break;
+    }
+    case 'flatwagon': {
+      bogies(d, [-0.3, 0.3]);
+      body.aabb(-0.5, FLOOR, -W, 0.5, FLOOR + 0.05, W); // deck
+      d.color(DARK);
+      for (const x of [-0.45, -0.15, 0.15, 0.45]) {
+        d.aabb(x - 0.01, FLOOR + 0.05, -W, x + 0.01, 0.16, -W + 0.015); // stanchions
+        d.aabb(x - 0.01, FLOOR + 0.05, W - 0.015, x + 0.01, 0.16, W);
+      }
+      d.color(TIMBER).aabb(-0.46, FLOOR + 0.05, -W + 0.02, 0.46, 0.14, W - 0.02); // load
+      break;
+    }
+    case 'stockcar': {
+      bogies(d, [-0.28, 0.28]);
+      body.aabb(-0.5, FLOOR, -W, 0.5, 0.09, W);
+      d.color(SLAT);
+      for (const y of [0.13, 0.19, 0.25]) {
+        d.aabb(-0.5, y, -W, 0.5, y + 0.025, -W + 0.015);
+        d.aabb(-0.5, y, W - 0.015, 0.5, y + 0.025, W);
+      }
+      body.aabb(-0.5, 0.09, -W, -0.47, 0.3, W);
+      body.aabb(0.47, 0.09, -W, 0.5, 0.3, W);
+      d.color(ROOF).aabb(-0.5, 0.3, -W, 0.5, 0.33, W);
+      break;
+    }
   }
   return { body: body.build() ?? new THREE.BufferGeometry(), detail: d.build() ?? new THREE.BufferGeometry() };
 }
@@ -124,4 +191,10 @@ export const UNIT_MODELS: Record<UnitModel, UnitGeo> = {
   coach: build('coach'),
   coachModern: build('coachModern'),
   mailvan: build('mailvan'),
+  openwagon: build('openwagon'),
+  hopper: build('hopper'),
+  boxvan: build('boxvan'),
+  tanker: build('tanker'),
+  flatwagon: build('flatwagon'),
+  stockcar: build('stockcar'),
 };

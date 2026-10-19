@@ -10,6 +10,8 @@ import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
 import { JUMP_CONDITIONS } from '../vehicles/train.ts';
+import { isCargo } from '../economy/cargo.ts';
+import type { StationPacket } from '../economy/cargoSystem.ts';
 import { emptyInfrastructure, sanitizeFinances } from '../economy/finance.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
 import { GameState } from '../sim/state.ts';
@@ -41,6 +43,8 @@ export interface Snapshot {
   nextAgreementId?: number;
   waypoints?: Waypoint[];
   nextWaypointId?: number;
+  /** Cargo waiting at stations: [station id, packets]. */
+  cargoPackets?: [number, StationPacket[]][];
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -68,6 +72,7 @@ export function takeSnapshot(state: GameState): Snapshot {
     nextAgreementId: state.nextAgreementId,
     waypoints: [...state.waypoints.values()],
     nextWaypointId: state.nextWaypointId,
+    cargoPackets: [...state.cargo.packets.entries()],
   };
 }
 
@@ -139,17 +144,23 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
     });
   }
   recountTowns(map, state.towns.values());
+  const savedPackets = new Map(Array.isArray(snap.cargoPackets) ? snap.cargoPackets : []);
   for (const s of Array.isArray(snap.stations) ? snap.stations : []) {
     if (!s || typeof s.id !== 'number' || s.id < 0 || s.id > 0xffff) continue;
-    const waiting: Record<number, number> = {};
-    let total = 0;
-    for (const [k, v] of Object.entries(s.waiting ?? {})) {
-      const n = num(v, 0);
-      if (n > 0) {
-        waiting[Number(k)] = n;
-        total += n;
+    // Cargo waiting: saved packets, or (older saves) passenger counts by destination.
+    const packets: StationPacket[] = [];
+    const saved = savedPackets.get(s.id);
+    if (Array.isArray(saved)) {
+      for (const p of saved) {
+        if (!p || !isCargo(p.cargo) || num(p.n, 0) <= 0) continue;
+        packets.push({ cargo: p.cargo, dest: num(p.dest, -1), src: num(p.src, s.id), n: Math.floor(p.n), day: num(p.day, state.date) });
+      }
+    } else {
+      for (const [k, v] of Object.entries((s.waiting ?? {}) as Record<string, unknown>)) {
+        if (typeof v === 'number' && v > 0) packets.push({ cargo: 'passengers', dest: Number(k), src: s.id, n: Math.floor(v), day: state.date });
       }
     }
+    state.cargo.packets.set(s.id, packets);
     state.stations.set(s.id, {
       id: s.id,
       name: String(s.name ?? 'Station').slice(0, 48),
@@ -158,8 +169,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       tiles: num(s.tiles, 0),
       townId: typeof s.townId === 'number' ? s.townId : null,
       builtDays: num(s.builtDays, state.date),
-      waiting,
-      waitingTotal: total,
+      waiting: {},
+      waitingTotal: 0,
       rating: num(s.rating, 175),
       lastPickup: typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
       lastSpeed: typeof s.lastSpeed === 'number' ? s.lastSpeed : undefined,
@@ -198,6 +209,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   state.nextWaypointId = Math.max(num(snap.nextWaypointId, 0), ...[...state.waypoints.keys()].map((k) => k + 1));
   state.news.push(...sanitizeNews(snap.news));
   state.nextNewsId = Math.max(num(snap.nextNewsId, 1), ...state.news.map((n) => n.id + 1));
+  for (const st of state.stations.values()) state.cargo.summarise(st);
+  state.dirtyStations.clear();
   state.nextStationId = Math.max(num(snap.nextStationId, 0), ...[...state.stations.keys()].map((k) => k + 1));
   return state;
 }
@@ -231,7 +244,9 @@ const STATUSES = ['depot', 'running', 'stopped', 'loading'] as const;
 
 function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): Train | null {
   if (!t || typeof t.id !== 'number' || !Array.isArray(t.units)) return null;
-  const units = t.units.filter((u) => u && typeof u.type === 'string' && railVehicle(u.type)).map((u) => ({ type: u.type }));
+  const units = t.units
+    .filter((u) => u && typeof u.type === 'string' && railVehicle(u.type))
+    .map((u) => (isCargo(u.cargo) && railVehicle(u.type)!.cargoes?.includes(u.cargo) ? { type: u.type, cargo: u.cargo } : { type: u.type }));
   if (units.length === 0) return null;
   const ints = (a: unknown) => (Array.isArray(a) ? a.filter((n): n is number => Number.isInteger(n) && n >= 0) : []);
   const status = STATUSES.includes(t.status as never) ? t.status! : 'stopped';
@@ -260,7 +275,9 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
     routeFor: '',
     replanAt: 0,
     loadTicks: num(t.loadTicks, 0),
-    cargo: (Array.isArray(t.cargo) ? t.cargo : []).filter((p) => p && num(p.n, 0) > 0),
+    cargo: (Array.isArray(t.cargo) ? t.cargo : [])
+      .filter((p) => p && num(p.n, 0) > 0)
+      .map((p) => ({ ...p, cargo: isCargo(p.cargo) ? p.cargo : 'passengers' })),
     builtDays: num(t.builtDays, state.date),
     value: num(t.value, 0),
     profitThisYear: num(t.profitThisYear, 0),

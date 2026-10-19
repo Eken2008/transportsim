@@ -189,6 +189,30 @@ Each part ends with green tests and a commit.
 
    An accident destroys the trains involved and blocks the tiles for cleanup. The company pays compensation, its station ratings drop, and the news reports it. Level-crossing collisions wait for road vehicles (M5).
 
+### M4 in detail
+Each part ends with green tests and a commit.
+1. **Cargo types and freight wagons.** The cargo types are passengers, mail, coal, iron ore, steel, wood, goods, grain, livestock, food and oil.
+   - **Payment:** each cargo has its own rate and its own patience before slow delivery cuts the pay.
+   - **Packets:** cargo packets carry the cargo type, origin and final destination. Stations keep the packets plus a summary per cargo and destination for clients.
+   - **Wagons:** wagons are refittable to a list of cargoes, and each unit stores its chosen cargo. Freight wagons and freight engines cover 1850–2050. Cargo weight adds to the train's mass.
+   - **Mail:** towns produce mail as well as passengers.
+2. **Industries and chains.** Industries are placed at world generation on `Industry` tiles. Primary industries produce monthly, delivering to the best-rated stations nearby. Secondary industries turn delivered input into output:
+   - coal and iron ore become steel;
+   - steel becomes goods at a factory;
+   - wood becomes goods;
+   - grain and livestock become food;
+   - oil becomes goods;
+   - a power station takes coal.
+
+   Towns accept goods and food. The client draws the industries and has an industry window.
+3. **Cargodist.** For each cargo, a link graph is built from the trains' consecutive stops, with capacity per link.
+   - **Demand:** symmetric for passengers and mail, asymmetric to accepting stations for freight.
+   - **Routing:** routes run on congestion-weighted shortest paths. Flow tables at each station give the next hop for every destination, and cargo transfers between trains on the way.
+   - **Payment:** each leg is paid to the company that carries it.
+   - **Computation:** the graph is computed in a Bun Worker on the server every few game days, with a synchronous fallback for tests and headless runs.
+4. **Town growth.** Towns grow faster when well served: new houses, taller buildings over time, and new streets. The client gets a town window, and monthly town figures cover passengers and mail carried, goods and food delivered, and growth.
+5. **Industry dynamics and inflation.** Production changes with service. Unserved industries may close and new ones open, with news. Optional inflation is set at game creation.
+
 ## Key dependencies
 `three`, `react`, `react-dom`, `zustand`, `vite`, `@vitejs/plugin-react`, `msgpackr`, `simplex-noise`, `idb` (a small IndexedDB wrapper) and `concurrently` (to run client and server together in dev). The server uses Bun's built-in `Bun.serve` WebSockets, so it needs no `ws` package, and tests use `bun test`.
 

@@ -390,7 +390,7 @@ export class Room {
       st.removedTrains.clear();
     }
     if (st.pendingNews.length > 0) this.broadcast({ t: 'news', items: st.pendingNews.splice(0), full: false });
-    const events = this.state.passengers.events;
+    const events = this.state.cargo.events;
     if (events.length > 0) {
       for (const ev of events) {
         const x = ev.tile % map.width;

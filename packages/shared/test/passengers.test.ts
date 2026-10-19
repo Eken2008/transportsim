@@ -64,8 +64,8 @@ describe('passengers', () => {
     run({ type: 'setOrders', id: train.id, orders: [{ kind: 'station', station: a.id }, { kind: 'station', station: b.id }] });
     for (let i = 0; i < TICKS_PER_DAY * 5; i++) state.step();
     expect(a.waitingTotal).toBeGreaterThan(0);
-    expect(Object.keys(a.waiting).map(Number)).toEqual([b.id]);
-    expect(b.waiting[a.id]).toBeGreaterThan(0);
+    expect(Object.keys(a.waiting.passengers ?? {}).map(Number)).toEqual([b.id]);
+    expect(b.waiting.passengers?.[a.id]).toBeGreaterThan(0);
   });
 
   test('trains carry passengers and earn money', () => {

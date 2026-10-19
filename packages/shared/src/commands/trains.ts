@@ -2,8 +2,8 @@ import { resaleValue } from '../economy/finance.ts';
 import { isElectrified } from '../rail/railTypes.ts';
 import { ymdFromDays } from '../sim/date.ts';
 import { TileType } from '../world/constants.ts';
-import { isAvailable, railVehicle } from '../vehicles/catalog.ts';
-import { JUMP_CONDITIONS, trainStats, type Order, type Train } from '../vehicles/train.ts';
+import { isAvailable, railVehicle, unitCargo } from '../vehicles/catalog.ts';
+import { JUMP_CONDITIONS, trainStats, type Order, type Train, type TrainUnit } from '../vehicles/train.ts';
 import { advanceOrder, settleOrders } from '../vehicles/orders.ts';
 import { MAX_TRAIN_TILES } from '../vehicles/maintenance.ts';
 
@@ -18,11 +18,29 @@ export const MAX_UNITS = 24;
 export const MAX_TRAIN_LENGTH = MAX_TRAIN_TILES; // tiles
 export const MAX_ORDERS = 32;
 
-/** Buy a train in a depot: `units` lists vehicle type ids front to back (first is the engine). */
+/** A unit in a command: a vehicle type id, or a type with the cargo a wagon is refitted to. */
+export type UnitSpec = string | TrainUnit;
+
+/** Buy a train in a depot: `units` lists vehicles front to back (first is the engine). */
 export interface BuyTrainCommand {
   type: 'buyTrain';
   depot: number;
-  units: string[];
+  units: UnitSpec[];
+}
+
+/** Validate unit specs; refits must be cargoes the wagon can carry. */
+export function parseUnits(input: unknown): TrainUnit[] | string {
+  if (!Array.isArray(input) || input.length === 0 || input.length > MAX_UNITS) return `A train has 1–${MAX_UNITS} vehicles`;
+  const out: TrainUnit[] = [];
+  for (const u of input) {
+    const type = typeof u === 'string' ? u : u && typeof u === 'object' ? (u as TrainUnit).type : undefined;
+    const v = typeof type === 'string' ? railVehicle(type) : undefined;
+    if (!v) return 'Unknown vehicle';
+    const cargo = typeof u === 'object' ? (u as TrainUnit).cargo : undefined;
+    if (cargo !== undefined && !v.cargoes?.includes(cargo)) return `${v.name} can't carry that`;
+    out.push(cargo && cargo !== v.cargoes?.[0] ? { type: v.id, cargo } : { type: v.id });
+  }
+  return out;
 }
 
 export type TrainActionKind = 'start' | 'stop' | 'toDepot' | 'reverse' | 'sell' | 'skip' | 'autofill';
@@ -40,7 +58,7 @@ export interface TrainActionCommand {
 export interface EditConsistCommand {
   type: 'editConsist';
   id: number;
-  units: string[];
+  units: UnitSpec[];
 }
 
 export interface SetOrdersCommand {
@@ -55,11 +73,13 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
   needsCompany: true,
   category: 'vehicles',
   plan(state, ctx, cmd): PlanResult {
-    const { depot, units } = cmd;
+    const { depot } = cmd;
     const map = state.map;
     if (!isInt(depot) || depot < 0 || depot >= map.layers.type.length) return fail('Invalid depot');
     if (map.layers.type[depot] !== TileType.Depot || map.layers.owner[depot] !== ctx.companyId) return fail('Not your depot');
-    if (!Array.isArray(units) || units.length === 0 || units.length > MAX_UNITS) return fail(`A train has 1–${MAX_UNITS} vehicles`);
+    const parsed = parseUnits(cmd.units);
+    if (typeof parsed === 'string') return fail(parsed);
+    const units = parsed.map((u) => u.type);
     const year = ymdFromDays(state.date).year;
     let cost = 0;
     for (const [k, id] of units.entries()) {
@@ -72,7 +92,7 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
     if (units.some((id) => railVehicle(id)?.traction === 'electric') && !isElectrified(map.layers.railType[depot]!)) {
       return fail('Electric engines need an electrified depot');
     }
-    const stats = trainStats(units.map((type) => ({ type })));
+    const stats = trainStats(parsed);
     if (stats.length > MAX_TRAIN_LENGTH) return fail(`Trains can be at most ${MAX_TRAIN_LENGTH} tiles long`);
     const total = state.cost(cost);
     return {
@@ -84,7 +104,7 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
           id: state.nextTrainId++,
           owner: ctx.companyId!,
           name: `Train ${n}`,
-          units: units.map((type) => ({ type })),
+          units: parsed,
           status: 'depot',
           depot,
           path: [],
@@ -233,8 +253,9 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
     if (!t || t.owner !== ctx.companyId) return fail('Not your train');
     if (t.status !== 'depot') return fail('Trains can only be changed inside a depot');
-    const units = cmd.units;
-    if (!Array.isArray(units) || units.length === 0 || units.length > MAX_UNITS) return fail(`A train has 1–${MAX_UNITS} vehicles`);
+    const parsed = parseUnits(cmd.units);
+    if (typeof parsed === 'string') return fail(parsed);
+    const units = parsed.map((u) => u.type);
     const year = ymdFromDays(state.date).year;
     // Multiset difference between old and new consists.
     const old = new Map<string, number>();
@@ -253,7 +274,7 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
       }
     }
     if (engines === 0) return fail('A train needs at least one engine');
-    if (trainStats(units.map((type) => ({ type }))).length > MAX_TRAIN_LENGTH) return fail(`Trains can be at most ${MAX_TRAIN_LENGTH} tiles long`);
+    if (trainStats(parsed).length > MAX_TRAIN_LENGTH) return fail(`Trains can be at most ${MAX_TRAIN_LENGTH} tiles long`);
     if (units.some((id) => railVehicle(id)?.traction === 'electric') && !isElectrified(state.map.layers.railType[t.depot]!)) {
       return fail('Electric engines need an electrified depot');
     }
@@ -262,13 +283,13 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
     let removed = 0;
     for (const [id, n] of old) removed += (railVehicle(id)?.cost ?? 0) * n;
     const cost = state.cost(added) - Math.round(state.cost(removed) * resale);
-    const same = units.length === t.units.length && units.every((u, i) => u === t.units[i]!.type);
+    const same = parsed.length === t.units.length && parsed.every((u, i) => u.type === t.units[i]!.type && unitCargo(u) === unitCargo(t.units[i]!));
     if (same) return fail('No changes');
     return {
       ok: true,
       cost,
       commit() {
-        t.units = units.map((type) => ({ type }));
+        t.units = parsed;
         t.value = Math.max(0, t.value + state.cost(added) - state.cost(removed));
         t.cargo = [];
         state.rail.invalidateStats(t);

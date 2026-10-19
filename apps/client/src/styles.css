@@ -989,6 +989,17 @@ ol.orders li.kind-waypoint .order-name {
   opacity: 0.85;
 }
 
+.cargo-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.unit-kind {
+  border-left: 3px solid transparent;
+}
+
 /* Signal options */
 .tool-options.wrap {
   flex-wrap: wrap;

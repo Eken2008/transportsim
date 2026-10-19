@@ -1,6 +1,7 @@
 import type { GameMap } from '../world/map.ts';
 import { TileType } from '../world/constants.ts';
 import type { Town } from '../town/towns.ts';
+import type { CargoId } from '../economy/cargo.ts';
 
 export interface Station {
   id: number;
@@ -17,10 +18,12 @@ export interface Station {
   tiles: number;
   townId: number | null;
   builtDays: number;
-  /** Passengers waiting, by destination station id. */
-  waiting: Record<number, number>;
-  /** Total waiting (cached sum of `waiting`). */
+  /** Cargo waiting: cargo → destination station → amount (a summary of the cargo system's packets). */
+  waiting: Partial<Record<CargoId, Record<number, number>>>;
+  /** Total waiting, all cargoes. */
   waitingTotal: number;
+  /** Cargo accepted around the station (from its catchment). */
+  accepts?: CargoId[];
   /** 0..255 like OpenTTD; affects how much cargo the station receives. */
   rating: number;
   /** Day a train last picked up passengers here. */

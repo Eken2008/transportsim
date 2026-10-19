@@ -32,7 +32,7 @@ import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
 import { signalKindOf, type SignalKind } from '../commands/signals.ts';
 import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
-import { PASSENGER_MASS, cargoCount, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
+import { cargoMass, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
 import { advanceOrder, needsService, peekNextOrder } from './orders.ts';
 import { DERAIL_OVERSPEED } from '../incidents/rail.ts';
 
@@ -793,7 +793,7 @@ export class RailSystem {
 
   /** Acceleration in km/h per second from tractive effort, resistance and gradient. */
   private acceleration(t: Train, s: TrainStats): number {
-    const mass = s.mass + cargoCount(t) * PASSENGER_MASS;
+    const mass = s.mass + cargoMass(t);
     if (mass <= 0) return 0;
     const vms = Math.max(t.speed / 3.6, 1);
     const tractive = Math.min(s.tractiveEffort, s.power / vms); // kN

@@ -84,21 +84,21 @@ describe('station ratings', () => {
     const { state, a, b } = world();
     const [a0] = a.stations;
     const [b0] = b.stations;
-    state.passengers.refresh();
-    const pop = state.passengers.population(a0.id);
+    state.cargo.refresh();
+    const pop = state.cargo.population(a0.id);
     expect(pop).toBeGreaterThan(0);
-    expect(state.passengers.population(b0.id)).toBe(pop);
+    expect(state.cargo.population(b0.id)).toBe(pop);
     a0.rating = 200;
     b0.rating = 50;
-    state.passengers.refresh();
-    expect(state.passengers.share(a0.id) / state.passengers.share(b0.id)).toBeCloseTo(4, 5);
-    expect(state.passengers.share(a0.id) + state.passengers.share(b0.id)).toBeCloseTo(pop, 5);
+    state.cargo.refresh();
+    expect(state.cargo.share(a0.id) / state.cargo.share(b0.id)).toBeCloseTo(4, 5);
+    expect(state.cargo.share(a0.id) + state.cargo.share(b0.id)).toBeCloseTo(pop, 5);
     expect(a0.share).toBe(0.8);
 
     // A station no train serves does not compete
     b.run({ type: 'setOrders', id: b.train.id, orders: [] });
-    state.passengers.refresh();
-    expect(state.passengers.share(a0.id)).toBeCloseTo(pop, 5);
-    expect(state.passengers.share(b0.id)).toBe(0);
+    state.cargo.refresh();
+    expect(state.cargo.share(a0.id)).toBeCloseTo(pop, 5);
+    expect(state.cargo.share(b0.id)).toBe(0);
   });
 });

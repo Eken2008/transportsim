@@ -1,7 +1,10 @@
 import {
   MAX_TRAIN_LENGTH,
   RAIL_VEHICLES,
-  cargoCount,
+  CARGOS,
+  CARGO_IDS,
+  cargoAmount,
+  unitCargo,
   isAvailable,
   MAX_SERVICE_INTERVAL,
   MIN_SERVICE_INTERVAL,
@@ -19,7 +22,9 @@ import {
   ymdFromDays,
   type CompanyRole,
   type Station,
+  type CargoId,
   type TrainInfo,
+  type TrainUnit,
 } from '@transportsim/shared';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { client } from '../net/client.ts';
@@ -28,6 +33,7 @@ import { formatMoney } from './format.ts';
 import { catchmentRect, residentsIn } from '../game/catchment.ts';
 import { CompanyWindow } from './CompanyWindow.tsx';
 import { OrdersEditor } from './OrdersEditor.tsx';
+import { capacityText, loadText } from './cargoText.ts';
 import { NewsWindow } from './NewsWindow.tsx';
 import { FinancesWindow, LeagueWindow } from './FinancesWindow.tsx';
 import { GameInfoWindow } from './GameInfoWindow.tsx';
@@ -184,7 +190,6 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   }
   const stats = trainStats(t.units);
   const motion = client.world?.motions.get(t.id)?.m;
-  const aboard = cargoCount(t);
 
   return (
     <Win w={w} title={t.name} width={360}>
@@ -195,10 +200,8 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
         <b className="mono">
           {Math.round(motion?.speed ?? 0)} / {stats.maxSpeed} km/h
         </b>
-        <span>Passengers</span>
-        <b className="mono">
-          {aboard} / {stats.capacity}
-        </b>
+        <span>Cargo</span>
+        <b className="mono small">{loadText(t.cargo, stats.capacities)}</b>
         <span>Profit</span>
         <b className="mono">
           {formatMoney(t.profitThisYear)} <span className="muted">(last year {formatMoney(t.profitLastYear)})</span>
@@ -329,13 +332,19 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
   const year = global ? ymdFromDays(global.date).year : 1900;
   const timeline = settings?.timeline ?? 'era';
   const engines = RAIL_VEHICLES.filter((v) => v.kind === 'loco' && isAvailable(v, year, timeline));
-  const wagons = RAIL_VEHICLES.filter((v) => v.kind === 'wagon' && v.cargo === 'passengers' && isAvailable(v, year, timeline));
-  const [engine, setEngine] = useState(engines.at(-1)?.id ?? '');
-  const [wagon, setWagon] = useState(wagons.at(-1)?.id ?? '');
+  const wagons = RAIL_VEHICLES.filter((v) => v.kind === 'wagon' && isAvailable(v, year, timeline));
+  const [engine, setEngine] = useState(engines.filter((v) => v.traction !== 'electric').sort((a, b) => b.maxSpeed - a.maxSpeed)[0]?.id ?? engines[0]?.id ?? '');
+  const [wagon, setWagon] = useState(wagons.find((v) => v.cargoes?.[0] === 'passengers')?.id ?? wagons[0]?.id ?? '');
+  const wagonType = railVehicle(wagon);
+  const [cargoChoice, setCargo] = useState<CargoId | ''>('');
+  const cargo = cargoChoice && wagonType?.cargoes?.includes(cargoChoice) ? cargoChoice : wagonType?.cargoes?.[0];
   const [count, setCount] = useState(4);
-  const units = useMemo(() => [engine, ...Array.from({ length: count }, () => wagon)].filter(Boolean), [engine, wagon, count]);
-  const stats = trainStats(units.map((type) => ({ type })));
-  const price = units.reduce((s, id) => s + (railVehicle(id)?.cost ?? 0), 0);
+  const units = useMemo<TrainUnit[]>(
+    () => [...(engine ? [{ type: engine }] : []), ...Array.from({ length: wagon ? count : 0 }, () => ({ type: wagon, cargo }))],
+    [engine, wagon, count, cargo],
+  );
+  const stats = trainStats(units);
+  const price = units.reduce((s, u) => s + (railVehicle(u.type)?.cost ?? 0), 0);
   const inDepot = [...(client.world?.trains.values() ?? [])].filter((t) => t.status === 'depot' && t.depot === w.id);
   const x = map ? w.id % map.width : 0;
   const y = map ? Math.floor(w.id / map.width) : 0;
@@ -375,23 +384,35 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
             </select>
           </label>
           <div className="row" style={{ gap: 10 }}>
-            <label className="field" style={{ flex: 1 }}>
-              <span>Carriages</span>
+            <label className="field" style={{ flex: 1, minWidth: 0 }}>
+              <span>Wagons</span>
               <select value={wagon} onChange={(e) => setWagon(e.target.value)}>
                 {wagons.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.name} — {v.capacity} seats, {v.maxSpeed} km/h
+                    {v.name} — {v.capacity} {v.cargoes?.[0] === 'passengers' ? 'seats' : CARGOS[v.cargoes?.[0] ?? 'goods'].unit}, {v.maxSpeed} km/h
                   </option>
                 ))}
               </select>
             </label>
+            {wagonType?.cargoes && wagonType.cargoes.length > 1 && (
+              <label className="field" style={{ width: 110 }}>
+                <span>Carrying</span>
+                <select value={cargo} onChange={(e) => setCargo(e.target.value as CargoId)}>
+                  {wagonType.cargoes.map((c) => (
+                    <option key={c} value={c}>
+                      {CARGOS[c].name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="field" style={{ width: 80 }}>
               <span>Count</span>
               <input type="number" min={0} max={20} value={count} onChange={(e) => setCount(Math.max(0, Math.min(20, Math.round(+e.target.value))))} />
             </label>
           </div>
           <p className="muted small" style={{ margin: '0 0 10px' }}>
-            {stats.capacity} seats · max {stats.maxSpeed} km/h · {stats.length.toFixed(1)} tiles long
+            {capacityText(stats.capacities)} · max {stats.maxSpeed} km/h · {stats.length.toFixed(1)} tiles long
             {stats.length > MAX_TRAIN_LENGTH ? ' (too long!)' : ''} · running cost {formatMoney(stats.runningCost)}/yr
           </p>
           <button className="primary" style={{ width: '100%' }} disabled={!engine} onClick={() => act({ type: 'buyTrain', depot: w.id, units })}>
@@ -416,9 +437,9 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
   }
   const company = client.world?.state.companies.get(st.owner);
   const serving = [...(client.world?.trains.values() ?? [])].filter((t) => t.orders.some((o) => o.kind === 'station' && o.station === st.id));
-  const waiting = Object.entries(st.waiting)
-    .map(([dest, n]) => ({ dest: Number(dest), n }))
-    .sort((a, b) => b.n - a.n);
+  const waiting = CARGO_IDS.flatMap((cargo) =>
+    Object.entries(st.waiting[cargo] ?? {}).map(([dest, n]) => ({ cargo, dest: Number(dest), n })),
+  ).sort((a, b) => b.n - a.n);
   return (
     <Win w={w} title={st.name}>
       <div className="kv">
@@ -429,7 +450,13 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
           {st.tiles} tiles{client.world ? `, longest ${longestPlatform(client.world.map, st)}` : ''}
         </b>
         <span>Waiting</span>
-        <b className="mono">{st.waitingTotal} passengers</b>
+        <b className="mono small">
+          {CARGO_IDS.filter((c) => st.waiting[c])
+            .map((c) => cargoAmount(c, Object.values(st.waiting[c]!).reduce((a, b) => a + b, 0)))
+            .join(' · ') || 'nothing'}
+        </b>
+        <span>Accepts</span>
+        <span className="small">{st.accepts?.length ? st.accepts.map((c) => CARGOS[c].name).join(', ') : 'nothing'}</span>
         <span>Catchment</span>
         <b className="mono">{client.world ? residentsIn(client.world.map, catchmentRect(client.world.map, st)).toLocaleString('en-GB') : 0} residents</b>
         {st.share !== undefined && st.share < 1 && (
@@ -446,8 +473,8 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
       {waiting.length > 0 && (
         <ul className="plain small">
           {waiting.slice(0, 8).map((x) => (
-            <li key={x.dest}>
-              {x.n} → {stationName(x.dest)}
+            <li key={`${x.cargo}-${x.dest}`}>
+              <span className="cargo-dot" style={{ background: CARGOS[x.cargo].color }} /> {cargoAmount(x.cargo, x.n)} → {stationName(x.dest)}
             </li>
           ))}
         </ul>
@@ -538,23 +565,23 @@ function CatchmentToggle({ id }: { id: number }) {
   );
 }
 
-/** Vehicles of a train; editable (reorder, add, remove) while it's parked in a depot. */
+/** Vehicles of a train; editable (reorder, add, remove, refit) while it's parked in a depot. */
 function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
-  const current = t.units.map((u) => u.type);
-  const currentKey = current.join(',');
-  const [draft, setDraft] = useState<string[]>(current);
+  const current = t.units;
+  const currentKey = JSON.stringify(current);
+  const [draft, setDraft] = useState<TrainUnit[]>(current);
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const global = useApp((st) => st.global);
   const timeline = useApp((st) => st.room?.settings.timeline ?? 'era');
   const year = global ? ymdFromDays(global.date).year : 1900;
   const available = RAIL_VEHICLES.filter((v) => isAvailable(v, year, timeline));
   const [toAdd, setToAdd] = useState(available.find((v) => v.kind === 'wagon')?.id ?? available[0]?.id ?? '');
-  useEffect(() => setDraft(currentKey ? currentKey.split(',') : []), [currentKey]);
+  useEffect(() => setDraft(JSON.parse(currentKey) as TrainUnit[]), [currentKey]);
 
   const editable = mine && t.status === 'depot';
-  const changed = draft.join(',') !== currentKey;
+  const changed = JSON.stringify(draft) !== currentKey;
   const preview = changed ? client.preview({ type: 'editConsist', id: t.id, units: draft }) : null;
-  const stats = trainStats(draft.map((type) => ({ type })));
+  const stats = trainStats(draft);
   const move = (from: number, to: number) => {
     if (to < 0 || to >= draft.length || from === to) return;
     const next = draft.slice();
@@ -562,17 +589,19 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
     next.splice(to, 0, u!);
     setDraft(next);
   };
+  const refit = (i: number, cargo: CargoId) => setDraft(draft.map((u, k) => (k === i ? { type: u.type, cargo } : u)));
 
   return (
     <>
       <h4>Vehicles</h4>
-      {!editable && mine && <p className="muted small" style={{ margin: '0 0 6px' }}>Send the train to a depot to rearrange or change its vehicles.</p>}
+      {!editable && mine && <p className="muted small" style={{ margin: '0 0 6px' }}>Send the train to a depot to rearrange, refit or change its vehicles.</p>}
       <ol className="consist">
-        {draft.map((id, i) => {
-          const v = railVehicle(id);
+        {draft.map((u, i) => {
+          const v = railVehicle(u.type);
+          const cargo = unitCargo(u);
           return (
             <li
-              key={i + id}
+              key={i + u.type}
               draggable={editable}
               className={dragFrom === i ? 'dragging' : ''}
               onDragStart={(e) => {
@@ -588,8 +617,19 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
               onDragEnd={() => setDragFrom(null)}
             >
               {editable && <span className="grip" aria-hidden>⋮⋮</span>}
-              <span className={`unit-kind ${v?.kind ?? ''}`}>{v?.kind === 'loco' ? 'Engine' : v?.cargo === 'mail' ? 'Mail' : 'Coach'}</span>
-              <span className="order-name">{v?.name ?? id}</span>
+              <span className={`unit-kind ${v?.kind ?? ''}`} style={cargo ? { borderColor: CARGOS[cargo].color } : undefined}>
+                {v?.kind === 'loco' ? 'Engine' : cargo ? CARGOS[cargo].name : 'Wagon'}
+              </span>
+              <span className="order-name">{v?.name ?? u.type}</span>
+              {editable && v?.cargoes && v.cargoes.length > 1 && (
+                <select value={cargo} onChange={(e) => refit(i, e.target.value as CargoId)} aria-label={`Refit ${v.name}`} style={{ padding: '2px 4px' }}>
+                  {v.cargoes.map((c) => (
+                    <option key={c} value={c}>
+                      {CARGOS[c].name}
+                    </option>
+                  ))}
+                </select>
+              )}
               {editable && (
                 <>
                   <button className="ghost small" disabled={i === 0} aria-label="Move forward" onClick={() => move(i, i - 1)}>
@@ -617,7 +657,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
                 </option>
               ))}
             </select>
-            <button onClick={() => toAdd && setDraft([...draft, toAdd])}>+ Add</button>
+            <button onClick={() => toAdd && setDraft([...draft, { type: toAdd }])}>+ Add</button>
             <button className="ghost" title="Reverse the order of all vehicles" onClick={() => setDraft(draft.slice().reverse())}>
               ⇄
             </button>
@@ -627,7 +667,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
               <span className={`small ${preview && !preview.ok ? 'neg' : 'muted'}`} style={{ flex: 1 }}>
                 {preview && !preview.ok
                   ? preview.error
-                  : `${stats.capacity} seats · ${stats.maxSpeed} km/h · ${stats.length.toFixed(1)} tiles · ${preview && preview.ok ? (preview.cost >= 0 ? 'costs ' + formatMoney(preview.cost) : 'refund ' + formatMoney(-preview.cost)) : ''}`}
+                  : `${capacityText(stats.capacities)} · ${stats.maxSpeed} km/h · ${stats.length.toFixed(1)} tiles · ${preview && preview.ok ? (preview.cost >= 0 ? 'costs ' + formatMoney(preview.cost) : 'refund ' + formatMoney(-preview.cost)) : ''}`}
               </span>
               <button className="ghost" onClick={() => setDraft(current)}>
                 Reset

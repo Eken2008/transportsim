@@ -141,6 +141,18 @@ try {
   await view({ x: ox - 4, y: oy + 1, yaw: 0.6, pitch: 0.7, distance: 9 });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${outDir}/catenary.png` });
+  // A freight train with one of each wagon model, parked at a station on the west of the line.
+  console.log('depot', await run({ type: 'buildDepot', x: ox - 15, y: oy, exit: 1, railType: 1 }));
+  console.log('station', await run({ type: 'buildStation', x: ox - 12, y: oy, axis: 0, platforms: 1, length: 3, railType: 1 }));
+  const wagons = ['open_wagon', 'hopper', 'box_wagon', 'tanker', 'bogie_flat', 'stock_car'];
+  console.log('buy', await run({ type: 'buyTrain', depot: (oy * 512 + ox - 15), units: ['ox', ...wagons] }));
+  const trainId = 0; // the first train in this game
+  console.log('orders', await run({ type: 'setOrders', id: trainId, orders: [{ kind: 'station', station: 0 }] }));
+  console.log('start', await run({ type: 'trainAction', id: trainId, action: 'start' }));
+  await page.waitForTimeout(6000);
+  await view({ x: ox - 12, y: oy + 0.5, yaw: 0.9, pitch: 0.5, distance: 6 });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${outDir}/freight.png` });
 } finally {
   await browser.close();
   if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(server.pid), '/T', '/F']);

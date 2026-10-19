@@ -1,7 +1,7 @@
 import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, type CompanyRole } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
-import { PassengerSystem } from '../economy/passengers.ts';
+import { CargoSystem } from '../economy/cargoSystem.ts';
 import { MaintenanceSystem } from '../vehicles/maintenance.ts';
 import { IncidentSystem } from '../incidents/rail.ts';
 import { COSTS } from '../economy/costs.ts';
@@ -71,7 +71,7 @@ export class GameState {
   /** Tile indices that carry at least one signal. */
   readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
-  readonly passengers: PassengerSystem;
+  readonly cargo: CargoSystem;
   readonly maintenance: MaintenanceSystem;
   readonly incidents: IncidentSystem;
   /** Recent news, oldest first. */
@@ -102,13 +102,13 @@ export class GameState {
     for (let o = 0; o < 256; o++) this.joins[o * 257] = 1;
     this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
     this.rail = new RailSystem(this);
-    this.passengers = new PassengerSystem(this);
+    this.cargo = new CargoSystem(this);
     this.maintenance = new MaintenanceSystem(this);
     this.rail.onService = (t) => this.maintenance.service(t);
     this.incidents = new IncidentSystem(this);
     this.maintenance.onBreakdown = (t) => this.incidents.onBreakdown(t);
-    this.rail.onArrive = (t, s) => this.passengers.arrive(t, s);
-    this.rail.onLoading = (t, s) => this.passengers.loading(t, s);
+    this.rail.onArrive = (t, s) => this.cargo.arrive(t, s);
+    this.rail.onLoading = (t, s) => this.cargo.loading(t, s);
   }
 
   static create(settings: GameSettings): GameState {
@@ -146,7 +146,7 @@ export class GameState {
   }
 
   private onNewDay(): void {
-    this.passengers.daily();
+    this.cargo.daily();
     this.maintenance.daily();
     this.rail.clearWrecks();
     this.billSharing();
