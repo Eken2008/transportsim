@@ -5,6 +5,7 @@ import {
   roleAllows,
   type Command,
   type ChatChannel,
+  type ClientMessage,
   type CommandResult,
   type GameSettings,
   type GameSpeed,
@@ -133,6 +134,13 @@ class AppClient {
         const p = this.pending.get(m.seq);
         this.pending.delete(m.seq);
         p?.(m);
+        return;
+      }
+      case 'settings': {
+        const room = useApp.getState().room;
+        if (!room) return;
+        if (this.world) Object.assign(this.world.state.settings, m.settings);
+        useApp.setState({ room: { ...room, settings: m.settings } });
         return;
       }
       case 'hostStatus':
@@ -299,6 +307,14 @@ class AppClient {
   exportGame(): void {
     toast('Preparing save file…', 'info', 1500);
     this.conn.send({ t: 'requestSave', export: true });
+  }
+
+  updateSettings(settings: Extract<ClientMessage, { t: 'updateSettings' }>['settings']): void {
+    this.conn.send({ t: 'updateSettings', settings });
+  }
+
+  kick(playerId: number): void {
+    this.conn.send({ t: 'kick', playerId });
   }
 
   chat(text: string, channel: ChatChannel = 'all'): void {

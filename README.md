@@ -2,7 +2,7 @@
 
 A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from OpenTTD, Simutrans and Transport Fever. Players found transport companies, build rail, road, air and sea networks, and carry passengers and goods between towns and industries. They can compete with each other or cooperate.
 
-> Status: **M1 — rail core** is playable.
+> Status: **M2 — companies and multiplayer depth** is playable.
 >
 > - **World:** procedural terrain with towns, roads and houses; terraforming.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels.
@@ -10,10 +10,14 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Signals:** block signals.
 > - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort and gradients; pathfinding, orders and full load; reversing at termini.
 > - **Passengers:** destination-based passengers with payment by distance and journey time.
-> - **Multiplayer:** live multiplayer sync and chat.
+> - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
+> - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table. Three quarters in the red means bankruptcy.
+> - **Competition:** station ratings from service quality; stations that cover the same houses split them by rating.
+> - **Cooperation:** track and station sharing agreements with a fee per train per day.
+> - **Multiplayer:** live multiplayer sync, chat with a company channel, and a news feed. The host can rename the game, change slots and visibility, and remove players.
 > - **Saves:** host-only saves in the browser.
 >
-> See [docs/PLAN.md](docs/PLAN.md) for the roadmap. Multi-member companies and finances (M2) come next.
+> See [docs/PLAN.md](docs/PLAN.md) for the roadmap. Advanced rail (M3: path signals, track types, breakdowns, accidents) comes next.
 
 ## Quick start
 
@@ -50,6 +54,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 
 - The server is **minimal and keeps nothing on disk**. Games live in memory only.
 - The player who creates a game is its **host**. If the host disconnects, the game keeps running for a grace period (60 s by default) so they can reconnect. After that it ends for everyone. If the host chooses *End game*, it ends immediately.
+- Players join **without a company**. They found one, ask to join one (the owner or a manager answers), accept an invitation, or take over a company that has no members. Membership follows the player's name, which is unique within a game, so it carries over when a saved game is resumed.
 - **Saves are stored only in the host's browser** (IndexedDB):
   - When a game starts, the host is asked whether to allow autosaves. Autosaves happen every in-game month, at most once a minute, and the last 3 are kept.
   - The host can also save manually, export saves as `.tsave` files, import them, and host a new game from any save.

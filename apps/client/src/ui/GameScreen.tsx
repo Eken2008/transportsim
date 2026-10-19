@@ -134,9 +134,14 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
       </div>
       <div className="spacer" />
       <div className="panel hud-box">
-        <span className="muted" title={global?.players.map((p) => `${p.name}${p.connected ? '' : ' (away)'}`).join('\n')}>
+        <button
+          className="ghost muted"
+          aria-label="Game and players"
+          title={`Game settings and players\n${global?.players.map((p) => `${p.name}${p.connected ? '' : ' (away)'}`).join('\n') ?? ''}`}
+          onClick={() => openWindow({ kind: 'game', id: 0 })}
+        >
           👥 {online}/{room.settings.maxPlayers}
-        </span>
+        </button>
         <button
           className="ghost mono"
           title="Copy game code"

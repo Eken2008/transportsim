@@ -61,6 +61,8 @@ export class Room {
   private readonly config: ServerConfig;
   private readonly onClosed: (room: Room) => void;
   private readonly clientPlayers = new Map<string, number>();
+  /** Clients the host removed; they can't rejoin. */
+  private readonly banned = new Set<string>();
   private chunkCache = new Map<number, { version: number; bytes: Uint8Array }>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private hostCloseTimer: ReturnType<typeof setTimeout> | null = null;
@@ -110,6 +112,8 @@ export class Room {
       mapWidth: this.state.map.width,
       mapHeight: this.state.map.height,
       year: ymdFromDays(this.state.date).year,
+      timeline: this.state.settings.timeline,
+      economy: this.state.settings.economy,
     };
   }
 
@@ -117,6 +121,7 @@ export class Room {
 
   join(session: Session): string | null {
     if (this.closed) return 'Game has ended';
+    if (this.banned.has(session.clientId)) return 'The host removed you from this game';
     const isHost = session.clientId === this.hostClientId;
     if (!isHost && this.connectedCount >= this.state.settings.maxPlayers) return 'Game is full';
     for (const s of this.sessions) {
@@ -276,6 +281,38 @@ export class Room {
         if (!isHost && !msg.export) return;
         this.sendSave(session, 'manual', msg.export === true);
         return;
+      case 'updateSettings': {
+        if (!isHost || !msg.settings || typeof msg.settings !== 'object') return;
+        const s = this.state.settings;
+        const { name, maxPlayers, isPublic } = msg.settings;
+        if (typeof name === 'string' && name.trim()) s.name = name.replace(/\s+/g, ' ').trim().slice(0, 48);
+        if (typeof maxPlayers === 'number' && Number.isFinite(maxPlayers)) {
+          s.maxPlayers = Math.max(1, Math.min(this.config.maxPlayers, Math.round(maxPlayers)));
+        }
+        if (typeof isPublic === 'boolean') s.isPublic = isPublic;
+        this.broadcast({ t: 'settings', settings: s });
+        return;
+      }
+      case 'kick': {
+        const target = this.state.players.get(msg.playerId);
+        if (!isHost || !target || target.isHost) return;
+        for (const [clientId, id] of this.clientPlayers) {
+          if (id !== target.id) continue;
+          this.banned.add(clientId);
+          this.clientPlayers.delete(clientId);
+        }
+        for (const s of [...this.sessions]) {
+          if (s.player !== target) continue;
+          this.send(s, { t: 'roomClosed', reason: 'The host removed you from the game' });
+          this.sessions.delete(s);
+          s.room = null;
+          s.player = null;
+        }
+        this.state.kickPlayer(target);
+        this.globalDirty = true;
+        this.systemChat(`${target.name} was removed by the host`);
+        return;
+      }
       case 'chat': {
         const text = String(msg.text ?? '').trim().slice(0, 300);
         if (!text) return;

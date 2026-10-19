@@ -378,6 +378,31 @@ try {
   check((await a.locator('.chat-log .company-line').innerText()).includes('Company only'), 'company chat reaches company members');
   await b.screenshot({ path: `${outDir}/04f-chat.png` });
 
+  // A third player joins; the host renames the game and removes them.
+  const ctxC = await browser.newContext({ viewport: { width: 1000, height: 700 } });
+  const c = await ctxC.newPage();
+  await c.goto(`http://localhost:${PORT}/`);
+  await c.getByText('Connected').waitFor({ timeout: 10_000 });
+  await c.getByPlaceholder('Player name').fill('Carl');
+  await c.getByPlaceholder('Game code').fill(code);
+  await c.getByRole('button', { name: 'Join by code' }).click();
+  await c.getByRole('button', { name: /Start or join a company/ }).waitFor({ timeout: 30_000 });
+  await a.getByRole('button', { name: 'Game and players' }).click();
+  const gameWin = a.locator('.window', { hasText: 'Players' });
+  await gameWin.locator('label.field', { hasText: 'Game name' }).locator('input').fill('Renamed railway');
+  await gameWin.getByRole('button', { name: 'Save', exact: true }).click();
+  await a.screenshot({ path: `${outDir}/04h-game.png` });
+  a.once('dialog', (d) => void d.accept());
+  await gameWin.locator('.list-row', { hasText: 'Carl' }).getByRole('button', { name: 'Remove' }).click();
+  await c.getByText(/removed you/).waitFor({ timeout: 5000 });
+  check(true, 'host removed a player');
+  await b.getByRole('button', { name: 'Game and players' }).click();
+  await b.waitForTimeout(300);
+  check((await b.locator('.window', { hasText: 'Players' }).innerText()).includes('Renamed railway'), 'guest sees the renamed game');
+  check(!(await b.locator('.window', { hasText: 'Players' }).innerText()).includes('Carl'), 'removed player is gone from the list');
+  await ctxC.close();
+  while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
+
   // Manual save lands in host IndexedDB
   const savedMoney = await a.locator('.money').innerText();
   await a.getByRole('button', { name: '💾 Save' }).click();

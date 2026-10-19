@@ -939,6 +939,13 @@ details.rating .kv {
   margin-top: 8px;
 }
 
+/* Game window */
+form.host-settings {
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
 /* Track sharing */
 form.propose {
   margin-top: 8px;

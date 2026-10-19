@@ -100,7 +100,7 @@ function JoinCard({ disabled, onBeforeJoin }: { disabled: boolean; onBeforeJoin:
             <div style={{ flex: 1, minWidth: 0 }}>
               <b>{r.name}</b>
               <span className="muted">
-                {r.hostName} · {r.mapWidth}×{r.mapHeight} · {r.year}
+                {r.hostName} · {r.mapWidth}×{r.mapHeight} · {r.year} · {r.timeline === 'era' ? 'eras' : 'sandbox'} · {r.economy} economy
               </span>
             </div>
             <span className="mono muted">

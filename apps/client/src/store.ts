@@ -88,7 +88,8 @@ export type GameWindow =
   | { kind: 'company'; id: 0 }
   | { kind: 'news'; id: 0 }
   | { kind: 'finances'; id: number }
-  | { kind: 'league'; id: 0 };
+  | { kind: 'league'; id: 0 }
+  | { kind: 'game'; id: 0 };
 
 export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
 

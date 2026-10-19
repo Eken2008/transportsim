@@ -535,6 +535,20 @@ export class GameState {
     this.setPlayersCompany(name, null);
   }
 
+  /** The host removed a player: they leave their company, and their requests and invitations go. */
+  kickPlayer(player: Player): void {
+    const c = this.companyOfName(player.name);
+    if (c) {
+      this.removeMember(c, player.name);
+      this.addNews('company', `${player.name} leaves ${c.name}`, { company: c.id });
+    }
+    for (const co of this.companies.values()) {
+      co.requests = co.requests.filter((n) => n !== player.name);
+      co.invites = co.invites.filter((m) => m.name !== player.name);
+    }
+    this.players.delete(player.id);
+  }
+
   /** A player changed their name: membership, requests and invites follow them. */
   renamePlayer(player: Player, name: string): void {
     const old = player.name;

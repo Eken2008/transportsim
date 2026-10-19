@@ -24,6 +24,8 @@ export interface RoomSummary {
   mapWidth: number;
   mapHeight: number;
   year: number;
+  timeline: GameSettings['timeline'];
+  economy: GameSettings['economy'];
 }
 
 export interface GlobalState {
@@ -37,6 +39,9 @@ export interface GlobalState {
 }
 
 export type ChatChannel = 'all' | 'company';
+
+/** Settings the host can change while the game runs. */
+export type LiveSetting = 'name' | 'maxPlayers' | 'isPublic';
 
 // ---- client → server --------------------------------------------------------
 
@@ -56,6 +61,10 @@ export type ClientMessage =
   | { t: 'requestSave'; export?: boolean }
   /** `company` sends to members of the sender's company only. */
   | { t: 'chat'; text: string; channel?: ChatChannel }
+  /** Host only: change lobby-level settings while the game runs. */
+  | { t: 'updateSettings'; settings: Partial<Pick<GameSettings, LiveSetting>> }
+  /** Host only: remove a player from the game (they can't rejoin it). */
+  | { t: 'kick'; playerId: number }
   | { t: 'ping'; at: number };
 
 // ---- server → client --------------------------------------------------------
@@ -90,6 +99,8 @@ export type ServerMessage =
   /** A train was paid at a station (floating "+£" label). */
   | { t: 'income'; tile: number; amount: number }
   | { t: 'global'; global: GlobalState }
+  /** Settings changed by the host during the game. */
+  | { t: 'settings'; settings: GameSettings }
   | { t: 'commandResult'; seq: number; ok: boolean; error?: string; cost?: number }
   /** Host connectivity; when disconnected the room closes at `closesAt` (epoch ms). */
   | { t: 'hostStatus'; connected: boolean; closesAt?: number }

@@ -225,6 +225,36 @@ describe('lobby & rooms', () => {
     lobby.shutdown();
   });
 
+  test('the host changes live settings and removes players, who cannot rejoin', () => {
+    const lobby = new Lobby(CONFIG);
+    const { host, room } = hostGame(lobby);
+    const guest = client(lobby, 'Guest');
+    guest.send({ t: 'joinRoom', roomId: room.id });
+    expect(lobby.publicRooms()[0]).toMatchObject({ timeline: 'era', economy: 'normal' });
+
+    // Only the host changes settings; slots are clamped to the server limit
+    guest.send({ t: 'updateSettings', settings: { name: 'Hijacked' } });
+    expect(room.state.settings.name).not.toBe('Hijacked');
+    host.send({ t: 'updateSettings', settings: { name: '  Renamed  ', maxPlayers: 99, isPublic: false } });
+    expect(room.state.settings).toMatchObject({ name: 'Renamed', maxPlayers: CONFIG.maxPlayers, isPublic: false });
+    expect(guest.conn.last('settings')?.settings.name).toBe('Renamed');
+    expect(lobby.publicRooms()).toHaveLength(0);
+
+    // The guest joins a company, then the host removes them
+    guest.send({ t: 'command', seq: 1, cmd: { type: 'foundCompany', name: 'Guest Co', color: 1 } });
+    const guestId = [...room.state.players.values()].find((p) => p.name === 'Guest')!.id;
+    guest.send({ t: 'kick', playerId: room.state.players.values().next().value!.id });
+    expect(room.state.players.size).toBe(2); // guests can't kick
+    host.send({ t: 'kick', playerId: guestId });
+    expect(guest.conn.last('roomClosed')?.reason).toContain('removed');
+    expect(room.state.players.has(guestId)).toBe(false);
+    expect(room.state.companies.get(0)!.members).toEqual([]);
+    guest.send({ t: 'joinRoom', roomId: room.id });
+    expect(guest.conn.last('error')?.message).toContain('removed');
+    expect(room.sessions.size).toBe(1);
+    lobby.shutdown();
+  });
+
   test('rejects garbage and wrong protocol', () => {
     const lobby = new Lobby(CONFIG);
     const conn = new FakeConn();
