@@ -197,6 +197,7 @@ export class GameState {
       if (ev.newMonth) this.onNewMonth();
       if (ev.newYear) this.onNewYear();
     }
+    this.cargo.tick();
     return ev;
   }
 

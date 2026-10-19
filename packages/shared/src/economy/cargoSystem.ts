@@ -1,3 +1,4 @@
+import { TICKS_PER_DAY } from '../sim/date.ts';
 import { STATION_CATCHMENT, type Station } from '../rail/station.ts';
 import type { GameState } from '../sim/state.ts';
 import { houseType } from '../town/houses.ts';
@@ -357,7 +358,17 @@ export class CargoSystem {
     this.refresh();
     this.scheduleGraph();
     this.produce();
+  }
+
+  /**
+   * Each tick, the stations whose turn it is (by id, so each once a day) update their rating,
+   * shed cargo that can't get anywhere and get new passengers and mail. Spreading this over
+   * the day keeps any one tick short.
+   */
+  tick(): void {
+    const turn = this.state.dayTick;
     for (const st of this.state.stations.values()) {
+      if (st.id % TICKS_PER_DAY !== turn) continue;
       this.updateRating(st);
       // Cargo that can no longer get to its destination drifts away.
       const list = this.packets.get(st.id);

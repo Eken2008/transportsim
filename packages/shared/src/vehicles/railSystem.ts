@@ -180,26 +180,62 @@ export class RailSystem {
    * braking for lower limits ahead of it.
    */
   private trackLimit(t: Train): number {
+    const c = this.limitsOf(t);
+    let lim = c.under;
+    let d = segLength(t.path[0]!) - t.pos;
     const horizon = brakingDistance(t.speed) + 1;
+    for (let i = 0; i < c.ahead.length && d <= horizon; i++) {
+      const l = c.ahead[i]!;
+      if (l < t.speed) lim = Math.min(lim, Math.hypot(l, speedForDistance(d)));
+      d += c.lengths[i]!;
+    }
+    return lim;
+  }
+
+  /**
+   * Speed limits for the track under a train (lowest) and for each segment of the route ahead
+   * as far as it could need to brake from top speed. They only change when the train enters a
+   * segment, replans or the track changes, so they are kept between ticks.
+   */
+  private limitCache = new Map<number, { key: number[]; under: number; ahead: number[]; lengths: number[] }>();
+
+  private limitsOf(t: Train): { under: number; ahead: number[]; lengths: number[] } {
+    const hit = this.limitCache.get(t.id);
+    const k = hit?.key;
+    if (
+      k &&
+      k[0] === t.path[0] &&
+      k[1] === t.path.length &&
+      k[2] === t.route.length &&
+      k[3] === (t.route[0] ?? -1) &&
+      k[4] === t.routeFor &&
+      k[5] === this.state.trackVersion
+    ) {
+      return hit;
+    }
+    const key = [t.path[0]!, t.path.length, t.route.length, t.route[0] ?? -1, t.routeFor, this.state.trackVersion];
+    const horizon = brakingDistance(this.statsOf(t).maxSpeed) + 2;
     // Segments from the tail to the head, then the route ahead up to the braking horizon.
     const seq = t.path.slice().reverse();
     const behind = seq.length;
-    let d = segLength(t.path[0]!) - t.pos;
+    let d = 0;
     for (const s of t.route) {
       if (d > horizon) break;
       seq.push(s);
       d += segLength(s);
     }
     const limits = curveLimits(seq);
-    let lim = Infinity;
-    for (let i = 0; i < behind; i++) lim = Math.min(lim, limits[i]!, this.segLimit(seq[i]!));
-    d = segLength(t.path[0]!) - t.pos;
+    let under = Infinity;
+    for (let i = 0; i < behind; i++) under = Math.min(under, limits[i]!, this.segLimit(seq[i]!));
+    const ahead: number[] = [];
+    const lengths: number[] = [];
     for (let i = behind; i < seq.length; i++) {
-      const l = Math.min(limits[i]!, this.segLimit(seq[i]!));
-      if (l < t.speed) lim = Math.min(lim, Math.hypot(l, speedForDistance(d)));
-      d += segLength(seq[i]!);
+      ahead.push(Math.min(limits[i]!, this.segLimit(seq[i]!)));
+      lengths.push(segLength(seq[i]!));
     }
-    return lim;
+    const out = { key, under, ahead, lengths };
+    this.limitCache.set(t.id, out);
+    return out;
   }
 
   /**
@@ -216,9 +252,11 @@ export class RailSystem {
   /** The consist changed: recompute length, power and so on. */
   invalidateStats(t: Train): void {
     this.stats.delete(t.id);
+    this.limitCache.delete(t.id);
   }
 
   forget(t: Train): void {
+    this.limitCache.delete(t.id);
     this.releaseAll(t);
     this.dropClaims(t);
     this.dropReservations(t);
@@ -864,11 +902,12 @@ export class RailSystem {
     const commit = brakingDistance(t.speed) + 1;
     const running = t.status === 'running';
     const rules = this.state.incidents.rules;
+    const access = this.accessOf(t);
     let pbs = t.pbs === true;
     for (let i = 0; i < t.route.length; i++) {
       const s = t.route[i]!;
       if (d > horizon) return d;
-      if (!segmentsConnect(map, prev, s, this.accessOf(t))) return d; // route went stale
+      if (!segmentsConnect(map, prev, s, access)) return d; // route went stale
       if (this.signalFacing(prev)) {
         const kind = this.signalKind(prev);
         pbs = kind === 'path';
