@@ -8,6 +8,7 @@ import {
   PIECE_EDGES,
   TileType,
   SIGNAL_ONE_WAY,
+  signalKindOf,
   depotExit,
   hasPiece,
   headInfo,
@@ -37,6 +38,10 @@ const DEPOT_DOOR = lin('#2a2d31');
 const SIGNAL_POST = lin('#30343a');
 const SIGNAL_HEAD = lin('#16181b');
 const ONE_WAY_PLATE = lin('#f2f2f2');
+const PATH_HEAD = lin('#23395b');
+const ENTRY_CAP = lin('#f2c94c');
+const EXIT_CAP = lin('#3e8ede');
+const PATH_CAP = lin('#f2f2f2');
 const _foot = new THREE.Vector3();
 const _dir = new THREE.Vector3();
 
@@ -176,7 +181,16 @@ export function addTrack(
           signalPlacement(map, x, y, td, _foot, _dir);
           const f = _foot;
           g.color(SIGNAL_POST).aabb(f.x - 0.018, f.y, f.z - 0.018, f.x + 0.018, f.y + SIGNAL_POST_HEIGHT, f.z + 0.018);
-          g.color(SIGNAL_HEAD).aabb(f.x - 0.045, f.y + SIGNAL_POST_HEIGHT - 0.04, f.z - 0.045, f.x + 0.045, f.y + SIGNAL_POST_HEIGHT + 0.12, f.z + 0.045);
+          const kind = signalKindOf(sig);
+          const top = f.y + SIGNAL_POST_HEIGHT + 0.12;
+          g.color(kind === 'path' ? PATH_HEAD : SIGNAL_HEAD).aabb(f.x - 0.045, f.y + SIGNAL_POST_HEIGHT - 0.04, f.z - 0.045, f.x + 0.045, top, f.z + 0.045);
+          // Kind marker on top of the head: entry yellow, exit blue, combo both, path white.
+          if (kind === 'entry' || kind === 'combo') g.color(ENTRY_CAP).aabb(f.x - 0.05, top, f.z - 0.05, f.x + 0.05, top + 0.025, f.z + 0.05);
+          if (kind === 'exit' || kind === 'combo') {
+            const y0 = kind === 'combo' ? top + 0.025 : top;
+            g.color(EXIT_CAP).aabb(f.x - 0.05, y0, f.z - 0.05, f.x + 0.05, y0 + 0.025, f.z + 0.05);
+          }
+          if (kind === 'path') g.color(PATH_CAP).aabb(f.x - 0.03, top, f.z - 0.03, f.x + 0.03, top + 0.05, f.z + 0.03);
           if (sig & SIGNAL_ONE_WAY) {
             // One-way: white plate below the head.
             g.color(ONE_WAY_PLATE).aabb(f.x - 0.055, f.y + SIGNAL_POST_HEIGHT - 0.17, f.z - 0.055, f.x + 0.055, f.y + SIGNAL_POST_HEIGHT - 0.08, f.z + 0.055);

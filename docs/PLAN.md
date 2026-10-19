@@ -159,6 +159,36 @@ Each part ends with green tests and a commit.
 
    Accident severity is stored now and takes effect with the M3 incident rules. Timeline mode already gates vehicle availability.
 
+### M3 in detail
+Each part ends with green tests and a commit.
+1. **Signal types.**
+   - **Storage:** a signal tile stores its kind in the top bits of the signals layer: block, entry, exit, combo or path. Each kind can also be one-way.
+   - **Pre-signals:** an entry or combo signal is green only if its block is free and at least one exit or combo signal out of that block is green, or if the block has no exit signals.
+   - **Path signals:** a train reserves the pieces of its route up to the next signal or the end of its route. Pieces cross-check for conflicts on the same tile.
+   - **Mixed areas:** a train past a path signal may only enter pieces reserved for it. Block signals treat reserved pieces as occupied. Pathfinding avoids pieces other trains have reserved.
+   - **UI:** signal tool options for each kind, distinct signal heads, and a reservation overlay.
+2. **Track types and electrification.**
+   - **Storage:** a `railType` layer holds standard, electrified or high-speed track, with a speed limit per type.
+   - **Electric traction:** electric engines need electrified track along their whole path.
+   - **Building and conversion:** the build tool picks a type, a convert tool upgrades track for the difference in cost, and the client draws catenary masts and wires.
+3. **Curve and gradient physics, and platform length.**
+   - **Curve limits:** from the run of 45° turns ahead (tight, medium or gentle) and from switches.
+   - **Gradients:** carry the train's mass along its length.
+   - **Bridges and track types:** cap speed.
+   - **Platform length:** trains stop with the whole train on the platform where it fits. A train longer than the platform loads more slowly, and its window warns about it.
+4. **Orders.** Waypoints (buildable single tiles that orders can name, passed without stopping), non-stop orders, timetables (wait times, and lateness shown in the train window), and conditional orders that jump on load, age, reliability or a needed service.
+5. **Breakdowns, servicing and ageing.**
+   - **Reliability:** each engine's reliability decays between services. A breakdown stops a train for a while, and its odds follow reliability and the breakdown setting.
+   - **Servicing:** trains visit a depot for service at an interval.
+   - **Ageing:** vehicles age past their lifespan and lose reliability.
+   - **Renewal:** autorenew replaces old vehicles in a depot, and autoreplace swaps one vehicle type for another.
+6. **Rail accidents.** With accidents on:
+   - two trains meeting on the same piece collide;
+   - a broken-down train's brakes may fail, so it passes a red signal;
+   - with realistic severity, overspeed on tight curves derails a train.
+
+   An accident destroys the trains involved and blocks the tiles for cleanup. The company pays compensation, its station ratings drop, and the news reports it. Level-crossing collisions wait for road vehicles (M5).
+
 ## Key dependencies
 `three`, `react`, `react-dom`, `zustand`, `vite`, `@vitejs/plugin-react`, `msgpackr`, `simplex-noise`, `idb` (a small IndexedDB wrapper) and `concurrently` (to run client and server together in dev). The server uses Bun's built-in `Bun.serve` WebSockets, so it needs no `ws` package, and tests use `bun test`.
 

@@ -19,7 +19,7 @@ import { FloatingText } from './floatingText.ts';
 import { CrossingBooms } from './crossings.ts';
 import { SignalTool } from '../tools/signalTool.ts';
 import { BridgeTool, TunnelTool } from '../tools/structureTools.ts';
-import { TileType } from '@transportsim/shared';
+import { TileType, type Piece } from '@transportsim/shared';
 import { openWindow } from '../store.ts';
 import { OrdersTool } from '../tools/ordersTool.ts';
 import { catchmentRect, rectTiles } from '../game/catchment.ts';
@@ -41,6 +41,9 @@ export class GameRenderer {
   readonly catchment: AreaGhost;
   readonly trains: TrainRenderer;
   readonly signalLights: SignalLights;
+  /** Path reservations overlay (toggled from the signal options). */
+  private readonly reservations: TrackGhost;
+  private reservationsRev = '';
   readonly floaters: FloatingText;
   readonly crossings: CrossingBooms;
   private downAt: { x: number; y: number } | null = null;
@@ -88,6 +91,8 @@ export class GameRenderer {
     this.scene.add(this.trains.root);
     this.signalLights = new SignalLights(world);
     this.scene.add(this.signalLights.mesh);
+    this.reservations = new TrackGhost(world.map);
+    this.scene.add(this.reservations.mesh);
     this.floaters = new FloatingText(canvas.parentElement!, world);
     this.crossings = new CrossingBooms(world);
     this.scene.add(this.crossings.root);
@@ -143,7 +148,12 @@ export class GameRenderer {
         if (s.focus && s.focus !== prev.focus) this.lookAt(s.focus.x + 0.5, s.focus.y + 0.5);
         if (s.tool !== prev.tool) this.setTool(s.tool);
         if (s.catchmentFor !== prev.catchmentFor || s.tool !== prev.tool) this.showStationCatchment();
-        else if (s.stationOpts !== prev.stationOpts || s.bridgeType !== prev.bridgeType || s.signalOneWay !== prev.signalOneWay) {
+        else if (
+          s.stationOpts !== prev.stationOpts ||
+          s.bridgeType !== prev.bridgeType ||
+          s.signalOneWay !== prev.signalOneWay ||
+          s.signalKind !== prev.signalKind
+        ) {
           this.tool?.invalidate?.();
           this.hoverDirty = true;
         }
@@ -152,6 +162,26 @@ export class GameRenderer {
     this.setTool(useApp.getState().tool);
     this.resize();
     this.loop();
+  }
+
+  private updateReservations(): void {
+    const show = useApp.getState().showReservations;
+    const key = show ? `${this.world.signalsRev}` : 'off';
+    if (key === this.reservationsRev) return;
+    this.reservationsRev = key;
+    if (!show) {
+      this.reservations.hide();
+      return;
+    }
+    const w = this.world.map.width;
+    const pieces = this.world.reserved
+      .filter((k) => k % 8 < 6)
+      .map((k) => {
+        const tile = Math.floor(k / 8);
+        return { x: tile % w, y: Math.floor(tile / w), piece: (k % 8) as Piece };
+      });
+    if (pieces.length) this.reservations.show(pieces, '#ffffff');
+    else this.reservations.hide();
   }
 
   private listen(el: EventTarget, type: string, fn: EventListener): void {
@@ -269,6 +299,7 @@ export class GameRenderer {
     this.controller.update(dt);
     this.trains.update(now, useApp.getState().global?.speed ?? 1);
     this.signalLights.update();
+    this.updateReservations();
     this.crossings.update(dt, now, this.controller.target);
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;

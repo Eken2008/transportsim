@@ -7,7 +7,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **World:** procedural terrain with towns, roads and houses; terraforming.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels.
 > - **Stations and depots:** multi-platform stations and depots.
-> - **Signals:** block signals.
+> - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.
 > - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort and gradients; pathfinding, orders and full load; reversing at termini.
 > - **Passengers:** destination-based passengers with payment by distance and journey time.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
@@ -73,7 +73,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | 🚆 menu                                          | Railway tools: track, signals, stations, depots, bridges, tunnels |
 | `4` / `5`                                        | Build / remove railway (drag a route from A to B; it joins existing track; Ctrl removes) |
 | `6` / `7`                                        | Station (`R` rotates) / depot                                 |
-| `9`                                              | Signals: click places, turns round, removes; choose normal or one-way (no passing from behind) |
+| `9`                                              | Signals: click places, turns round, removes; kinds block, entry, exit, combo (pre-signals) and path; one-way; reservation overlay |
 | `B` / `N`                                        | Bridge (drag end to end) / tunnel (click a slope into a hill) |
 | `8`                                              | Bulldoze an area                                             |
 | Click                                            | Open a depot, station (show its catchment) or train (rearrange vehicles in a depot) |

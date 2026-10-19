@@ -32,6 +32,8 @@ export class ClientWorld {
   readonly motions = new Map<number, { m: TrainMotion; at: number }>();
   /** Signal tile → mask of trackdirs showing red (only for tiles near our view). */
   readonly signalRed = new Map<number, number>();
+  /** Path-reserved pieces (tile * 8 + piece) near our view. */
+  reserved: number[] = [];
   signalsRev = 0;
   /** Level crossing tiles in received chunks (for barrier animation). */
   readonly crossings = new Set<number>();
@@ -132,9 +134,10 @@ export class ClientWorld {
     for (const [id, v] of this.motions) if (!seen.has(id) && now - v.at > 1500) this.motions.delete(id);
   }
 
-  applySignals(tiles: number[], red: number[]): void {
+  applySignals(tiles: number[], red: number[], reserved: number[]): void {
     this.signalRed.clear();
     tiles.forEach((t, i) => this.signalRed.set(t, red[i]!));
+    this.reserved = reserved;
     this.signalsRev++;
   }
 

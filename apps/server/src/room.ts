@@ -455,10 +455,17 @@ export class Room {
         tiles.push(tile);
         red.push(mask);
       }
-      const key = tiles.join(',') + '|' + red.join(',');
+      const reserved: number[] = [];
+      for (const k of rail.reservedPieces()) {
+        const tile = Math.floor(k / 8);
+        const x = tile % map.width;
+        const chunk = Math.floor((tile - x) / map.width / CHUNK_SIZE) * map.chunksX + Math.floor(x / CHUNK_SIZE);
+        if (s.subscribed.has(chunk)) reserved.push(k);
+      }
+      const key = tiles.join(',') + '|' + red.join(',') + '|' + reserved.join(',');
       if (key === s.lastSignals) continue;
       s.lastSignals = key;
-      this.send(s, { t: 'signals', tiles, red });
+      this.send(s, { t: 'signals', tiles, red, reserved });
     }
   }
 

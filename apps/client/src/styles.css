@@ -939,6 +939,17 @@ details.rating .kv {
   margin-top: 8px;
 }
 
+/* Signal options */
+.tool-options.wrap {
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: calc(100% - 20px);
+}
+.tool-options .seg {
+  display: flex;
+  gap: 4px;
+}
+
 /* Game window */
 form.host-settings {
   padding-bottom: 4px;

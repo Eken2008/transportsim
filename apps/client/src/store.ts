@@ -1,4 +1,4 @@
-import type { ChatChannel, GameSettings, GlobalState, NewsItem, RoomSummary, ServerLimits } from '@transportsim/shared';
+import type { ChatChannel, GameSettings, GlobalState, NewsItem, RoomSummary, ServerLimits, SignalKind } from '@transportsim/shared';
 import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
@@ -69,6 +69,10 @@ export interface AppState {
   bridgeType: number | null;
   /** Signal tool places one-way signals (no passing from behind). */
   signalOneWay: boolean;
+  /** Kind of signal the signal tool places. */
+  signalKind: SignalKind;
+  /** Draw path reservations on the track. */
+  showReservations: boolean;
   /** Station whose catchment area is shown (toggled from its window). */
   catchmentFor: number | null;
   /** Bumped when train details change, so windows re-render. */
@@ -124,6 +128,8 @@ export const useApp = create<AppState>(() => ({
   stationOpts: { axis: 0, platforms: 2, length: 5 },
   bridgeType: null,
   signalOneWay: false,
+  signalKind: 'block',
+  showReservations: false,
   catchmentFor: null,
   trainsRev: 0,
   ordersFor: null,

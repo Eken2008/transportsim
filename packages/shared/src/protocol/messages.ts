@@ -94,8 +94,11 @@ export type ServerMessage =
   | { t: 'trains'; trains: TrainInfo[]; removed: number[]; full: boolean }
   /** Positions of trains near the client's subscribed chunks (~10 Hz). */
   | { t: 'trainPos'; trains: TrainMotion[] }
-  /** Aspects of signals in subscribed chunks: `red[i]` is the red-trackdir mask of `tiles[i]`. */
-  | { t: 'signals'; tiles: number[]; red: number[] }
+  /**
+   * Aspects of signals in subscribed chunks: `red[i]` is the red-trackdir mask of `tiles[i]`.
+   * `reserved` lists path-reserved pieces (tile * 8 + piece) in those chunks.
+   */
+  | { t: 'signals'; tiles: number[]; red: number[]; reserved: number[] }
   /** A train was paid at a station (floating "+£" label). */
   | { t: 'income'; tile: number; amount: number }
   | { t: 'global'; global: GlobalState }

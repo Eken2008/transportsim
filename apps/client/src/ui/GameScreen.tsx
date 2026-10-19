@@ -4,8 +4,10 @@ import {
   GAME_SPEEDS,
   MAX_PLATFORMS,
   MAX_PLATFORM_LENGTH,
+  SIGNAL_KINDS,
   formatDate,
   type GameSpeed,
+  type SignalKind,
 } from '@transportsim/shared';
 import { useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
@@ -287,19 +289,37 @@ function Toolbar() {
   );
 }
 
+const SIGNAL_HELP: Record<SignalKind, string> = {
+  block: 'Green when the block beyond is empty',
+  entry: 'Pre-signal: like block, but also needs a green exit signal out of its block (e.g. into a station with free platforms)',
+  exit: 'Pre-signal: a block signal that entry signals before it look at',
+  combo: 'Pre-signal: both entry and exit, for chains of pre-signals',
+  path: 'Lets a train in when it can reserve its route to the next signal; trains on paths that do not cross can share a block',
+};
+
 function SignalOptions() {
   const tool = useApp((s) => s.tool);
   const oneWay = useApp((s) => s.signalOneWay);
+  const kind = useApp((s) => s.signalKind);
+  const showRes = useApp((s) => s.showReservations);
   if (tool !== 'signal') return null;
   return (
-    <div className="panel tool-options" role="radiogroup" aria-label="Signal type">
-      <span className="muted">Signal</span>
-      <button className={!oneWay ? 'primary' : ''} aria-pressed={!oneWay} onClick={() => useApp.setState({ signalOneWay: false })} title="Controls trains travelling its way; trains from behind pass freely">
-        Normal
-      </button>
-      <button className={oneWay ? 'primary' : ''} aria-pressed={oneWay} onClick={() => useApp.setState({ signalOneWay: true })} title="Like a normal signal, but trains may not pass it from behind">
+    <div className="panel tool-options wrap">
+      <div className="seg" role="radiogroup" aria-label="Signal kind">
+        {SIGNAL_KINDS.map((k) => (
+          <button key={k} className={kind === k ? 'primary' : ''} aria-pressed={kind === k} title={SIGNAL_HELP[k]} onClick={() => useApp.setState({ signalKind: k })}>
+            {k[0]!.toUpperCase() + k.slice(1)}
+          </button>
+        ))}
+      </div>
+      <label className="row" title="Trains may not pass it from behind">
+        <input type="checkbox" checked={oneWay} onChange={(e) => useApp.setState({ signalOneWay: e.target.checked })} />
         One-way
-      </button>
+      </label>
+      <label className="row" title="Draw the paths trains have reserved through path signals">
+        <input type="checkbox" checked={showRes} onChange={(e) => useApp.setState({ showReservations: e.target.checked })} />
+        Show reservations
+      </label>
     </div>
   );
 }

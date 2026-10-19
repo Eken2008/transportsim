@@ -1,4 +1,14 @@
-import { SIGNAL_ONE_WAY, TileType, hasPiece, nearestPiece, type Command, type PlacedPiece, type Piece } from '@transportsim/shared';
+import {
+  SIGNAL_ONE_WAY,
+  TileType,
+  hasPiece,
+  nearestPiece,
+  signalKindOf,
+  type Command,
+  type PlacedPiece,
+  type Piece,
+  type SignalKind,
+} from '@transportsim/shared';
 import { client } from '../net/client.ts';
 import type { TerrainHit } from '../render/picking.ts';
 import type { TrackGhost } from '../render/trackGhost.ts';
@@ -7,15 +17,15 @@ import type { Modifiers, Tool } from './tool.ts';
 
 /**
  * Click plain track to place a signal facing one way, click again to turn it round, a third
- * time to remove it. The options panel chooses normal or one-way signals; clicking a signal
- * of the other type converts it. Ctrl-click removes.
+ * time to remove it. The options panel chooses the kind and one-way; clicking a signal of
+ * another kind converts it. Ctrl-click removes.
  */
 export class SignalTool implements Tool {
   private lastKey = '';
 
   constructor(private readonly ghost: TrackGhost) {}
 
-  private target(hit: TerrainHit): { piece: PlacedPiece; dirs: number; oneWay: boolean; label: string } | null {
+  private target(hit: TerrainHit): { piece: PlacedPiece; dirs: number; oneWay: boolean; kind: SignalKind; label: string } | null {
     const map = client.world?.map;
     if (!map) return null;
     const i = map.tileIndex(hit.tileX, hit.tileY);
@@ -25,28 +35,28 @@ export class SignalTool implements Tool {
     if (!hasPiece(bits, piece)) return null;
     const sig = map.layers.signals[i]!;
     const current = (sig >> (piece * 2)) & 3;
-    const oneWay = useApp.getState().signalOneWay;
-    const kind = oneWay ? 'one-way signal' : 'signal';
+    const { signalOneWay: oneWay, signalKind: kind } = useApp.getState();
+    const name = `${oneWay ? 'one-way ' : ''}${kind === 'block' ? '' : `${kind} `}signal`;
     let dirs: number;
     let label: string;
-    if (current !== 0 && ((sig & SIGNAL_ONE_WAY) !== 0) !== oneWay) {
+    if (current !== 0 && (((sig & SIGNAL_ONE_WAY) !== 0) !== oneWay || signalKindOf(sig) !== kind)) {
       dirs = current;
-      label = `Click: change to ${kind}`;
+      label = `Click: change to ${name}`;
     } else if (current === 0) {
       dirs = 1;
-      label = `Click: place ${kind}`;
+      label = `Click: place ${name}`;
     } else if (current === 1) {
       dirs = 2;
-      label = `Click: turn ${kind} around`;
+      label = `Click: turn ${name} around`;
     } else {
       dirs = 0;
       label = 'Click: remove signal';
     }
-    return { piece: { x: hit.tileX, y: hit.tileY, piece }, dirs, oneWay, label };
+    return { piece: { x: hit.tileX, y: hit.tileY, piece }, dirs, oneWay, kind, label };
   }
 
   private command(t: NonNullable<ReturnType<SignalTool['target']>>, mods: Modifiers): Command {
-    return { type: 'setSignal', x: t.piece.x, y: t.piece.y, piece: t.piece.piece, dirs: mods.ctrl ? 0 : t.dirs, oneWay: t.oneWay };
+    return { type: 'setSignal', x: t.piece.x, y: t.piece.y, piece: t.piece.piece, dirs: mods.ctrl ? 0 : t.dirs, oneWay: t.oneWay, kind: t.kind };
   }
 
   onHover(hit: TerrainHit | null, mods: Modifiers): void {

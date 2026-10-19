@@ -278,9 +278,22 @@ try {
   await a.screenshot({ path: `${outDir}/04a-curve.png` });
   // One-way signal
   await a.keyboard.press('Digit9');
-  await a.getByRole('button', { name: 'One-way' }).click();
+  await a.getByLabel('One-way').check();
   await clickTile(sx - 8, sy - 4);
   check(((await tileAt(sx - 8, sy - 4)).signals & 0x1000) !== 0, 'placed a one-way signal');
+  await a.getByLabel('One-way').uncheck();
+  await a.getByRole('button', { name: 'Path', exact: true }).click();
+  await clickTile(sx - 9, sy - 4);
+  check((await tileAt(sx - 9, sy - 4)).signals >> 13 === 4, 'placed a path signal');
+  await a.getByRole('button', { name: 'Entry', exact: true }).click();
+  await clickTile(sx + 3, sy - 4);
+  check((await tileAt(sx + 3, sy - 4)).signals >> 13 === 1, 'placed an entry signal');
+  await a.getByLabel('Show reservations').check();
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 7, y: s.y - 4, yaw: 0.5, pitch: 0.6, distance: 9 }), { x: sx, y: sy });
+  await a.waitForTimeout(2000);
+  await a.screenshot({ path: `${outDir}/04a2-signals.png` });
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y, yaw: 0.35, pitch: 1.05, distance: 34 }), { x: sx, y: sy });
+  await a.waitForTimeout(1000);
   await a.keyboard.press('Escape');
   // Level crossing over a town road
   const spot = await hook((h, s: { x: number; y: number }) => (h as unknown as { findCrossingSpot(x: number, y: number): { x: number; y: number; piece: number } | null }).findCrossingSpot(s.x, s.y), spawn);

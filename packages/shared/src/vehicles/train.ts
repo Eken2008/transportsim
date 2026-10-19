@@ -59,6 +59,8 @@ export interface Train {
   profitLastYear: number;
   /** Station of the last stop (for "last visited" UI and cargo bookkeeping). */
   lastStation: number;
+  /** Passed a path signal (and no block signal since): may only enter pieces reserved for it. */
+  pbs?: boolean;
 }
 
 export interface TrainStats {

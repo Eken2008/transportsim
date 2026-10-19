@@ -27,6 +27,7 @@ import {
 import { TICKS_PER_DAY, TICKS_PER_SECOND } from '../sim/date.ts';
 import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
+import { signalKindOf, type SignalKind } from '../commands/signals.ts';
 import { PASSENGER_MASS, cargoCount, trainStats, type Train, type TrainMotion, type TrainStats } from './train.ts';
 
 /** km/h corresponding to 1 tile per second. Sets the game's sense of scale. */
@@ -78,6 +79,12 @@ export class RailSystem {
   private blockUse = new Map<number, Map<number, number>>();
   /** block → train that has committed to entering it past a green signal */
   private claims = new Map<number, number>();
+  /** Path reservations: pieceKey → train. */
+  private reserved = new Map<number, number>();
+  /** block → (train → reserved pieces in the block) */
+  private blockRes = new Map<number, Map<number, number>>();
+  /** block → segments leaving it through an exit or combo signal (for entry signals). */
+  private blockExits = new Map<number, number[]>();
   /** Called when a train arrives at a platform (cargo handling hooks in here). */
   onArrive: ((t: Train, station: number) => void) | null = null;
   /** Called every tick while loading; return true to keep waiting (e.g. full load). */
@@ -99,6 +106,7 @@ export class RailSystem {
   forget(t: Train): void {
     this.releaseAll(t);
     this.dropClaims(t);
+    this.dropReservations(t);
     this.stats.delete(t.id);
   }
 
@@ -156,6 +164,7 @@ export class RailSystem {
     if (t.path.some((p) => pieceKey(p) === k) || !set.delete(t.id)) return;
     if (set.size === 0) this.occ.delete(k);
     this.leaveBlockPiece(t, k);
+    if (this.reserved.get(k) === t.id) this.unreserve(k);
   }
 
   private leaveBlockPiece(t: Train, k: number): void {
@@ -186,12 +195,110 @@ export class RailSystem {
     }
   }
 
-  /** Rebuild occupancy from scratch (after loading a save). */
+  /** Rebuild occupancy from scratch (after loading a save, or when blocks change). */
   rebuildOccupancy(): void {
     this.occ.clear();
     this.blockUse.clear();
     this.claims.clear();
     for (const t of this.state.trains.values()) for (const s of t.path) this.occupy(t, s);
+    this.blockRes.clear();
+    for (const [k, id] of this.reserved) this.countReservation(k, id, 1);
+  }
+
+  // ---- path reservations -------------------------------------------------------
+
+  private countReservation(k: number, id: number, delta: number): void {
+    const b = this.blockOf.get(k);
+    if (b === undefined) return;
+    let use = this.blockRes.get(b);
+    if (!use) this.blockRes.set(b, (use = new Map()));
+    const n = (use.get(id) ?? 0) + delta;
+    if (n > 0) use.set(id, n);
+    else use.delete(id);
+    if (use.size === 0) this.blockRes.delete(b);
+  }
+
+  private unreserve(k: number): void {
+    const id = this.reserved.get(k);
+    if (id === undefined) return;
+    this.reserved.delete(k);
+    this.countReservation(k, id, -1);
+  }
+
+  /** Drop a train's reservations, except (with `keepPath`) those under the train. */
+  private dropReservations(t: Train, keepPath = false): void {
+    const keep = keepPath ? new Set(t.path.map(pieceKey)) : null;
+    for (const [k, id] of [...this.reserved]) if (id === t.id && !keep?.has(k)) this.unreserve(k);
+  }
+
+  reservedBy(s: number): number | undefined {
+    return this.reserved.get(pieceKey(s));
+  }
+
+  /** Reserved piece keys (tile * 8 + piece), for the reservation overlay. */
+  reservedPieces(): IterableIterator<number> {
+    return this.reserved.keys();
+  }
+
+  /** Is the piece of `s` (or a piece crossing it) occupied or reserved by another train? */
+  private pieceConflict(s: number, id: number): boolean {
+    if (this.occupiedByOther(s, id)) return true;
+    const tile = segTile(s);
+    const p = segPiece(s);
+    if (p >= 6) {
+      const r = this.reserved.get(tile * 8 + p);
+      return r !== undefined && r !== id;
+    }
+    const bits = this.state.map.layers.track[tile]!;
+    for (let q = 0; q < 6; q++) {
+      if (!hasPiece(bits, q) || (q !== p && q === PARALLEL_PIECE[p])) continue;
+      const r = this.reserved.get(tile * 8 + q);
+      if (r !== undefined && r !== id) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The stretch of route a path signal (or a train inside a path-signalled area) must reserve
+   * from route index `i`: up to and including the next segment with a signal facing the train,
+   * or to the end of the route.
+   */
+  private runFrom(t: Train, i: number): number[] {
+    const run: number[] = [];
+    for (let k = i; k < t.route.length; k++) {
+      const s = t.route[k]!;
+      run.push(s);
+      if (this.signalFacing(s)) break;
+    }
+    return run;
+  }
+
+  private canReserve(run: readonly number[], id: number): boolean {
+    for (const s of run) {
+      if (this.pieceConflict(s, id)) return false;
+      const b = this.blockOf.get(pieceKey(s));
+      // A train that entered past a block signal may go anywhere in its block.
+      const c = b === undefined ? undefined : this.claims.get(b);
+      if (c !== undefined && c !== id) return false;
+    }
+    return true;
+  }
+
+  private reserve(run: readonly number[], t: Train): void {
+    for (const s of run) {
+      const k = pieceKey(s);
+      if (this.reserved.get(k) === t.id) continue;
+      this.reserved.set(k, t.id);
+      this.countReservation(k, t.id, 1);
+    }
+  }
+
+  /** Reserve the run from route index `i` if possible (`commit`), or just test it. */
+  private tryReserve(t: Train, i: number, commit: boolean): boolean {
+    const run = this.runFrom(t, i);
+    if (run.length === 0 || !this.canReserve(run, t.id)) return false;
+    if (commit) this.reserve(run, t);
+    return true;
   }
 
   // ---- signal blocks -------------------------------------------------------------
@@ -281,6 +388,20 @@ export class RailSystem {
         }
       }
     }
+    this.blockExits.clear();
+    const sigs = map.layers.signals;
+    for (const tile of this.state.signalTiles) {
+      const kind = signalKindOf(sigs[tile]!);
+      if (kind !== 'exit' && kind !== 'combo') continue;
+      for (let td = 0; td < 12; td++) {
+        if (!((sigs[tile]! >> td) & 1)) continue;
+        const b = this.blockOf.get(tile * 8 + (td >> 1));
+        if (b === undefined) continue;
+        const list = this.blockExits.get(b);
+        if (list) list.push(seg(tile, td));
+        else this.blockExits.set(b, [seg(tile, td)]);
+      }
+    }
     this.blocksFor = this.state.trackVersion;
     this.rebuildOccupancy();
   }
@@ -296,17 +417,46 @@ export class RailSystem {
     const use = this.blockUse.get(b);
     if (use) for (const id of use.keys()) if (id !== except) return true;
     const c = this.claims.get(b);
-    return c !== undefined && c !== except;
+    if (c !== undefined && c !== except) return true;
+    const res = this.blockRes.get(b);
+    if (res) for (const id of res.keys()) if (id !== except) return true;
+    return false;
+  }
+
+  signalKind(s: number): SignalKind {
+    return signalKindOf(this.state.map.layers.signals[segTile(s)]!);
+  }
+
+  /**
+   * Would a non-path signal of `kind` let a train (`except`) into block `b`? Entry and combo
+   * signals also need a green exit (or combo) signal out of the block, if it has any.
+   */
+  private blockGreen(b: number | undefined, except: number, kind: SignalKind, depth = 0): boolean {
+    if (b === undefined) return true;
+    if (this.blockBusy(b, except)) return false;
+    if (kind !== 'entry' && kind !== 'combo') return true;
+    const exits = this.blockExits.get(b);
+    if (!exits?.length || depth > 8) return true;
+    return exits.some((e) => this.exitGreen(e, depth + 1));
+  }
+
+  /** Is the exit (or combo) signal at the end of segment `e` green for an unknown train? */
+  private exitGreen(e: number, depth: number): boolean {
+    const kind = this.signalKind(e);
+    return nextSegments(this.state.map, e, this.state.blockAccess).every((n) =>
+      this.blockGreen(this.blockOf.get(pieceKey(n)), -1, kind === 'combo' ? 'combo' : 'block', depth),
+    );
   }
 
   /** Red if the block beyond the signal on this tile/trackdir is occupied or claimed. */
   signalRed(tile: number, td: number): boolean {
     this.ensureBlocks();
-    for (const n of nextSegments(this.state.map, seg(tile, td), this.state.blockAccess)) {
-      const b = this.blockOf.get(pieceKey(n));
-      if (b !== undefined && this.blockBusy(b, -1)) return true;
-    }
-    return false;
+    const s = seg(tile, td);
+    const next = nextSegments(this.state.map, s, this.state.blockAccess);
+    const kind = this.signalKind(s);
+    // Path signals show red until a train reserves a path through them.
+    if (kind === 'path') return !next.some((n) => this.reserved.has(pieceKey(n)));
+    return !next.every((n) => this.blockGreen(this.blockOf.get(pieceKey(n)), -1, kind));
   }
 
   depotHasVehicles(tile: number): boolean {
@@ -350,6 +500,7 @@ export class RailSystem {
     t.path = [s];
     t.pos = 0;
     t.depot = -1;
+    t.pbs = false;
     this.occupy(t, s);
     this.state.dirtyTrains.add(t.id);
   }
@@ -379,6 +530,7 @@ export class RailSystem {
     t.routeFor = '';
     t.speed = 0;
     this.dropClaims(t);
+    this.dropReservations(t, true);
     return true;
   }
 
@@ -475,16 +627,29 @@ export class RailSystem {
     let d = segLength(t.path[0]!) - t.pos;
     let prev = t.path[0]!;
     const commit = brakingDistance(t.speed) + 1;
-    for (const s of t.route) {
+    const running = t.status === 'running';
+    let pbs = t.pbs === true;
+    for (let i = 0; i < t.route.length; i++) {
+      const s = t.route[i]!;
       if (d > horizon) return d;
       if (!segmentsConnect(map, prev, s, this.state.accessFor(t.owner))) return d; // route went stale
       if (this.signalFacing(prev)) {
-        const b = this.blockOf.get(pieceKey(s));
-        if (b !== undefined) {
-          if (this.blockBusy(b, t.id)) return d - SAFETY_MARGIN;
-          // Close enough that we will pass: reserve the block so nobody else enters.
-          if (d <= commit && t.status === 'running') this.claims.set(b, t.id);
+        const kind = this.signalKind(prev);
+        pbs = kind === 'path';
+        if (pbs) {
+          // Close enough that we will pass: reserve the path to the next signal.
+          if (this.reservedBy(s) !== t.id && !this.tryReserve(t, i, d <= commit && running)) return d - SAFETY_MARGIN;
+        } else {
+          const b = this.blockOf.get(pieceKey(s));
+          if (b !== undefined && this.claims.get(b) !== t.id) {
+            if (!this.blockGreen(b, t.id, kind)) return d - SAFETY_MARGIN;
+            // Close enough that we will pass: claim the block so nobody else enters.
+            if (d <= commit && running) this.claims.set(b, t.id);
+          }
         }
+      } else if (pbs && this.reservedBy(s) !== t.id) {
+        // Inside a path-signalled area: keep the way ahead reserved.
+        if (!this.tryReserve(t, i, d <= commit && running)) return d - SAFETY_MARGIN;
       }
       if (this.occupiedByOther(s, t.id)) return d - SAFETY_MARGIN;
       d += segLength(s);
@@ -507,12 +672,13 @@ export class RailSystem {
         next === undefined ||
         !segmentsConnect(map, head, next, this.state.accessFor(t.owner)) ||
         this.occupiedByOther(next, t.id) ||
-        (this.signalFacing(head) && this.blockBusy(this.blockOf.get(pieceKey(next)) ?? -1, t.id))
+        !this.mayEnter(t, head, next)
       ) {
         t.pos = segLength(head);
         t.speed = 0;
         break;
       }
+      if (this.signalFacing(head)) t.pbs = this.signalKind(head) === 'path';
       t.route.shift();
       t.path.unshift(next);
       this.occupy(t, next);
@@ -520,6 +686,18 @@ export class RailSystem {
       dist -= room;
     }
     this.trimTail(t);
+  }
+
+  /** May the head move from `head` onto `next` (route[0])? Signals and reservations decide. */
+  private mayEnter(t: Train, head: number, next: number): boolean {
+    if (this.signalFacing(head)) {
+      const kind = this.signalKind(head);
+      if (kind === 'path') return this.reservedBy(next) === t.id || this.tryReserve(t, 0, true);
+      const b = this.blockOf.get(pieceKey(next));
+      return b === undefined || this.claims.get(b) === t.id || this.blockGreen(b, t.id, kind);
+    }
+    if (t.pbs && this.reservedBy(next) !== t.id) return this.tryReserve(t, 0, true);
+    return true;
   }
 
   private trimTail(t: Train): void {
@@ -559,6 +737,8 @@ export class RailSystem {
   enterDepot(t: Train, tile: number): void {
     this.releaseAll(t);
     this.dropClaims(t);
+    this.dropReservations(t);
+    t.pbs = false;
     t.path = [];
     t.route = [];
     t.pos = 0;
@@ -611,7 +791,12 @@ export class RailSystem {
       return;
     }
     const map = this.state.map;
-    const penalty = (s: number) => (this.occupiedByOther(s, t.id) ? 6 : 0);
+    this.dropReservations(t, true);
+    const penalty = (s: number) => {
+      if (this.occupiedByOther(s, t.id)) return 6;
+      const r = this.reserved.get(pieceKey(s));
+      return r !== undefined && r !== t.id ? 4 : 0;
+    };
     const access = this.state.accessFor(t.owner);
     let path = findPath(map, t.path[0]!, goal, { access, penalty });
     if (!path && t.speed < 0.5) {

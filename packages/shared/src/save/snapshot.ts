@@ -238,5 +238,6 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
     profitThisYear: num(t.profitThisYear, 0),
     profitLastYear: num(t.profitLastYear, 0),
     lastStation: num(t.lastStation, -1),
+    pbs: t.pbs === true,
   };
 }
