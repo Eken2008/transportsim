@@ -79,7 +79,8 @@ export type GameWindow =
   | { kind: 'train'; id: number }
   | { kind: 'depot'; id: number }
   | { kind: 'station'; id: number }
-  | { kind: 'trains'; id: 0 };
+  | { kind: 'trains'; id: 0 }
+  | { kind: 'company'; id: 0 };
 
 export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
 

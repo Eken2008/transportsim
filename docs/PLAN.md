@@ -127,6 +127,38 @@ The game also has chat, a news feed and statistics graphs.
 
 Implementation starts with **M0 and then M1**. Later milestones are planned in detail when they begin.
 
+### M2 in detail
+Each part ends with green tests and a commit.
+1. **Companies with members and roles.** Players join a game without a company and choose one of three options: found a company, ask to join one, or spectate.
+   - **Members and roles:** each member is stored by name with a role: owner, manager, operator or viewer.
+   - **Permissions:** every command declares the permission it needs. Building and buying need manager or owner. Driving trains and setting orders need operator or higher. Membership and company settings need the owner.
+   - **Membership commands:** found, request, invite, answer a request, set a role (handing over ownership), remove a member, leave, rename and recolour.
+   - **Abandoned companies:** a company left without members can be adopted by the next player who asks to join.
+   - **Names:** names are unique within a game, because membership follows the name across saves.
+2. **News and chat.** A shared news feed covers companies founded and joined, a station's first train, finance warnings and agreements. The client shows a ticker and a news history window. Chat gains a company-only channel.
+3. **Finances and loans.**
+   - **Ledger:** a per-company ledger records income and expenses by category for each quarter and keeps a few years of history.
+   - **Loans:** companies borrow and repay in steps up to a maximum loan, and the interest rate depends on difficulty.
+   - **Maintenance:** track, stations and depots cost money every month.
+   - **Bankruptcy:** a company with a negative balance at the end of a quarter gets warnings. After the third quarter in a row it goes bankrupt, and its vehicles and infrastructure are removed.
+   - **UI:** a finances window and a company league table.
+4. **Station ratings and competition.** A station's rating has these parts:
+   - days since the last pickup;
+   - cargo waiting;
+   - the speed of the last train;
+   - the age of the last vehicle;
+   - a bonus for new stations.
+
+   Houses covered by several stations send their passengers to the best-rated ones, split in proportion to rating. The station window shows how the rating is made up.
+5. **Track and station sharing agreements.** One company offers another access to its track (optionally with its stations) for a fee per train per day spent on that infrastructure. The other company accepts, and either side can cancel.
+   - **Linking:** track links across owners.
+   - **Access checks:** pathfinding, signals and orders check access through a per-company table.
+   - **Billing:** fees are counted per tick and billed daily.
+   - **Cancelling:** a cancelled agreement makes trains that are still on the other company's track head home.
+6. **Game settings and moderation.** A game info window shows the settings, and the host can change slots and visibility during the game and remove players. The lobby lists timeline and economy.
+
+   Accident severity is stored now and takes effect with the M3 incident rules. Timeline mode already gates vehicle availability.
+
 ## Key dependencies
 `three`, `react`, `react-dom`, `zustand`, `vite`, `@vitejs/plugin-react`, `msgpackr`, `simplex-noise`, `idb` (a small IndexedDB wrapper) and `concurrently` (to run client and server together in dev). The server uses Bun's built-in `Bun.serve` WebSockets, so it needs no `ws` package, and tests use `bun test`.
 

@@ -59,6 +59,15 @@ try {
   await a.getByText('Allow autosaves?').waitFor({ timeout: 30_000 });
   check(true, 'host sees autosave consent prompt');
   await a.getByRole('button', { name: 'Allow autosaves' }).click();
+  // Players join without a company; the company window opens so they can found or join one.
+  const companyWin = a.locator('.window', { hasText: 'Found a company' });
+  await companyWin.waitFor({ timeout: 5000 });
+  check(true, 'company window opens for a player without a company');
+  await companyWin.getByRole('textbox', { name: 'Company name' }).fill('Alice Rail');
+  await companyWin.getByRole('button', { name: 'Found', exact: true }).click();
+  await a.locator('.money').waitFor({ timeout: 5000 });
+  check((await a.locator('.hud-box').first().innerText()).includes('Alice Rail'), 'founded a company');
+  await a.locator('.window button[aria-label="Close"]').click();
   await a.waitForTimeout(4000);
   await a.screenshot({ path: `${outDir}/02-game.png` });
   const chunks = Number((await a.locator('.statusbar').innerText()).match(/(\d+) chunks/)?.[1] ?? 0);
@@ -304,6 +313,19 @@ try {
   check(await b.getByText('Allow autosaves?').count() === 0, 'guest is not asked about autosaves');
   await b.screenshot({ path: `${outDir}/04-guest.png` });
   check((await a.locator('.chat-log').innerText()).includes('Bob joined'), 'host sees guest join message');
+
+  // Bob asks to join Alice's company; Alice accepts him as a manager.
+  await b.locator('.window', { hasText: 'Join a company' }).getByRole('button', { name: 'Ask to join' }).click();
+  await a.getByText('Bob asks to join').waitFor({ timeout: 5000 });
+  await a.locator('.company-btn').click();
+  const members = a.locator('.window', { hasText: 'Asking to join' });
+  await members.getByRole('combobox', { name: 'Role for Bob' }).selectOption('manager');
+  await members.getByRole('button', { name: 'Accept' }).click();
+  await b.getByText('You joined Alice Rail as manager').waitFor({ timeout: 5000 });
+  check((await b.locator('.hud-box').first().innerText()).includes('Alice Rail'), 'guest joined the host company as a manager');
+  await a.screenshot({ path: `${outDir}/04e-company.png` });
+  while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
+  while ((await b.locator('.window').count()) > 0) await b.locator('.window button[aria-label="Close"]').first().click();
 
   // Chat round trip
   await b.getByPlaceholder(/Say something/).fill('Hello from Bob');

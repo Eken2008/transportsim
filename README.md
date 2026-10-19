@@ -73,6 +73,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `8`                                              | Bulldoze an area                                             |
 | Click                                            | Open a depot, station (show its catchment) or train (rearrange vehicles in a depot) |
 | `T`                                              | Train list                                                   |
+| `C`                                              | Company: found or join one, members, roles, invitations      |
 | `Esc`                                            | Deselect tool        |
 | `Space`                                          | Pause (host only)    |
 | `?`                                              | Help                 |

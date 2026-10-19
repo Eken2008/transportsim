@@ -4,9 +4,11 @@ import {
   cargoCount,
   isAvailable,
   railVehicle,
+  roleAllows,
   segTile,
   trainStats,
   ymdFromDays,
+  type CompanyRole,
   type TrainInfo,
 } from '@transportsim/shared';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -14,9 +16,10 @@ import { client } from '../net/client.ts';
 import { closeWindow, openWindow, toast, useApp, windowKey, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
 import { catchmentRect, residentsIn } from '../game/catchment.ts';
+import { CompanyWindow } from './CompanyWindow.tsx';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
-function useTick(ms: number): void {
+export function useTick(ms: number): void {
   const [, set] = useState(0);
   useEffect(() => {
     const id = setInterval(() => set((n) => n + 1), ms);
@@ -25,12 +28,20 @@ function useTick(ms: number): void {
 }
 
 function useMyCompany(): number | null {
-  const room = useApp((s) => s.room);
-  const global = useApp((s) => s.global);
-  return global?.players.find((p) => p.id === room?.playerId)?.companyId ?? null;
+  return useMyRole().companyId;
 }
 
-function act(cmd: Parameters<typeof client.command>[0]): void {
+/** The local player's company and role in it. */
+export function useMyRole(): { companyId: number | null; role: CompanyRole | null } {
+  const room = useApp((s) => s.room);
+  const global = useApp((s) => s.global);
+  const me = global?.players.find((p) => p.id === room?.playerId);
+  const company = global?.companies.find((c) => c.id === me?.companyId);
+  const role = (me && company?.members.find((m) => m.name === me.name)?.role) || null;
+  return { companyId: company ? company.id : null, role };
+}
+
+export function act(cmd: Parameters<typeof client.command>[0]): void {
   void client.command(cmd).then((r) => {
     if (!r.ok && r.error) toast(r.error, 'error');
   });
@@ -44,7 +55,7 @@ export function focusOn(x: number, y: number): void {
 
 let zTop = 10;
 
-function Win({ w, title, children, width = 340 }: { w: GameWindow; title: ReactNode; children: ReactNode; width?: number }) {
+export function Win({ w, title, children, width = 340 }: { w: GameWindow; title: ReactNode; children: ReactNode; width?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(() => {
     const n = useApp.getState().windows.length;
@@ -101,6 +112,8 @@ export function WindowLayer() {
             return <StationWindow key={key} w={w} />;
           case 'trains':
             return <TrainListWindow key={key} w={w} />;
+          case 'company':
+            return <CompanyWindow key={key} w={w} />;
         }
       })}
     </>
@@ -133,7 +146,9 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   useTick(400);
   const t = useTrain(w.id);
   const ordersFor = useApp((s) => s.ordersFor);
-  const mine = useMyCompany() === t?.owner;
+  const my = useMyRole();
+  const mine = my.companyId === t?.owner && roleAllows(my.role, 'operate');
+  const canBuild = mine && roleAllows(my.role, 'build');
   if (!t) {
     return (
       <Win w={w} title="Train">
@@ -187,7 +202,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
             </>
           )}
           {t.orders.length > 1 && <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'skip' })}>Skip order</button>}
-          {t.status === 'depot' && (
+          {t.status === 'depot' && canBuild && (
             <button className="danger" onClick={() => confirm(`Sell ${t.name}?`) && act({ type: 'trainAction', id: t.id, action: 'sell' })}>
               Sell
             </button>
@@ -206,7 +221,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
           )}
         </div>
       )}
-      <ConsistEditor t={t} mine={mine} />
+      <ConsistEditor t={t} mine={canBuild} />
       <h4>Orders</h4>
       {t.orders.length === 0 && <p className="muted">No orders yet. Add the stations this train should serve.</p>}
       <ol className="orders">
@@ -261,7 +276,8 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
   useApp((s) => s.trainsRev);
   const global = useApp((s) => s.global);
   const settings = useApp((s) => s.room?.settings);
-  const company = useMyCompany();
+  const my = useMyRole();
+  const company = my.companyId;
   const map = client.world?.map;
   const year = global ? ymdFromDays(global.date).year : 1900;
   const timeline = settings?.timeline ?? 'era';
@@ -276,7 +292,9 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
   const inDepot = [...(client.world?.trains.values() ?? [])].filter((t) => t.status === 'depot' && t.depot === w.id);
   const x = map ? w.id % map.width : 0;
   const y = map ? Math.floor(w.id / map.width) : 0;
-  const mine = map?.layers.owner[w.id] === company;
+  const ours = map?.layers.owner[w.id] === company;
+  const mine = ours && roleAllows(my.role, 'build');
+  const canStart = ours && roleAllows(my.role, 'operate');
 
   return (
     <Win w={w} title={`Train depot (${x}, ${y})`} width={380}>
@@ -287,7 +305,7 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
           <b style={{ flex: 1 }}>{t.name}</b>
           <span className="muted small">{t.orders.length} orders</span>
           <button onClick={() => openWindow({ kind: 'train', id: t.id })}>Open</button>
-          {mine && (
+          {canStart && (
             <button className="primary" disabled={t.orders.length === 0} title={t.orders.length ? '' : 'Give it orders first'} onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>
               ▶
             </button>

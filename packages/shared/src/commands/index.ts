@@ -26,6 +26,27 @@ import {
 } from './trains.ts';
 import { setSignalHandler, type SetSignalCommand } from './signals.ts';
 import { buildBridgeHandler, buildTunnelHandler, type BuildBridgeCommand, type BuildTunnelCommand } from './structures.ts';
+import {
+  answerJoinHandler,
+  cancelJoinHandler,
+  companySettingsHandler,
+  foundCompanyHandler,
+  invitePlayerHandler,
+  joinCompanyHandler,
+  leaveCompanyHandler,
+  removeMemberHandler,
+  setMemberRoleHandler,
+  type AnswerJoinCommand,
+  type CancelJoinCommand,
+  type CompanySettingsCommand,
+  type FoundCompanyCommand,
+  type InvitePlayerCommand,
+  type JoinCompanyCommand,
+  type LeaveCompanyCommand,
+  type RemoveMemberCommand,
+  type SetMemberRoleCommand,
+} from './company.ts';
+import { roleAllows } from '../company/company.ts';
 import type { CommandContext, CommandHandler, CommandEffects } from './types.ts';
 
 export * from './types.ts';
@@ -35,6 +56,7 @@ export * from './station.ts';
 export * from './trains.ts';
 export * from './signals.ts';
 export * from './structures.ts';
+export * from './company.ts';
 
 export type Command =
   | TerraformCommand
@@ -49,7 +71,16 @@ export type Command =
   | EditConsistCommand
   | SetSignalCommand
   | BuildBridgeCommand
-  | BuildTunnelCommand;
+  | BuildTunnelCommand
+  | FoundCompanyCommand
+  | JoinCompanyCommand
+  | CancelJoinCommand
+  | LeaveCompanyCommand
+  | AnswerJoinCommand
+  | InvitePlayerCommand
+  | SetMemberRoleCommand
+  | RemoveMemberCommand
+  | CompanySettingsCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -66,7 +97,24 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   setSignal: setSignalHandler,
   buildBridge: buildBridgeHandler,
   buildTunnel: buildTunnelHandler,
+  foundCompany: foundCompanyHandler,
+  joinCompany: joinCompanyHandler,
+  cancelJoin: cancelJoinHandler,
+  leaveCompany: leaveCompanyHandler,
+  answerJoin: answerJoinHandler,
+  invitePlayer: invitePlayerHandler,
+  setMemberRole: setMemberRoleHandler,
+  removeMember: removeMemberHandler,
+  companySettings: companySettingsHandler,
 };
+
+const PERMISSION_ERRORS = {
+  build: 'Only managers and the owner can build and spend money',
+  operate: 'Viewers cannot drive trains',
+  members: 'Only managers and the owner can manage members',
+  owner: 'Only the owner can do that',
+  member: 'You are not a member of this company',
+} as const;
 
 export type CommandResult =
   | { ok: true; cost: number; effects: CommandEffects | null }
@@ -86,7 +134,11 @@ export function executeCommand(
   const handler = HANDLERS[cmd.type as CommandType] as CommandHandler<Command> | undefined;
   if (!handler) return { ok: false, error: `Unknown command ${String(cmd.type)}` };
   const company = ctx.companyId !== null ? state.companies.get(ctx.companyId) : undefined;
-  if (handler.needsCompany && !company) return { ok: false, error: 'You need a company first' };
+  if (handler.needsCompany) {
+    if (!company) return { ok: false, error: 'You need a company first' };
+    const perm = typeof handler.permission === 'function' ? handler.permission(cmd) : (handler.permission ?? 'build');
+    if (!roleAllows(state.roleOf(ctx.playerId, company.id), perm)) return { ok: false, error: PERMISSION_ERRORS[perm] };
+  }
 
   const plan = handler.plan(state, ctx, cmd);
   if (!plan.ok) return plan;

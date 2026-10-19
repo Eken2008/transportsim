@@ -1,15 +1,18 @@
 import {
   PROTOCOL_VERSION,
+  ROLE_LABELS,
   executeCommand,
+  roleAllows,
   type Command,
   type CommandResult,
   type GameSettings,
   type GameSpeed,
+  type GlobalState,
   type ServerMessage,
 } from '@transportsim/shared';
 import { ClientWorld } from '../game/clientWorld.ts';
 import { downloadSave, gzip, listSaves, putSave, requestPersistentStorage } from '../saves/saveStore.ts';
-import { toast, useApp } from '../store.ts';
+import { openWindow, toast, useApp } from '../store.ts';
 import { storageGet, storageSet, getClientId, getPlayerName } from './identity.ts';
 import { Connection, serverUrl } from './connection.ts';
 
@@ -90,6 +93,9 @@ class AppClient {
         });
         if (sameRoom) this.resubscribe?.();
         if (m.isHost && !m.autosave && !sameRoom) this.askAutosave();
+        if (!sameRoom && m.global.players.find((p) => p.id === m.playerId)?.companyId == null) {
+          openWindow({ kind: 'company', id: 0 });
+        }
         return;
       }
       case 'roomClosed':
@@ -118,6 +124,7 @@ class AppClient {
         this.world?.onIncome?.(m.tile, m.amount);
         return;
       case 'global':
+        this.notifyMembership(useApp.getState().global, m.global);
         this.world?.applyGlobal(m.global);
         useApp.setState({ global: m.global });
         return;
@@ -141,6 +148,34 @@ class AppClient {
         return;
       case 'pong':
         return;
+    }
+  }
+
+  /** Toasts for membership changes that concern the local player. */
+  private notifyMembership(prev: GlobalState | null, next: GlobalState): void {
+    const playerId = useApp.getState().room?.playerId;
+    if (!prev || playerId === undefined) return;
+    const me = next.players.find((p) => p.id === playerId);
+    const before = prev.players.find((p) => p.id === playerId);
+    if (!me || !before) return;
+    const company = next.companies.find((c) => c.id === me.companyId);
+    const was = prev.companies.find((c) => c.id === before.companyId);
+    const role = company?.members.find((x) => x.name === me.name)?.role;
+    const oldRole = was?.members.find((x) => x.name === before.name)?.role;
+    if (me.companyId !== before.companyId) {
+      if (company && role) toast(`You joined ${company.name} as ${ROLE_LABELS[role].toLowerCase()}`, 'success');
+      else if (was) toast(`You are no longer a member of ${was.name}`);
+    } else if (company && role && oldRole && role !== oldRole) {
+      toast(`You are now ${role === 'owner' ? 'the owner' : `a ${ROLE_LABELS[role].toLowerCase()}`} of ${company.name}`, 'success');
+    }
+    if (company && roleAllows(role, 'members')) {
+      const old = new Set(was?.id === company.id ? was.requests : []);
+      for (const name of company.requests) if (!old.has(name)) toast(`${name} asks to join ${company.name} — press C to answer`, 'info', 8000);
+    }
+    for (const c of next.companies) {
+      const invited = c.invites.some((x) => x.name === me.name);
+      const wasInvited = prev.companies.find((o) => o.id === c.id)?.invites.some((x) => x.name === me.name);
+      if (invited && !wasInvited) toast(`${c.name} invites you to join — press C to answer`, 'info', 8000);
     }
   }
 

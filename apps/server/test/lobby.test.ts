@@ -120,6 +120,12 @@ describe('lobby & rooms', () => {
     room.flush();
     expect(host.conn.inbox.filter((m) => m.t === 'chunk')).toHaveLength(4);
 
+    // Players join without a company and found one
+    host.send({ t: 'command', seq: 0, cmd: { type: 'terraform', x0: 5, y0: 5, x1: 5, y1: 5, mode: 'raise' } });
+    expect(host.conn.last('commandResult')).toMatchObject({ seq: 0, ok: false });
+    host.send({ t: 'command', seq: 0, cmd: { type: 'foundCompany', name: 'Host Rail', color: 2 } });
+    expect(host.conn.last('commandResult')).toMatchObject({ seq: 0, ok: true });
+
     // Find a land corner and raise it
     let x = 5;
     const y = 5;
@@ -173,6 +179,23 @@ describe('lobby & rooms', () => {
     runDays(35);
     expect(host.conn.last('saveData')?.kind).toBe('auto');
     expect(guest.conn.last('saveData')).toBeUndefined();
+    lobby.shutdown();
+  });
+
+  test('player names are unique within a game, and players start without a company', () => {
+    const lobby = new Lobby(CONFIG);
+    const { room } = hostGame(lobby);
+    const a = client(lobby, 'Guest', 'guest-a-client');
+    const b = client(lobby, 'Guest', 'guest-b-client');
+    a.send({ t: 'joinRoom', roomId: room.id });
+    b.send({ t: 'joinRoom', roomId: room.id });
+    const names = [...room.state.players.values()].map((p) => p.name);
+    expect(names).toEqual(['Host', 'Guest', 'Guest 2']);
+    expect([...room.state.players.values()].every((p) => p.companyId === null)).toBe(true);
+    // Reconnecting keeps the player's name
+    a.send({ t: 'leaveRoom' });
+    a.send({ t: 'joinRoom', roomId: room.id });
+    expect([...room.state.players.values()].map((p) => p.name)).toEqual(names);
     lobby.shutdown();
   });
 

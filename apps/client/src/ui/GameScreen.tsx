@@ -47,6 +47,8 @@ export function GameScreen() {
         useApp.setState((s) => ({ stationOpts: { ...s.stationOpts, axis: s.stationOpts.axis === 0 ? 1 : 0 } }));
       } else if (e.code === 'KeyT') {
         openWindow({ kind: 'trains', id: 0 });
+      } else if (e.code === 'KeyC') {
+        openWindow({ kind: 'company', id: 0 });
       } else if (e.code === 'Slash' || e.key === '?') setShowHelp((v) => !v);
       else if (e.code === 'Space' && useApp.getState().room?.isHost) {
         e.preventDefault();
@@ -89,13 +91,18 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
     <div className="hud-top">
       <div className="panel hud-box">
         {company ? (
-          <>
+          <button className="ghost company-btn" title="Your company (C)" onClick={() => openWindow({ kind: 'company', id: 0 })}>
             <span className="company-swatch" style={{ background: COMPANY_COLORS[company.color] }} />
             <b>{company.name}</b>
             <span className={`mono money ${company.money < 0 ? 'neg' : ''}`}>{formatMoney(company.money)}</span>
-          </>
+          </button>
         ) : (
-          <span className="muted">Spectating</span>
+          <>
+            <span className="muted">Spectating</span>
+            <button className="primary" title="Found or join a company (C)" onClick={() => openWindow({ kind: 'company', id: 0 })}>
+              🏢 Start or join a company
+            </button>
+          </>
         )}
       </div>
       <div className="spacer" />
@@ -381,7 +388,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>9</kbd> signals · <kbd>B</kbd> bridge · <kbd>N</kbd> tunnel · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
       </div>
       <div>
-        Click a depot, station or train to open it · <kbd>T</kbd> train list · <kbd>Space</kbd> pause (host) · ⤓ Export downloads the game
+        Click a depot, station or train to open it · <kbd>T</kbd> train list · <kbd>C</kbd> company · <kbd>Space</kbd> pause (host) · ⤓ Export downloads the game
       </div>
     </div>
   );

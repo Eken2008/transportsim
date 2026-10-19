@@ -127,12 +127,13 @@ export class Room {
     if (existing !== undefined) player = this.state.players.get(existing);
     if (player) {
       player.connected = true;
-      player.name = session.name;
+      this.state.renamePlayer(player, this.uniqueName(session.name, player));
     } else {
-      player = this.state.addPlayer(session.name, isHost);
+      player = this.state.addPlayer(this.uniqueName(session.name), isHost);
       this.clientPlayers.set(session.clientId, player.id);
     }
-    this.state.ensureCompany(player);
+    // Membership follows names, so names are unique within a game.
+    session.name = player.name;
 
     session.room = this;
     session.player = player;
@@ -168,6 +169,16 @@ export class Room {
       }
     }
     return null;
+  }
+
+  /** `name`, or `name 2`, `name 3`… if another player in this game already uses it. */
+  private uniqueName(name: string, self?: Player): string {
+    const taken = new Set([...this.state.players.values()].filter((p) => p !== self).map((p) => p.name));
+    if (!taken.has(name)) return name;
+    for (let n = 2; ; n++) {
+      const candidate = `${name.slice(0, 20)} ${n}`;
+      if (!taken.has(candidate)) return candidate;
+    }
   }
 
   /** Session went away. `explicit` = the player chose to leave (vs. a dropped connection). */

@@ -41,6 +41,10 @@ try {
   await page.locator('label.field', { hasText: 'Economy' }).locator('select').selectOption('easy');
   await page.getByRole('button', { name: 'Create game' }).click();
   await page.getByRole('button', { name: 'Not now' }).click({ timeout: 30_000 });
+  // Players start without a company: found one from the company window, then close it.
+  await page.getByRole('button', { name: 'Found', exact: true }).click();
+  await page.locator('.money').waitFor();
+  await page.locator('.window button[aria-label="Close"]').click();
 
   const run = (cmd: object) =>
     page.evaluate((c) => (window as unknown as { transportsim: Hook }).transportsim.command(c), cmd);

@@ -1,4 +1,4 @@
-import type { Company } from '../company/company.ts';
+import { COMPANY_ROLES, MAX_MEMBERS, type Company, type CompanyMember } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
 import { railVehicle } from '../vehicles/catalog.ts';
 import { linkAllByGeometry } from '../rail/links.ts';
@@ -96,7 +96,9 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       color: num(c.color, 0),
       money: num(c.money, 0),
       loan: num(c.loan, 0),
-      members: Array.isArray(c.members) ? c.members.map(String) : [],
+      members: sanitizeMembers(c.members, true),
+      requests: Array.isArray(c.requests) ? c.requests.map(String).slice(0, 16) : [],
+      invites: sanitizeMembers(c.invites, false).slice(0, 16),
       foundedDays: num(c.foundedDays, state.date),
     });
   }
@@ -150,6 +152,29 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   state.rail.rebuildOccupancy();
   state.nextStationId = Math.max(num(snap.nextStationId, 0), ...[...state.stations.keys()].map((k) => k + 1));
   return state;
+}
+
+/**
+ * Members as saved. Version 1 saves list plain names: the first becomes the owner and the rest
+ * managers. A company always ends up with exactly one owner when it has members.
+ */
+function sanitizeMembers(input: unknown, needOwner: boolean): CompanyMember[] {
+  if (!Array.isArray(input)) return [];
+  const out: CompanyMember[] = [];
+  for (const [i, m] of input.entries()) {
+    const name = String(typeof m === 'string' ? m : (m as CompanyMember)?.name ?? '').slice(0, 24);
+    if (!name || out.some((o) => o.name === name)) continue;
+    const role = typeof m === 'string' ? (i === 0 ? 'owner' : 'manager') : (m as CompanyMember).role;
+    out.push({ name, role: COMPANY_ROLES.includes(role) ? role : 'viewer' });
+  }
+  if (needOwner && out.length > 0) {
+    const owners = out.filter((m) => m.role === 'owner');
+    for (const m of owners.slice(1)) m.role = 'manager';
+    if (owners.length === 0) out[0]!.role = 'owner';
+  } else if (!needOwner) {
+    for (const m of out) if (m.role === 'owner') m.role = 'manager';
+  }
+  return out.slice(0, MAX_MEMBERS);
 }
 
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);

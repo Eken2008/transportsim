@@ -1,4 +1,4 @@
-import { COMPANY_COLORS, MAX_COMPANIES, type Company } from '../company/company.ts';
+import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, type CompanyRole } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
 import { PassengerSystem } from '../economy/passengers.ts';
@@ -167,13 +167,8 @@ export class GameState {
   addPlayer(name: string, isHost: boolean): Player {
     const p: Player = { id: this.nextPlayerId++, name, companyId: null, connected: true, isHost };
     this.players.set(p.id, p);
-    // Rejoin the company the player was a member of (e.g. after loading a save)
-    for (const c of this.companies.values()) {
-      if (c.members.includes(name)) {
-        p.companyId = c.id;
-        break;
-      }
-    }
+    // Rejoin the company the player is a member of (e.g. after loading a save)
+    p.companyId = this.companyOfName(name)?.id ?? null;
     return p;
   }
 
@@ -181,13 +176,27 @@ export class GameState {
     this.players.delete(id);
   }
 
-  foundCompany(founder: Player, name?: string): Company | null {
+  companyOfName(name: string): Company | undefined {
+    for (const c of this.companies.values()) if (memberOf(c, name)) return c;
+    return undefined;
+  }
+
+  /** The role of the command's player in the command's company, if any. */
+  roleOf(playerId: number, companyId: number | null): CompanyRole | null {
+    const p = this.players.get(playerId);
+    const c = companyId === null ? undefined : this.companies.get(companyId);
+    return (p && c && memberOf(c, p.name)?.role) || null;
+  }
+
+  foundCompany(founder: Player, name?: string, color?: number): Company | null {
     let id = 0;
     while (this.companies.has(id)) id++;
     if (id >= MAX_COMPANIES) return null;
     const usedColors = new Set([...this.companies.values()].map((c) => c.color));
-    let color = 0;
-    while (usedColors.has(color) && color < COMPANY_COLORS.length - 1) color++;
+    if (color === undefined || usedColors.has(color)) {
+      color = 0;
+      while (usedColors.has(color) && color < COMPANY_COLORS.length - 1) color++;
+    }
     const econ = ECONOMY[this.settings.economy];
     const company: Company = {
       id,
@@ -195,21 +204,57 @@ export class GameState {
       color,
       money: econ.startMoney,
       loan: 0,
-      members: [founder.name],
+      members: [],
+      requests: [],
+      invites: [],
       foundedDays: this.date,
     };
     this.companies.set(id, company);
-    founder.companyId = id;
+    this.addMember(company, founder.name, 'owner');
     return company;
   }
 
-  /** Ensure the player has a company (one per player until multi-member companies land). */
-  ensureCompany(player: Player): Company | null {
-    if (player.companyId !== null) {
-      const c = this.companies.get(player.companyId);
-      if (c) return c;
+  /** Make `name` a member (leaving any other company), clearing their pending requests and invites. */
+  addMember(company: Company, name: string, role: CompanyRole): void {
+    const current = this.companyOfName(name);
+    if (current && current !== company) this.removeMember(current, name);
+    for (const c of this.companies.values()) {
+      c.requests = c.requests.filter((n) => n !== name);
+      c.invites = c.invites.filter((m) => m.name !== name);
     }
-    return this.foundCompany(player);
+    const m = memberOf(company, name);
+    if (m) m.role = role;
+    else company.members.push({ name, role });
+    this.setPlayersCompany(name, company.id);
+  }
+
+  /** Remove a member; if the owner leaves, the most senior remaining member takes over. */
+  removeMember(company: Company, name: string): void {
+    const m = memberOf(company, name);
+    if (!m) return;
+    company.members = company.members.filter((x) => x !== m);
+    if (m.role === 'owner' && company.members.length > 0) {
+      const rank = (r: CompanyRole) => COMPANY_ROLES.indexOf(r);
+      const heir = company.members.reduce((a, b) => (rank(b.role) < rank(a.role) ? b : a));
+      heir.role = 'owner';
+    }
+    this.setPlayersCompany(name, null);
+  }
+
+  /** A player changed their name: membership, requests and invites follow them. */
+  renamePlayer(player: Player, name: string): void {
+    const old = player.name;
+    player.name = name;
+    if (old === name) return;
+    for (const c of this.companies.values()) {
+      for (const m of c.members) if (m.name === old) m.name = name;
+      c.requests = c.requests.map((n) => (n === old ? name : n));
+      for (const m of c.invites) if (m.name === old) m.name = name;
+    }
+  }
+
+  private setPlayersCompany(name: string, companyId: number | null): void {
+    for (const p of this.players.values()) if (p.name === name) p.companyId = companyId;
   }
 
   /** Scale a base cost by economy difficulty. */

@@ -100,6 +100,7 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
 
 export const trainActionHandler: CommandHandler<TrainActionCommand> = {
   needsCompany: true,
+  permission: (cmd) => (cmd.action === 'sell' ? 'build' : 'operate'),
   plan(state, ctx, cmd): PlanResult {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
     if (!t || t.owner !== ctx.companyId) return fail('Not your train');
@@ -160,6 +161,7 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
 
 export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
   needsCompany: true,
+  permission: 'operate',
   plan(state, ctx, cmd): PlanResult {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
     if (!t || t.owner !== ctx.companyId) return fail('Not your train');
