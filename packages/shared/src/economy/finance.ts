@@ -1,7 +1,7 @@
 import { ymdFromDays } from '../sim/date.ts';
 
 /** Where money comes from and goes to, as in a company's books. Income is positive. */
-export const LEDGER_CATEGORIES = ['income', 'sharing', 'construction', 'vehicles', 'running', 'property', 'interest'] as const;
+export const LEDGER_CATEGORIES = ['income', 'sharing', 'construction', 'vehicles', 'running', 'property', 'interest', 'incidents'] as const;
 export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number];
 export type Ledger = Record<LedgerCategory, number>;
 
@@ -13,6 +13,7 @@ export const LEDGER_LABELS: Record<LedgerCategory, string> = {
   running: 'Running costs',
   property: 'Property maintenance',
   interest: 'Loan interest',
+  incidents: 'Accidents',
 };
 
 export interface QuarterRecord {

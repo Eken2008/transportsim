@@ -6,7 +6,11 @@ import { formatMoney } from './format.ts';
 import { Win } from './windows.tsx';
 
 const TIMELINE = { era: 'Eras: vehicles unlock over time', sandbox: 'Sandbox: everything available' };
-const ACCIDENTS = { off: 'Off', low: 'Low', realistic: 'Realistic' };
+const ACCIDENTS = {
+  off: 'Off',
+  low: 'Low: trains crash only where signalling is clearly unsafe',
+  realistic: 'Realistic: shorter sight, brake failures and derailments',
+};
 const ROUGHNESS = { flat: 'Flat', hilly: 'Hilly', mountainous: 'Mountainous' };
 
 /** Game settings and players; the host can rename the game, change slots and visibility, and remove players. */
@@ -53,11 +57,11 @@ export function GameInfoWindow({ w }: { w: GameWindow & { kind: 'game' } }) {
         </span>
         <span>Accidents</span>
         <span>
-          {ACCIDENTS[s.accidents]} <span className="muted small">(incidents arrive in a later version)</span>
+          {ACCIDENTS[s.accidents]} <span className="muted small">(level crossings with road vehicles arrive later)</span>
         </span>
         <span>Breakdowns</span>
         <span>
-          {s.breakdowns ? 'On' : 'Off'} <span className="muted small">(arrive in a later version)</span>
+          {s.breakdowns ? 'On' : 'Off'}
         </span>
         <span>Date</span>
         <span className="mono">{global ? formatDate(global.date) : '—'}</span>

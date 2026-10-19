@@ -41,6 +41,9 @@ export class GameRenderer {
   readonly catchment: AreaGhost;
   readonly trains: TrainRenderer;
   readonly signalLights: SignalLights;
+  /** Tiles blocked by accident wreckage. */
+  private readonly wrecks: AreaGhost;
+  private wrecksKey = '';
   /** Path reservations overlay (toggled from the signal options). */
   private readonly reservations: TrackGhost;
   private reservationsRev = '';
@@ -93,6 +96,8 @@ export class GameRenderer {
     this.scene.add(this.signalLights.mesh);
     this.reservations = new TrackGhost(world.map);
     this.scene.add(this.reservations.mesh);
+    this.wrecks = new AreaGhost(world.map, 0.55);
+    this.scene.add(this.wrecks.mesh);
     this.floaters = new FloatingText(canvas.parentElement!, world);
     this.crossings = new CrossingBooms(world);
     this.scene.add(this.crossings.root);
@@ -163,6 +168,16 @@ export class GameRenderer {
     this.setTool(useApp.getState().tool);
     this.resize();
     this.loop();
+  }
+
+  private updateWrecks(): void {
+    const tiles = useApp.getState().global?.wrecks ?? [];
+    const key = tiles.join(',');
+    if (key === this.wrecksKey) return;
+    this.wrecksKey = key;
+    const w = this.world.map.width;
+    if (tiles.length) this.wrecks.show(tiles.map((t) => ({ x: t % w, y: Math.floor(t / w) })), '#ff5a1f');
+    else this.wrecks.hide();
   }
 
   private updateReservations(): void {
@@ -307,6 +322,7 @@ export class GameRenderer {
     this.trains.update(now, useApp.getState().global?.speed ?? 1);
     this.signalLights.update();
     this.updateReservations();
+    this.updateWrecks();
     this.crossings.update(dt, now, this.controller.target);
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;

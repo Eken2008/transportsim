@@ -100,6 +100,8 @@ export interface Train {
   serviceInterval?: number;
   /** Already told the owner it outlived its design life. */
   oldWarned?: boolean;
+  /** Ticks left coasting without brakes (a brake failure: signals are passed at danger). */
+  brakeFail?: number;
 }
 
 export interface TrainStats {

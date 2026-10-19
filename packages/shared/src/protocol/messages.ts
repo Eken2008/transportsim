@@ -38,6 +38,8 @@ export interface GlobalState {
   players: Player[];
   agreements: Agreement[];
   waypoints: Waypoint[];
+  /** Tiles blocked by wreckage after an accident. */
+  wrecks: number[];
 }
 
 export type ChatChannel = 'all' | 'company';

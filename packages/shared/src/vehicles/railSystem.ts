@@ -34,6 +34,7 @@ import { signalKindOf, type SignalKind } from '../commands/signals.ts';
 import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
 import { PASSENGER_MASS, cargoCount, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
 import { advanceOrder, needsService, peekNextOrder } from './orders.ts';
+import { DERAIL_OVERSPEED } from '../incidents/rail.ts';
 
 /** km/h corresponding to 1 tile per second. Sets the game's sense of scale. */
 export const KMH_PER_TILE_PER_S = 28;
@@ -52,6 +53,10 @@ const REPLAN_DELAY = 45;
 const CREEP_KMH = 4;
 
 const DT = 1 / TICKS_PER_SECOND;
+/** Pseudo train id for wreckage occupying track. */
+const WRECK = -2;
+/** Deceleration of a train coasting without brakes, km/h per second. */
+const COAST_KMH_PER_S = 2;
 /** The parallel (non-touching) partner of each corner piece. */
 const PARALLEL_PIECE = [-1, -1, 4, 5, 2, 3];
 
@@ -194,10 +199,15 @@ export class RailSystem {
     return lim;
   }
 
-  /** Speed limit of the curves along a train's path and route (for the train window and accidents). */
+  /**
+   * Curve limit on the track under a train. The route just ahead counts too, since the arc of
+   * a curve can be longer than the train.
+   */
   curveLimitUnder(t: Train): number {
-    const limits = curveLimits(t.path.slice().reverse());
-    return Math.min(...limits);
+    const seq = t.path.slice().reverse();
+    const n = seq.length;
+    seq.push(...t.route.slice(0, 6));
+    return Math.min(...curveLimits(seq).slice(0, n));
   }
 
   /** The consist changed: recompute length, power and so on. */
@@ -245,16 +255,7 @@ export class RailSystem {
   }
 
   private occupy(t: Train, s: number): void {
-    const k = pieceKey(s);
-    let set = this.occ.get(k);
-    if (!set) this.occ.set(k, (set = new Set()));
-    if (set.has(t.id)) return;
-    set.add(t.id);
-    const b = this.blockOf.get(k);
-    if (b === undefined) return;
-    let use = this.blockUse.get(b);
-    if (!use) this.blockUse.set(b, (use = new Map()));
-    use.set(t.id, (use.get(t.id) ?? 0) + 1);
+    this.markOccupied(pieceKey(s), t.id);
   }
 
   private release(t: Train, s: number): void {
@@ -297,12 +298,72 @@ export class RailSystem {
     }
   }
 
+  // ---- wreckage ------------------------------------------------------------------
+
+  /** pieceKey → tick the wreckage is cleared. Wreckage occupies its piece like a train (id WRECK). */
+  private wrecks = new Map<number, number>();
+
+  addWreck(k: number, until: number): void {
+    this.wrecks.set(k, Math.max(until, this.wrecks.get(k) ?? 0));
+    this.markOccupied(k, WRECK);
+  }
+
+  /** Clear wreckage whose cleanup time has passed. */
+  clearWrecks(): void {
+    for (const [k, until] of [...this.wrecks]) {
+      if (until > this.state.tick) continue;
+      this.wrecks.delete(k);
+      const set = this.occ.get(k);
+      if (!set?.delete(WRECK)) continue;
+      if (set.size === 0) this.occ.delete(k);
+      const b = this.blockOf.get(k);
+      const use = b === undefined ? undefined : this.blockUse.get(b);
+      if (use) {
+        use.delete(WRECK);
+        if (use.size === 0) this.blockUse.delete(b!);
+      }
+    }
+  }
+
+  wreckTiles(): number[] {
+    return [...new Set([...this.wrecks.keys()].map((k) => Math.floor(k / 8)))];
+  }
+
+  private markOccupied(k: number, id: number): void {
+    let set = this.occ.get(k);
+    if (!set) this.occ.set(k, (set = new Set()));
+    if (set.has(id)) return;
+    set.add(id);
+    const b = this.blockOf.get(k);
+    if (b === undefined) return;
+    let use = this.blockUse.get(b);
+    if (!use) this.blockUse.set(b, (use = new Map()));
+    use.set(id, (use.get(id) ?? 0) + 1);
+  }
+
+  /** Ids of trains on the piece of `s`, or on pieces crossing it (not `except`, not wreckage). */
+  trainsOn(s: number, except: number): number[] {
+    const tile = segTile(s);
+    const p = segPiece(s);
+    const out = new Set<number>();
+    const add = (k: number) => {
+      for (const id of this.occ.get(k) ?? []) if (id !== except && id !== WRECK) out.add(id);
+    };
+    if (p >= 6) add(tile * 8 + p);
+    else {
+      const bits = this.state.map.layers.track[tile]!;
+      for (let q = 0; q < 6; q++) if (hasPiece(bits, q) && (q === p || q !== PARALLEL_PIECE[p])) add(tile * 8 + q);
+    }
+    return [...out];
+  }
+
   /** Rebuild occupancy from scratch (after loading a save, or when blocks change). */
   rebuildOccupancy(): void {
     this.occ.clear();
     this.blockUse.clear();
     this.claims.clear();
     for (const t of this.state.trains.values()) for (const s of t.path) this.occupy(t, s);
+    for (const k of this.wrecks.keys()) this.markOccupied(k, WRECK);
     this.blockRes.clear();
     for (const [k, id] of this.reserved) this.countReservation(k, id, 1);
   }
@@ -682,6 +743,17 @@ export class RailSystem {
       this.plan(t);
     }
 
+    if (t.brakeFail) {
+      // Brake failure: no traction, no brakes; the train rolls on, slowing only by resistance.
+      t.brakeFail--;
+      t.speed = Math.max(0, t.speed - COAST_KMH_PER_S * DT);
+      this.advance(t, (t.speed / KMH_PER_TILE_PER_S) * DT);
+      if (!this.state.trains.has(t.id)) return;
+      this.checkDerail(t);
+      if (!t.brakeFail) this.state.dirtyTrains.add(t.id);
+      return;
+    }
+
     // Look ahead for the nearest place we must stop.
     const stats = this.statsOf(t);
     const stopAt = this.stopDistance(t, brakingDistance(t.speed) + 2);
@@ -705,9 +777,18 @@ export class RailSystem {
     if (t.speed < 0.05 && limit < 0.5) t.speed = 0;
 
     this.advance(t, (t.speed / KMH_PER_TILE_PER_S) * DT);
+    if (!this.state.trains.has(t.id)) return; // crashed
+    this.checkDerail(t);
+    if (!this.state.trains.has(t.id)) return;
     this.passWaypoint(t);
 
     if (t.speed === 0 && t.status === 'running') this.whenStopped(t);
+  }
+
+  /** Realistic accidents: a train far over the curve limit under it derails. */
+  private checkDerail(t: Train): void {
+    if (!this.state.incidents.rules?.derail || t.speed < 40) return;
+    if (t.speed > this.curveLimitUnder(t) * DERAIL_OVERSPEED) this.state.incidents.derail(t);
   }
 
   /** Acceleration in km/h per second from tractive effort, resistance and gradient. */
@@ -743,6 +824,7 @@ export class RailSystem {
     let prev = t.path[0]!;
     const commit = brakingDistance(t.speed) + 1;
     const running = t.status === 'running';
+    const rules = this.state.incidents.rules;
     let pbs = t.pbs === true;
     for (let i = 0; i < t.route.length; i++) {
       const s = t.route[i]!;
@@ -766,7 +848,8 @@ export class RailSystem {
         // Inside a path-signalled area: keep the way ahead reserved.
         if (!this.tryReserve(t, i, d <= commit && running)) return d - SAFETY_MARGIN;
       }
-      if (this.occupiedByOther(s, t.id)) return d - SAFETY_MARGIN;
+      // With accidents on, drivers only see trains ahead within sight; signals must do the rest.
+      if (this.occupiedByOther(s, t.id) && (!rules || d <= rules.sight)) return d - SAFETY_MARGIN;
       d += segLength(s);
       prev = s;
     }
@@ -783,6 +866,17 @@ export class RailSystem {
         break;
       }
       const next = t.route[0];
+      const rules = this.state.incidents.rules;
+      if (
+        rules &&
+        next !== undefined &&
+        t.speed > rules.collideAbove &&
+        this.occupiedByOther(next, t.id) &&
+        segmentsConnect(map, head, next, this.accessOf(t))
+      ) {
+        this.state.incidents.collide(t, next);
+        return;
+      }
       if (
         next === undefined ||
         !segmentsConnect(map, head, next, this.accessOf(t)) ||
@@ -805,6 +899,7 @@ export class RailSystem {
 
   /** May the head move from `head` onto `next` (route[0])? Signals and reservations decide. */
   private mayEnter(t: Train, head: number, next: number): boolean {
+    if (t.brakeFail) return true; // no brakes: past the signal regardless
     if (this.signalFacing(head)) {
       const kind = this.signalKind(head);
       if (kind === 'path') return this.reservedBy(next) === t.id || this.tryReserve(t, 0, true);

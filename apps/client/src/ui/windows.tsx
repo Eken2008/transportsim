@@ -150,6 +150,7 @@ function stationName(id: number): string {
 
 export function trainStatus(t: TrainInfo): string {
   if (t.status === 'depot') return 'In depot';
+  if (t.brakeFail) return 'Brake failure!';
   if (t.brokenDown) return 'Broken down';
   if (t.serviceTrip) return 'Heading for a service';
   if (t.status === 'loading') return `Loading at ${stationName(t.lastStation)}`;

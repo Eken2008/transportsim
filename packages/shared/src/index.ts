@@ -22,6 +22,7 @@ export * from './vehicles/catalog.ts';
 export * from './vehicles/train.ts';
 export * from './vehicles/orders.ts';
 export * from './vehicles/maintenance.ts';
+export * from './incidents/rail.ts';
 export * from './vehicles/railSystem.ts';
 export * from './town/road.ts';
 export * from './town/houses.ts';

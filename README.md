@@ -2,7 +2,7 @@
 
 A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from OpenTTD, Simutrans and Transport Fever. Players found transport companies, build rail, road, air and sea networks, and carry passengers and goods between towns and industries. They can compete with each other or cooperate.
 
-> Status: **M2 — companies and multiplayer depth** is playable.
+> Status: **M3 — advanced rail** is playable.
 >
 > - **World:** procedural terrain with towns, roads and houses; terraforming.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
@@ -10,6 +10,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.
 > - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort, gradients and curve, bridge and track speed limits; pathfinding and reversing at termini.
 > - **Upkeep:** reliability that decays between services, breakdowns (a game setting), automatic service trips, ageing, autorenew and replacement rules.
+> - **Accidents:** with accidents on, trains only see so far ahead, so unsafe signalling crashes trains; brake failures pass red signals, and on realistic, overspeed derails trains. Wreckage blocks the line for a while.
 > - **Orders:** stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
 > - **Passengers:** destination-based passengers with payment by distance and journey time.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
@@ -19,7 +20,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Multiplayer:** live multiplayer sync, chat with a company channel, and a news feed. The host can rename the game, change slots and visibility, and remove players.
 > - **Saves:** host-only saves in the browser.
 >
-> See [docs/PLAN.md](docs/PLAN.md) for the roadmap. Advanced rail (M3: path signals, track types, breakdowns, accidents) comes next.
+> See [docs/PLAN.md](docs/PLAN.md) for the roadmap. The full cargo economy (M4: cargodist, industries, town growth) comes next.
 
 ## Quick start
 
