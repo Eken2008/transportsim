@@ -15,6 +15,7 @@ import {
   type GameState,
   type Industry,
   type Station,
+  type TrainMotion,
   type GlobalState,
   type Player,
   type RoomSummary,
@@ -44,6 +45,8 @@ export interface Session {
   cmdCount: number;
   /** Last signal aspects sent (to send only changes). */
   lastSignals?: string;
+  /** Vehicle id → what was last sent of its position, and when. */
+  sentPos?: Map<number, { key: string; at: number }>;
   /** Stations and industries shown in the client's windows. */
   watchStations?: Set<number>;
   watchIndustries?: Set<number>;
@@ -57,6 +60,8 @@ const industrySig = (i: Industry) => `${i.level}|${i.name}`;
 const MAX_COMMANDS_PER_SECOND = 40;
 const MAX_CATCHUP_STEPS = 60;
 const POS_INTERVAL_MS = 100;
+/** Unchanged positions are repeated this often, so clients keep the vehicle. */
+const POS_KEEPALIVE_MS = 900;
 const NEWS_ON_JOIN = 50;
 
 export class Room {
@@ -526,9 +531,29 @@ export class Room {
       }
       return set;
     });
+    const motions = running.map((t) => this.state.systemOf(t).motion(t));
+    const keys = motions.map((m) => {
+      const free = m.air ?? m.ship;
+      return free ? free.map((v) => v.toFixed(3)).join() : `${m.path[0]}:${m.path.length}:${m.pos.toFixed(3)}:${m.speed.toFixed(2)}:${m.ahead[0]}`;
+    });
+    const now = performance.now();
     for (const s of this.sessions) {
-      const trains = running.filter((_, i) => [...chunksOf[i]!].some((c) => s.subscribed.has(c)));
-      if (trains.length) this.send(s, { t: 'trainPos', trains: trains.map((t) => this.state.systemOf(t).motion(t)) });
+      // Vehicles that haven't moved are sent again only now and then (the client drops ones it
+      // hasn't heard of for a while).
+      const sent = (s.sentPos ??= new Map());
+      const out: TrainMotion[] = [];
+      running.forEach((t, i) => {
+        if (![...chunksOf[i]!].some((c) => s.subscribed.has(c))) return;
+        const prev = sent.get(t.id);
+        if (prev && prev.key === keys[i] && now - prev.at < POS_KEEPALIVE_MS) return;
+        sent.set(t.id, { key: keys[i]!, at: now });
+        out.push(motions[i]!);
+      });
+      if (sent.size > running.length * 2 + 64) {
+        const live = new Set(running.map((t) => t.id));
+        for (const id of sent.keys()) if (!live.has(id)) sent.delete(id);
+      }
+      if (out.length) this.send(s, { t: 'trainPos', trains: out });
     }
   }
 

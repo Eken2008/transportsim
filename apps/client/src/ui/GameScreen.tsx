@@ -18,6 +18,8 @@ import { client } from '../net/client.ts';
 import { installDebugHook } from '../render/debugHook.ts';
 import { availableBridges } from '../tools/structureTools.ts';
 import { WindowLayer, useMyRole } from './windows.tsx';
+import { Tutorial } from './Tutorial.tsx';
+import { sound } from '../audio/sound.ts';
 import { NewsTicker } from './NewsWindow.tsx';
 import { GameRenderer } from '../render/gameRenderer.ts';
 import { openWindow, useApp, type ToolId } from '../store.ts';
@@ -80,6 +82,7 @@ export function GameScreen() {
       <HostBanner />
       <NewsTicker />
       {showHelp && <Help onClose={() => setShowHelp(false)} />}
+      {!showHelp && <Tutorial />}
       <WindowLayer />
       <StationOptions />
       <SignalOptions />
@@ -183,6 +186,7 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         <button title="Statistics: graphs of every company's history" aria-label="📈 Graphs" onClick={() => openWindow({ kind: 'stats', id: 0 })}>
           📈<span className="lbl"> Graphs</span>
         </button>
+        <VolumeButton />
         <button className="ghost" title="Controls (?)" onClick={onHelp}>
           ?
         </button>
@@ -484,6 +488,31 @@ function StatusBar({ fps, chunks }: { fps: number; chunks: number }) {
   );
 }
 
+/** Sound on/off, with a volume slider on hover or focus. */
+function VolumeButton() {
+  const [, rerender] = useState(0);
+  useEffect(() => sound.onChange(() => rerender((n) => n + 1)), []);
+  return (
+    <span className="volume">
+      <button className="ghost" title={sound.muted ? 'Sound off (click for on)' : 'Sound on (click for off)'} aria-label={sound.muted ? 'Unmute' : 'Mute'} onClick={() => sound.setMuted(!sound.muted)}>
+        {sound.muted || sound.volume === 0 ? '🔇' : '🔊'}
+      </button>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={sound.volume}
+        aria-label="Volume"
+        onChange={(e) => {
+          sound.setVolume(Number(e.target.value));
+          if (sound.muted) sound.setMuted(false);
+        }}
+      />
+    </span>
+  );
+}
+
 function Help({ onClose }: { onClose: () => void }) {
   return (
     <div className="panel help" onClick={onClose}>
@@ -510,10 +539,28 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>4</kbd> railway (drag; hold <kbd>Ctrl</kbd> to remove) · <kbd>5</kbd> remove railway
       </div>
       <div>
-        <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>9</kbd> signals · <kbd>B</kbd> bridge · <kbd>N</kbd> tunnel · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
+        <kbd>6</kbd> station (<kbd>R</kbd> rotates) · <kbd>7</kbd> depot · <kbd>9</kbd> signals · <kbd>B</kbd> bridge · <kbd>N</kbd> tunnel · <kbd>P</kbd> waypoint ·{' '}
+        <kbd>V</kbd> convert track · <kbd>8</kbd> bulldoze · <kbd>Esc</kbd> deselect
       </div>
       <div>
-        Click a depot, station or train to open it · <kbd>T</kbd> train list · <kbd>C</kbd> company · <kbd>F</kbd> finances · <kbd>L</kbd> league · <kbd>Space</kbd> pause (host) · ⤓ Export downloads the game
+        Roads: <kbd>G</kbd> build · <kbd>Z</kbd> remove · <kbd>H</kbd> stop · <kbd>J</kbd> depot · <kbd>K</kbd> one-way · Air: <kbd>Y</kbd> airport · Water: <kbd>U</kbd> canal ·{' '}
+        <kbd>I</kbd> lock · <kbd>O</kbd> dock · <kbd>M</kbd> ship depot · <kbd>X</kbd> buoy
+      </div>
+      <div>
+        Click a depot, station or vehicle to open it · <kbd>T</kbd> vehicle list · <kbd>C</kbd> company · <kbd>F</kbd> finances · <kbd>L</kbd> league · 📈 graphs ·{' '}
+        <kbd>Space</kbd> pause (host) · ⤓ Export downloads the game
+      </div>
+      <div>
+        <button
+          className="link"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+            useApp.setState({ tutorial: true });
+          }}
+        >
+          Show the getting-started guide
+        </button>
       </div>
     </div>
   );

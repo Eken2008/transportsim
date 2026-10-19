@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
 import { useApp, type ToolId } from '../store.ts';
+import { sound } from '../audio/sound.ts';
 import { BulldozeTool, CanalTool, ConvertTool, DepotTool, StationTool, WaypointTool } from '../tools/placeTools.ts';
 import { RoadPlaceTool, RoadTool } from '../tools/roadTools.ts';
 import { RailTool } from '../tools/railTool.ts';
@@ -352,6 +353,11 @@ export class GameRenderer {
 
     this.controller.update(dt);
     this.trains.update(now, useApp.getState().global?.speed ?? 1, this.controller.target, this.controller.distance);
+    // Ambient rumble: louder with more vehicles near the focus, and when zoomed in.
+    const t = this.controller.target;
+    let near = 0;
+    for (const p of this.trains.picks) if (Math.abs(p.pos.x - t.x) < 24 && Math.abs(p.pos.z - t.z) < 24) near++;
+    sound.setTraffic((Math.min(near, 12) / 12) * Math.min(1, Math.max(0.15, 30 / this.controller.distance)));
     this.signalLights.update();
     this.updateReservations();
     this.updateWrecks();

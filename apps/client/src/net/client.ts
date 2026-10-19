@@ -20,6 +20,7 @@ import { downloadSave, gzip, listSaves, putSave, requestPersistentStorage } from
 import { openWindow, toast, useApp } from '../store.ts';
 import { storageGet, storageSet, getClientId, getPlayerName } from './identity.ts';
 import { Connection, serverUrl } from './connection.ts';
+import { sound } from '../audio/sound.ts';
 
 const AUTOSAVE_PREF_KEY = 'ts.autosavePref';
 
@@ -158,6 +159,7 @@ class AppClient {
         return;
       case 'income':
         this.world?.onIncome?.(m.tile, m.amount);
+        sound.coin();
         return;
       case 'global': {
         const g = this.withHistory(m.global);
@@ -210,6 +212,8 @@ class AppClient {
         useApp.setState((s) => {
           const known = new Set((m.full ? [] : s.news).map((n) => n.id));
           const fresh = m.items.filter((n) => !known.has(n.id));
+          if (!m.full && fresh.some((n) => n.kind === 'accident')) sound.crash();
+          else if (!m.full && fresh.length) sound.chime();
           return {
             news: [...(m.full ? [] : s.news), ...fresh].slice(-100),
             ticker: !m.full && fresh.length > 0 ? fresh[fresh.length - 1]! : s.ticker,
@@ -384,7 +388,14 @@ class AppClient {
   command(cmd: Command): Promise<{ ok: boolean; error?: string; cost?: number }> {
     const seq = ++this.seq;
     return new Promise((resolve) => {
-      this.pending.set(seq, resolve);
+      this.pending.set(seq, (r) => {
+        if (r.ok && !useApp.getState().doneCommands.includes(cmd.type)) useApp.setState((s) => ({ doneCommands: [...s.doneCommands, cmd.type] }));
+        if (r.ok) {
+          if (cmd.type === 'clearArea' || cmd.type.startsWith('remove')) sound.demolish();
+          else if (/^(build|set|convert|terraform|buy)/.test(cmd.type)) sound.build();
+        }
+        resolve(r);
+      });
       this.conn.send({ t: 'command', seq, cmd });
     });
   }

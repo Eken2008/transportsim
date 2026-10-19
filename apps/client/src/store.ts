@@ -88,6 +88,10 @@ export interface AppState {
   /** Camera focus request (renderer watches `seq`). */
   focus: { x: number; y: number; seq: number } | null;
   windows: GameWindow[];
+  /** The getting-started guide is showing. */
+  tutorial: boolean;
+  /** Kinds of command this player has carried out (the guide ticks steps off with them). */
+  doneCommands: string[];
 }
 
 export type GameWindow =
@@ -150,6 +154,8 @@ export const useApp = create<AppState>(() => ({
   ordersFor: null,
   focus: null,
   windows: [],
+  tutorial: false,
+  doneCommands: [],
 }));
 
 let toastId = 0;

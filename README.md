@@ -2,7 +2,7 @@
 
 A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from OpenTTD, Simutrans and Transport Fever. Players found transport companies, build rail, road, air and sea networks, and carry passengers and goods between towns and industries. They can compete with each other or cooperate.
 
-> Status: **M7 — water** is playable.
+> Status: all milestones of the [plan](docs/PLAN.md) (M0–M8) are in.
 >
 > - **World:** procedural terrain with towns, roads and houses that grow with good service; terraforming.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
@@ -18,13 +18,15 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, routed by cargodist (demand to every reachable destination, transfers between trains), paid per leg by distance and journey time.
 > - **Industries:** mines, forests, farms and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food. Served industries grow, neglected ones close, new ones open. Optional inflation.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
-> - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table. Three quarters in the red means bankruptcy.
+> - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table; graphs of ten years of company history and of cargo payment rates. Three quarters in the red means bankruptcy.
 > - **Competition:** station ratings from service quality; stations that cover the same houses split them by rating.
 > - **Cooperation:** track and station sharing agreements with a fee per train per day.
 > - **Multiplayer:** live multiplayer sync, chat with a company channel, and a news feed. The host can rename the game, change slots and visibility, and remove players.
 > - **Saves:** host-only saves in the browser.
+> - **Getting started:** a guide that ticks off the steps to a first working railway; synthesised sound effects and ambient traffic noise, with volume control.
+> - **Scale:** a 2048² map with about 5,000 vehicles runs at about half a CPU core; players get only the updates for what they can see (about 10 KB/s each in a busy game).
 >
-> See [docs/PLAN.md](docs/PLAN.md) for the roadmap. Polish and scale (M8) comes next.
+> See [docs/PLAN.md](docs/PLAN.md) for the plan, and [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) to run your own server.
 
 ## Quick start
 
@@ -45,6 +47,8 @@ Open http://localhost:5173. To play against yourself, open a second browser prof
 | `bun run build`     | Production build of the client into `apps/client/dist`               |
 | `bun run start`     | Server only; serves `apps/client/dist` if it exists                  |
 | `bun run smoke`     | Build, then run a two-player browser test (needs Node 22 and Chrome) |
+| `bun run bench`     | Simulation benchmark on a big map full of vehicles                   |
+| `bun run loadtest`  | Bot players join one game; reports tick time and bandwidth           |
 
 ## Layout
 
@@ -52,7 +56,7 @@ Open http://localhost:5173. To play against yourself, open a second browser prof
 packages/shared   Simulation, commands, protocol and saves. Used by both server and client.
 apps/server       Minimal Bun WebSocket server: lobby, rooms, tick loop, interest management
 apps/client       Vite + React UI, Three.js renderer, IndexedDB save store
-scripts/          Smoke test
+scripts/          Smoke test, benchmark and load test
 ```
 
 All game rules live in `packages/shared`. The server runs them authoritatively, and the client runs the same code to preview build costs and errors before sending a command.
@@ -89,7 +93,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `V`                                              | Convert track type (drag an area); the rail tools choose standard, electrified or high-speed track |
 | `8`                                              | Bulldoze an area                                             |
 | Click                                            | Open a depot, hangar or ship depot, station (show its catchment) or train (rearrange vehicles in a depot) |
-| `T`                                              | Train list                                                   |
+| `T`                                              | Vehicle list                                                 |
 | `C`                                              | Company: found or join one, members, roles, invitations      |
 | `F` / `L`                                        | Finances (books, loans, infrastructure) / company league     |
 | `Esc`                                            | Deselect tool        |
@@ -115,3 +119,5 @@ MAX_PLAYERS=32 MAX_MAP_SIZE=4096 bun run start
 | `STATIC_DIR`           | `apps/client/dist` | Directory of client files to serve                        |
 
 There are two ways to point a client at a different server: `?server=host:port` in the URL, or `VITE_SERVER_URL` at build time.
+
+See [docs/SELF_HOSTING.md](docs/SELF_HOSTING.md) for proxies, running as a service and sizing.

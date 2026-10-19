@@ -17,7 +17,7 @@ PORT=8787 bun run start            # serves the client and the game WebSocket on
 
 Open `http://<your-host>:8787`. The server serves the built client from `apps/client/dist` and accepts game connections at `/ws`. `GET /health` returns `{"ok":true,"rooms":N}` for monitoring.
 
-To serve the client from somewhere else (a CDN, or a separate static host), set `STATIC_DIR` to an empty folder, or leave the client out of the deployment. The client then needs to reach the server's `/ws` on the same host it was loaded from.
+To serve the client from somewhere else (a CDN, or a separate static host), build it with `VITE_SERVER_URL=your-server:8787` (or a full `wss://your-server/ws`) so it connects there, or open it with `?server=host:port` in the URL. The server then needs no `STATIC_DIR`.
 
 ## Settings
 

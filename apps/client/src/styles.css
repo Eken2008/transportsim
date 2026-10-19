@@ -467,7 +467,8 @@ input[type='range'] {
   padding: 12px 14px;
   font-size: 13px;
   line-height: 1.7;
-  width: 300px;
+  width: 380px;
+  max-width: calc(100vw - 20px);
 }
 .help kbd {
   font-family: var(--mono);
@@ -1034,4 +1035,91 @@ form.propose {
 form.propose label {
   white-space: nowrap;
   gap: 4px;
+}
+
+/* Getting-started guide */
+.tutorial {
+  position: absolute;
+  top: 64px;
+  left: 10px;
+  width: 300px;
+  max-width: calc(100vw - 20px);
+  padding: 10px 12px;
+  font-size: 13px;
+  z-index: 5;
+}
+.tutorial-steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.tutorial-steps li {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  color: var(--muted);
+}
+.tutorial-steps li.current,
+.tutorial-steps li.done {
+  color: inherit;
+}
+.tutorial-steps li p {
+  margin: 4px 0 2px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.tutorial-steps .tick {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  border: 1px solid var(--line-strong);
+}
+.tutorial-steps li.done .tick {
+  background: #3bb273;
+  border-color: #3bb273;
+  color: #08130c;
+}
+.tutorial-steps li.current .tick {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tutorial kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+button.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Volume: the slider appears on hover or keyboard focus */
+.volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.volume input[type='range'] {
+  width: 0;
+  opacity: 0;
+  transition:
+    width 0.15s,
+    opacity 0.15s;
+}
+.volume:hover input[type='range'],
+.volume:focus-within input[type='range'] {
+  width: 80px;
+  opacity: 1;
 }

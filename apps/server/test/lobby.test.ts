@@ -105,6 +105,57 @@ describe('lobby & rooms', () => {
     lobby.shutdown();
   });
 
+  test("stations: new ones go to everyone, daily changes only to players who see or watch them", () => {
+    const lobby = new Lobby(CONFIG);
+    const { host, joined, room } = hostGame(lobby);
+    const guest = client(lobby, 'Guest');
+    guest.send({ t: 'joinRoom', roomId: joined.roomId });
+    host.send({ t: 'subscribe', chunks: [0] }); // the north-west corner, where the station is
+    guest.send({ t: 'subscribe', chunks: [3] });
+    const st = { id: 99, name: 'Test Halt', owner: 0, x: 10, y: 10, x0: 10, y0: 10, x1: 10, y1: 10, tiles: 1, townId: null, builtDays: 0, waiting: {}, waitingTotal: 0, rating: 175 };
+    room.state.stations.set(st.id, st);
+    const got = (c: FakeConn) => c.inbox.some((m) => m.t === 'stations' && m.stations.some((s) => s.id === st.id));
+    const update = () => {
+      host.conn.inbox = [];
+      guest.conn.inbox = [];
+      room.state.markStationDirty(st.id);
+      room.flush();
+    };
+    update();
+    expect(got(host.conn)).toBe(true);
+    expect(got(guest.conn)).toBe(true);
+    st.waitingTotal = 12;
+    update();
+    expect(got(host.conn)).toBe(true);
+    expect(got(guest.conn)).toBe(false);
+    guest.send({ t: 'watch', stations: [st.id], industries: [] });
+    update();
+    expect(got(guest.conn)).toBe(true);
+    guest.send({ t: 'watch', stations: [], industries: [] });
+    st.name = 'Test Central';
+    update();
+    expect(got(guest.conn)).toBe(true);
+    lobby.shutdown();
+  });
+
+  test('company books: the daily global carries the current quarter; history comes on its own', () => {
+    const lobby = new Lobby(CONFIG);
+    const { host, room } = hostGame(lobby);
+    host.send({ t: 'command', seq: 1, cmd: { type: 'foundCompany', name: 'H Rail', color: 1 } });
+    const c = [...room.state.companies.values()][0]!;
+    c.finances.unshift({ year: 1899, quarter: 3, ledger: { ...c.finances[0]!.ledger, income: 500 } });
+    c.history.push({ date: 1, money: 1, loan: 0, value: 1, vehicles: 0, ledger: { ...c.finances[0]!.ledger }, delivered: {} });
+    expect(room.globalState().companies[0]!.finances).toHaveLength(1);
+    expect(room.globalState().companies[0]!.history).toHaveLength(0);
+    const late = client(lobby, 'Late');
+    late.send({ t: 'joinRoom', roomId: room.id });
+    const h = late.conn.last('history')!;
+    expect(h.full).toBe(true);
+    expect(h.companies[0]!.finances).toHaveLength(2);
+    expect(h.companies[0]!.months).toHaveLength(1);
+    lobby.shutdown();
+  });
+
   test('host leaving explicitly ends the game immediately', () => {
     const lobby = new Lobby(CONFIG);
     const { host, joined } = hostGame(lobby);

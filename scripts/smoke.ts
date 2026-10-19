@@ -38,10 +38,20 @@ const check = (ok: boolean, what: string) => {
   console.log(`${ok ? '✓' : '✗'} ${what}`);
   if (!ok) failed = true;
 };
+/** Poll a condition for a few seconds (the client sees changes a moment after the server makes them). */
+const eventually = async (cond: () => Promise<boolean>, ms = 4000) => {
+  const end = Date.now() + ms;
+  for (;;) {
+    if (await cond()) return true;
+    if (Date.now() > end) return false;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+};
 
 try {
   const ctxA = await browser.newContext({ viewport: { width: 1400, height: 860 } });
   const ctxB = await browser.newContext({ viewport: { width: 1100, height: 760 } });
+  await ctxB.addInitScript(() => localStorage.setItem('ts.tutorialSeen', '1'));
   const a = await ctxA.newPage();
   const b = await ctxB.newPage();
   for (const [p, n] of [[a, 'A'], [b, 'B']] as [Page, string][]) {
@@ -67,6 +77,11 @@ try {
   await companyWin.getByRole('button', { name: 'Found', exact: true }).click();
   await a.locator('.money').waitFor({ timeout: 5000 });
   check((await a.locator('.hud-box').first().innerText()).includes('Alice Rail'), 'founded a company');
+  // New players get the getting-started guide; founding the company ticks off its first step.
+  const guide = a.locator('.tutorial');
+  await guide.waitFor({ timeout: 8000 });
+  check((await guide.locator('li.done').count()) >= 1, 'getting-started guide shows, first step ticked');
+  await guide.getByRole('button', { name: 'Close the guide' }).click();
   await a.locator('.window button[aria-label="Close"]').click();
   await a.waitForTimeout(4000);
   await a.screenshot({ path: `${outDir}/02-game.png` });
@@ -211,6 +226,12 @@ try {
   check(newsText.includes('Alice founds Alice Rail'), 'news window lists the company founding');
   check(newsText.includes('first train arrives'), 'news reports the first train at a station');
   await newsWin.locator('button[aria-label="Close"]').click();
+  // Graphs: the payment chart has a line per cargo from the start.
+  await a.getByRole('button', { name: '📈 Graphs' }).click();
+  const stats = a.locator('.window', { hasText: 'Statistics' });
+  await stats.getByRole('tab', { name: 'Payment rates' }).click();
+  check((await stats.locator('svg polyline').count()) >= 5, 'statistics window draws charts');
+  await stats.locator('button[aria-label="Close"]').click();
   // Books and a loan
   await a.keyboard.press('KeyF');
   const fin = a.locator('.window', { hasText: 'finances' });
@@ -289,19 +310,19 @@ try {
   await a.keyboard.press('Digit9');
   await a.getByLabel('One-way').check();
   await clickTile(sx - 8, sy - 4);
-  check(((await tileAt(sx - 8, sy - 4)).signals & 0x1000) !== 0, 'placed a one-way signal');
+  check(await eventually(async () => ((await tileAt(sx - 8, sy - 4)).signals & 0x1000) !== 0), 'placed a one-way signal');
   await a.getByLabel('One-way').uncheck();
   await a.getByRole('button', { name: 'Path', exact: true }).click();
   await clickTile(sx - 9, sy - 4);
-  check((await tileAt(sx - 9, sy - 4)).signals >> 13 === 4, 'placed a path signal');
+  check(await eventually(async () => (await tileAt(sx - 9, sy - 4)).signals >> 13 === 4), 'placed a path signal');
   await a.getByRole('button', { name: 'Entry', exact: true }).click();
   await clickTile(sx + 3, sy - 4);
-  check((await tileAt(sx + 3, sy - 4)).signals >> 13 === 1, 'placed an entry signal');
+  check(await eventually(async () => (await tileAt(sx + 3, sy - 4)).signals >> 13 === 1), 'placed an entry signal');
   await a.getByLabel('Show reservations').check();
   await a.keyboard.press('Escape');
   await a.keyboard.press('KeyP');
   await clickTile(sx - 4, sy - 4);
-  check(((await tileAt(sx - 4, sy - 4)).data & 0x800) !== 0, 'built a waypoint');
+  check(await eventually(async () => ((await tileAt(sx - 4, sy - 4)).data & 0x800) !== 0), 'built a waypoint');
   await a.keyboard.press('Digit9');
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 7, y: s.y - 4, yaw: 0.5, pitch: 0.6, distance: 9 }), { x: sx, y: sy });
   await a.waitForTimeout(2000);
@@ -323,17 +344,17 @@ try {
   await a.waitForTimeout(1500);
   await a.keyboard.press('KeyG');
   await dragTiles(sx - 6, sy + 8, sx + 6, sy + 8);
-  check((await tileAt(sx, sy + 8)).type === 3, 'built a road with the road tool');
+  check(await eventually(async () => (await tileAt(sx, sy + 8)).type === 3), 'built a road with the road tool');
   if ((await tileAt(sx, sy + 8)).type !== 3) console.log('  toasts:', await a.locator('.toast').allInnerTexts(), JSON.stringify(await tileAt(sx, sy + 8)));
   await a.keyboard.press('KeyH');
   await clickTile(sx - 2, sy + 8);
-  check((await tileAt(sx - 2, sy + 8)).type === 8, 'built a bus stop');
+  check(await eventually(async () => (await tileAt(sx - 2, sy + 8)).type === 8), 'built a bus stop');
   await a.keyboard.press('KeyJ');
   await clickTile(sx + 2, sy + 9);
-  check((await tileAt(sx + 2, sy + 9)).type === 9, 'built a road depot');
+  check(await eventually(async () => (await tileAt(sx + 2, sy + 9)).type === 9), 'built a road depot');
   await a.keyboard.press('KeyK');
   await clickTile(sx + 4, sy + 8);
-  check(((await tileAt(sx + 4, sy + 8)).data & 0x10) !== 0, 'made a road one-way');
+  check(await eventually(async () => ((await tileAt(sx + 4, sy + 8)).data & 0x10) !== 0), 'made a road one-way');
   await a.keyboard.press('Escape');
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y + 6.5, yaw: 0.6, pitch: 0.7, distance: 9 }), { x: sx, y: sy });
   await a.waitForTimeout(2000);
@@ -454,6 +475,7 @@ try {
 
   // A third player joins; the host renames the game and removes them.
   const ctxC = await browser.newContext({ viewport: { width: 1000, height: 700 } });
+  await ctxC.addInitScript(() => localStorage.setItem('ts.tutorialSeen', '1'));
   const c = await ctxC.newPage();
   lastPage = c;
   c.on('pageerror', (e) => console.log(`[C pageerror] ${e.message}`));
@@ -515,6 +537,7 @@ try {
   // Airports need a later start year: a separate game from 1960. One airport is built with the
   // air tool, one by command; an aircraft bought in the hangar flies between them.
   const ctxD = await browser.newContext({ viewport: { width: 1400, height: 860 } });
+  await ctxD.addInitScript(() => localStorage.setItem('ts.tutorialSeen', '1'));
   const d = await ctxD.newPage();
   d.setDefaultTimeout(30_000);
   lastPage = d;
@@ -560,7 +583,7 @@ try {
     await d.getByRole('button', { name: 'Airports tools' }).click();
     await d.keyboard.press('KeyY');
     await dClick(ap1.x, ap1.y);
-    check((await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap1.x + 2, ap1.y + 1])).type === 10, 'built an airport with the air tool');
+    check(await eventually(async () => (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap1.x + 2, ap1.y + 1])).type === 10), 'built an airport with the air tool');
     const built = await dh((h, t: { x: number; y: number }) => h.command({ type: 'buildAirport', x: t.x, y: t.y, kind: 'small' }), ap2);
     check(built.ok, `built a second airport by command${built.ok ? '' : `: ${built.error}`}`);
     await d.keyboard.press('Escape');
@@ -627,16 +650,16 @@ try {
     await d.keyboard.press('KeyU');
     await dDrag(wx, wy + 3, wx + 16, wy + 3);
     await d.waitForTimeout(2000);
-    check((await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 8, wy + 3])).type === 1, 'dug a canal with the canal tool');
+    check(await eventually(async () => (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 8, wy + 3])).type === 1), 'dug a canal with the canal tool');
     await d.keyboard.press('KeyO');
     await dClick(wx + 2, wy + 4);
-    check((await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 2, wy + 4])).type === 12, 'built a dock with the dock tool');
+    check(await eventually(async () => (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 2, wy + 4])).type === 12), 'built a dock with the dock tool');
     const far = await dh((h, t: number[]) => h.command({ type: 'buildDock', x: t[0], y: t[1] }), [wx + 14, wy + 4]);
     check(far.ok, `built a second dock by command${far.ok ? '' : `: ${far.error}`}`);
     await dh((h, t: number[]) => h.command({ type: 'buildCanal', x0: t[0], y0: t[1], x1: t[0], y1: t[1] }), [wx + 8, wy + 2]);
     await d.keyboard.press('KeyM');
     await dClick(wx + 8, wy + 2);
-    check((await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 8, wy + 2])).type === 13, 'built a ship depot with the depot tool');
+    check(await eventually(async () => (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 8, wy + 2])).type === 13), 'built a ship depot with the depot tool');
     await d.keyboard.press('KeyX');
     await dClick(wx + 11, wy + 3);
     check((await dh((h) => h.stations().length)) >= 2, 'docks made stations');
