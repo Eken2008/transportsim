@@ -4,6 +4,7 @@ import { houseType } from '../town/houses.ts';
 import { TileType } from '../world/constants.ts';
 import { Random } from '../util/random.ts';
 import { cargoCount, type Train } from '../vehicles/train.ts';
+import { isBus } from '../vehicles/catalog.ts';
 import { CARGO_IDS, cargoPayment, type CargoId } from './cargo.ts';
 import { RATING_STEP, ratingParts } from './rating.ts';
 import { industryType } from './industries.ts';
@@ -478,7 +479,8 @@ export class CargoSystem {
     if (st.firstArrival === undefined) {
       st.firstArrival = this.state.date;
       const owner = this.state.companies.get(t.owner)?.name ?? 'A company';
-      this.state.addNews('station', `Citizens celebrate! The first train arrives at ${st.name} (${owner})`, {
+      const first = t.mode === 'air' ? 'first aircraft lands' : t.mode === 'road' ? `first ${isBus(t.units[0]!) ? 'bus' : 'truck'} arrives` : 'first train arrives';
+      this.state.addNews('station', `Citizens celebrate! The ${first} at ${st.name} (${owner})`, {
         company: t.owner,
         tile: st.y * this.state.map.width + st.x,
       });

@@ -453,7 +453,9 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
   const air = w.kind === 'hangar';
   const airport = air && map ? client.world?.state.stations.get(map.layers.data[w.id]!) : undefined;
   const types = (air ? AIRCRAFT : ROAD_VEHICLES).filter((v) => isAvailable(v, year, settings?.timeline ?? 'era'));
-  const [type, setType] = useState(types.filter((t) => t.cargoes?.[0] === 'passengers').at(-1)?.id ?? types[0]?.id ?? '');
+  /** Heavy jets can't be bought at a small airport. */
+  const tooBig = (t: { heavy?: boolean }) => air && !!t.heavy && airport?.airport?.kind !== 'large';
+  const [type, setType] = useState(types.filter((t) => t.cargoes?.[0] === 'passengers' && !tooBig(t)).at(-1)?.id ?? types[0]?.id ?? '');
   const v = railVehicle(type) ?? types[0];
   const [cargoChoice, setCargo] = useState<CargoId | ''>('');
   const cargo = cargoChoice && v?.cargoes?.includes(cargoChoice) ? cargoChoice : v?.cargoes?.[0];
@@ -519,7 +521,7 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
                 : 'A truck: uses truck stops.'}{' '}
             Running cost {formatMoney(v.runningCost)}/yr.
           </p>
-          <button className="primary" style={{ width: '100%' }} onClick={() => act({ type: 'buyTrain', depot: w.id, units: [{ type: v.id, cargo }] })}>
+          <button className="primary" style={{ width: '100%' }} disabled={tooBig(v)} onClick={() => act({ type: 'buyTrain', depot: w.id, units: [{ type: v.id, cargo }] })}>
             Buy for {formatMoney(v.cost)}
           </button>
         </>

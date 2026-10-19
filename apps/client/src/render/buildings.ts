@@ -272,11 +272,11 @@ function addAirportTile(g: GeoBuilder, map: GameMap, x: number, y: number, role:
       break;
     case AirportRole.Terminal: {
       g.color(CONCRETE).aabb(x, h - 0.01, y, x + 1, h, y + 1);
-      g.color(TAXI_LINE).aabb(x + 0.48, h, y, x + 0.52, h + 0.003, y + 0.35); // stand line
-      g.color(TERMINAL).aabb(x, h, y + 0.5, x + 1, h + 0.32, y + 0.98);
-      g.color(TERMINAL_GLASS).aabb(x + 0.04, h + 0.08, y + 0.495, x + 0.96, h + 0.26, y + 0.5);
-      g.color(ROOF_GREY).aabb(x - 0.005, h + 0.32, y + 0.48, x + 1.005, h + 0.35, y + 0.99);
-      g.color(TERMINAL).aabb(x + 0.44, h + 0.12, y + 0.3, x + 0.56, h + 0.22, y + 0.5); // jet bridge
+      g.color(TAXI_LINE).aabb(x + 0.48, h, y, x + 0.52, h + 0.003, y + 0.5); // stand line
+      g.color(TERMINAL).aabb(x, h, y + 0.66, x + 1, h + 0.3, y + 0.98);
+      g.color(TERMINAL_GLASS).aabb(x + 0.04, h + 0.08, y + 0.655, x + 0.96, h + 0.24, y + 0.66);
+      g.color(ROOF_GREY).aabb(x - 0.005, h + 0.3, y + 0.64, x + 1.005, h + 0.33, y + 0.99);
+      g.color(TERMINAL).aabb(x + 0.62, h + 0.1, y + 0.45, x + 0.7, h + 0.19, y + 0.66); // jet bridge
       break;
     }
     case AirportRole.Hangar: {

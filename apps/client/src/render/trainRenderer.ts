@@ -262,7 +262,7 @@ export class TrainRenderer {
     const x = Math.max(0, Math.min(map.width - 0.01, x0 + Math.cos(heading) * step));
     const y = Math.max(0, Math.min(map.height - 0.01, y0 + Math.sin(heading) * step));
     const ground = map.heightAt(x, y) * HEIGHT_SCALE + 0.02;
-    const len = (v.length / 16) * 1.4;
+    const len = (v.length / 16) * 0.85;
     const company = this.world.state.companies.get(owner);
     const color = this.colors[(company?.color ?? 0) % this.colors.length]!;
     const mm = this.meshesFor(v.model, 1);

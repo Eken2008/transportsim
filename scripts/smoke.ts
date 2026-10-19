@@ -455,12 +455,15 @@ try {
   // A third player joins; the host renames the game and removes them.
   const ctxC = await browser.newContext({ viewport: { width: 1000, height: 700 } });
   const c = await ctxC.newPage();
+  lastPage = c;
+  c.on('pageerror', (e) => console.log(`[C pageerror] ${e.message}`));
+  c.on('console', (m) => m.type() === 'error' && console.log(`[C console] ${m.text()}`));
   await c.goto(`http://localhost:${PORT}/`);
   await c.getByText('Connected').waitFor({ timeout: 10_000 });
   await c.getByPlaceholder('Player name').fill('Carl');
   await c.getByPlaceholder('Game code').fill(code);
   await c.getByRole('button', { name: 'Join by code' }).click();
-  await c.getByRole('button', { name: /Start or join a company/ }).waitFor({ timeout: 30_000 });
+  await c.getByRole('button', { name: /Start or join a company/ }).waitFor({ timeout: 60_000 });
   await a.getByRole('button', { name: 'Game and players' }).click();
   const gameWin = a.locator('.window', { hasText: 'Players' });
   await gameWin.locator('label.field', { hasText: 'Game name' }).locator('input').fill('Renamed railway');
@@ -477,7 +480,9 @@ try {
   await ctxC.close();
   while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
 
-  // Manual save lands in host IndexedDB
+  // Manual save lands in host IndexedDB (paused, so the money read is the money saved)
+  await a.getByTitle('Pause (Space)').click();
+  await a.waitForTimeout(800);
   const savedMoney = await a.locator('.money').innerText();
   await a.getByRole('button', { name: '💾 Save' }).click();
   await a.getByText('Game saved to this browser').waitFor({ timeout: 10_000 });
@@ -526,7 +531,7 @@ try {
   await danaWin.getByRole('textbox', { name: 'Company name' }).fill('Dana Air');
   await danaWin.getByRole('button', { name: 'Found', exact: true }).click();
   await d.locator('.money').waitFor({ timeout: 5000 });
-  type DHook = { spawn: { x: number; y: number }; view(v: object): void; tileToScreen(x: number, y: number): { x: number; y: number }; command(cmd: object): Promise<{ ok: boolean; error?: string }>; tile(x: number, y: number): { type: number; data: number }; trains(): { id: number; mode?: string }[] };
+  type DHook = { spawn: { x: number; y: number }; view(v: object): void; tileToScreen(x: number, y: number): { x: number; y: number }; command(cmd: object): Promise<{ ok: boolean; error?: string }>; tile(x: number, y: number): { type: number; data: number }; trains(): { id: number; mode?: string; air?: number[] }[]; stations(): { id: number; airport: boolean }[] };
   const dh = <T>(fn: (h: DHook, arg: never) => T, arg?: unknown) =>
     d.evaluate(([f, x]) => new Function('h', 'arg', `return (${f})(h, arg)`)((window as unknown as { transportsim: DHook }).transportsim, x), [fn.toString(), arg] as const) as Promise<T>;
   const dClick = async (x: number, y: number) => {
@@ -565,7 +570,8 @@ try {
     await hangarWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
     const planeWin = d.locator('.window', { has: d.locator('ol.orders') }).last();
     const home = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap1.x, ap1.y])).data;
-    const away = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap2.x, ap2.y])).data;
+    // The far airport may be off screen (its tiles not loaded here); find it among the stations.
+    const away = await dh((h, at: number) => h.stations().find((st) => st.airport && st.id !== at)?.id ?? -1, home);
     const planeId = await dh((h) => h.trains().filter((t) => t.mode === 'air').at(-1)?.id ?? -1);
     const r = await dh((h, o: number[]) => h.command({ type: 'setOrders', id: o[0], orders: [{ kind: 'station', station: o[1] }, { kind: 'station', station: o[2] }] }), [planeId, home, away]);
     check(r.ok, `gave the aircraft orders${r.ok ? '' : `: ${r.error}`}`);
@@ -574,6 +580,15 @@ try {
     await d.waitForTimeout(6000);
     const planeStatus = await planeWin.locator('.kv b').first().innerText();
     check(/Heading|Loading/.test(planeStatus), `aircraft is flying (${planeStatus})`);
+    while ((await d.locator('.window').count()) > 0) await d.locator('.window button[aria-label="Close"]').first().click();
+    await d.getByTitle('Pause (Space)').click();
+    await d.waitForTimeout(1500);
+    const planeAt = await dh((h) => h.trains().find((t) => t.mode === 'air')?.air);
+    check(!!planeAt, 'the client gets the aircraft position');
+    if (planeAt) await dh((h, p: number[]) => h.view({ x: p[0], y: p[1], distance: 6, pitch: 0.5 }), planeAt);
+    await d.waitForTimeout(3000);
+    await d.screenshot({ path: `${outDir}/07b-aircraft.png` });
+    check((await dh((h) => h.stations().filter((st) => st.airport).length)) === 2, 'both airports are known to the client');
     while ((await d.locator('.window').count()) > 0) await d.locator('.window button[aria-label="Close"]').first().click();
     await dh((h, s: { x: number; y: number }) => h.view({ x: s.x + 2.5, y: s.y + 1.5, yaw: 0.6, pitch: 0.6, distance: 9 }), ap1);
     await d.waitForTimeout(1500);

@@ -88,9 +88,13 @@ export function installDebugHook(r: GameRenderer): () => void {
       }
       return null;
     },
+    /** Stations as the client knows them. */
+    stations() {
+      return [...(client.world?.state.stations.values() ?? [])].map((st) => ({ id: st.id, name: st.name, airport: !!st.airport }));
+    },
     /** Vehicles as the client knows them. */
     trains() {
-      return [...(client.world?.trains.values() ?? [])].map((t) => ({ id: t.id, mode: t.mode, status: t.status, name: t.name }));
+      return [...(client.world?.trains.values() ?? [])].map((t) => ({ id: t.id, mode: t.mode, status: t.status, name: t.name, air: client.world?.motions.get(t.id)?.m.air }));
     },
     /** A straight town road tile near (x, y) where a level crossing could go. */
     findCrossingSpot(x: number, y: number) {

@@ -63,7 +63,7 @@ export interface AirportNodes {
 
 export function airportNodes(a: AirportInfo): AirportNodes {
   const t = AIRPORT_TYPES[a.kind];
-  const gateY = a.y + t.h - 1 + 0.15;
+  const gateY = a.y + t.h - 1 + 0.2;
   return {
     taxiY: a.y + 1.5,
     hangarDoor: { x: a.x + 0.5, y: gateY },
