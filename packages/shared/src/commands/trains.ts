@@ -5,6 +5,7 @@ import { TileType } from '../world/constants.ts';
 import { isAvailable, railVehicle } from '../vehicles/catalog.ts';
 import { JUMP_CONDITIONS, trainStats, type Order, type Train } from '../vehicles/train.ts';
 import { advanceOrder, settleOrders } from '../vehicles/orders.ts';
+import { MAX_TRAIN_TILES } from '../vehicles/maintenance.ts';
 
 /** A timetable duration in days (0.1 resolution, up to a year), or undefined. */
 function days(v: unknown): number | undefined {
@@ -14,7 +15,7 @@ function days(v: unknown): number | undefined {
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
 export const MAX_UNITS = 24;
-export const MAX_TRAIN_LENGTH = 16; // tiles
+export const MAX_TRAIN_LENGTH = MAX_TRAIN_TILES; // tiles
 export const MAX_ORDERS = 32;
 
 /** Buy a train in a depot: `units` lists vehicle type ids front to back (first is the engine). */

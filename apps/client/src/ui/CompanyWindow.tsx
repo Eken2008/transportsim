@@ -1,4 +1,15 @@
-import { COMPANY_COLORS, COMPANY_ROLES, ROLE_LABELS, roleAllows, type Company, type CompanyRole } from '@transportsim/shared';
+import {
+  COMPANY_COLORS,
+  COMPANY_ROLES,
+  RAIL_VEHICLES,
+  ROLE_LABELS,
+  isAvailable,
+  railVehicle,
+  roleAllows,
+  ymdFromDays,
+  type Company,
+  type CompanyRole,
+} from '@transportsim/shared';
 import { useState } from 'react';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
@@ -136,6 +147,8 @@ function MyCompany({ c, role }: { c: Company; role: CompanyRole }) {
 
       <SharingSection c={c} canAct={roleAllows(role, 'build')} />
 
+      <VehiclePolicy c={c} canAct={roleAllows(role, 'build')} />
+
       <button
         className="danger"
         style={{ width: '100%', marginTop: 12 }}
@@ -151,6 +164,62 @@ function MyCompany({ c, role }: { c: Company; role: CompanyRole }) {
       >
         Leave company
       </button>
+    </>
+  );
+}
+
+/** Autorenew and replacement rules, applied when trains visit a depot. */
+function VehiclePolicy({ c, canAct }: { c: Company; canAct: boolean }) {
+  const date = useApp((s) => s.global?.date ?? 0);
+  const timeline = useApp((s) => s.room?.settings.timeline ?? 'era');
+  const year = ymdFromDays(date).year;
+  const [from, setFrom] = useState(RAIL_VEHICLES[0]!.id);
+  const fromType = railVehicle(from)!;
+  const targets = RAIL_VEHICLES.filter((v) => v.kind === fromType.kind && v.id !== from && isAvailable(v, year, timeline));
+  const [to, setTo] = useState('');
+  const target = targets.some((v) => v.id === to) ? to : (targets[0]?.id ?? '');
+  const rules = Object.entries(c.replace);
+  return (
+    <>
+      <h4>Vehicles</h4>
+      <label className="row small" title="When a train older than its design life visits a depot, its vehicles are replaced with new ones of the same types">
+        <input type="checkbox" disabled={!canAct} checked={c.autorenew} onChange={(e) => act({ type: 'vehicleSettings', autorenew: e.target.checked })} />
+        Renew trains that outlive their design life (at a depot visit)
+      </label>
+      {rules.map(([f, t]) => (
+        <div className="list-row" key={f}>
+          <span style={{ flex: 1 }} className="small">
+            Replace <b>{railVehicle(f)?.name ?? f}</b> with <b>{railVehicle(t)?.name ?? t}</b>
+          </span>
+          {canAct && (
+            <button className="ghost small" aria-label="Remove rule" onClick={() => act({ type: 'vehicleSettings', replace: { from: f, to: null } })}>
+              ✕
+            </button>
+          )}
+        </div>
+      ))}
+      {canAct && (
+        <div className="row wrap" style={{ marginTop: 6 }}>
+          <select value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Replace" style={{ flex: 1, minWidth: 0 }}>
+            {RAIL_VEHICLES.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+          →
+          <select value={target} onChange={(e) => setTo(e.target.value)} aria-label="With" style={{ flex: 1, minWidth: 0 }}>
+            {targets.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}
+              </option>
+            ))}
+          </select>
+          <button disabled={!target} onClick={() => act({ type: 'vehicleSettings', replace: { from, to: target } })}>
+            Add rule
+          </button>
+        </div>
+      )}
     </>
   );
 }

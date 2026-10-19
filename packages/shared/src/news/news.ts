@@ -1,4 +1,4 @@
-export type NewsKind = 'company' | 'station' | 'finance' | 'agreement';
+export type NewsKind = 'company' | 'station' | 'finance' | 'agreement' | 'vehicle' | 'accident';
 
 export interface NewsItem {
   id: number;
@@ -17,7 +17,7 @@ export const NEWS_HISTORY = 100;
 
 export function sanitizeNews(input: unknown): NewsItem[] {
   if (!Array.isArray(input)) return [];
-  const kinds: NewsKind[] = ['company', 'station', 'finance', 'agreement'];
+  const kinds: NewsKind[] = ['company', 'station', 'finance', 'agreement', 'vehicle', 'accident'];
   const out: NewsItem[] = [];
   for (const n of input.slice(-NEWS_HISTORY)) {
     if (!n || typeof n.id !== 'number' || typeof n.date !== 'number' || !kinds.includes(n.kind)) continue;

@@ -5,7 +5,7 @@ import { cargoCount, type JumpOrder, type Train } from './train.ts';
 export const SERVICE_INTERVAL_DAYS = 150;
 
 export function needsService(state: GameState, t: Train): boolean {
-  return state.date - (t.lastService ?? t.builtDays) > SERVICE_INTERVAL_DAYS;
+  return state.date - (t.lastService ?? t.builtDays) > (t.serviceInterval ?? SERVICE_INTERVAL_DAYS);
 }
 
 /** The value a jump order's condition looks at. */

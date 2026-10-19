@@ -121,6 +121,10 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       badQuarters: Math.max(0, Math.floor(num(c.badQuarters, 0))),
       infrastructure: emptyInfrastructure(),
       value: num(c.value, 0),
+      autorenew: c.autorenew !== false,
+      replace: Object.fromEntries(
+        Object.entries(c.replace ?? {}).filter(([from, to]) => typeof to === 'string' && railVehicle(from) && railVehicle(to)),
+      ),
     });
   }
   for (const t of Array.isArray(snap.towns) ? snap.towns : []) {
@@ -268,5 +272,10 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
     autofill: t.autofill === true || undefined,
     lastService: typeof t.lastService === 'number' ? t.lastService : undefined,
     reliability: typeof t.reliability === 'number' ? Math.max(0, Math.min(1, t.reliability)) : undefined,
+    brokenDown: Math.max(0, Math.floor(num(t.brokenDown, 0))) || undefined,
+    breakdowns: Math.max(0, Math.floor(num(t.breakdowns, 0))) || undefined,
+    serviceTrip: t.serviceTrip === true || undefined,
+    serviceInterval: typeof t.serviceInterval === 'number' ? Math.max(30, Math.min(800, Math.round(t.serviceInterval))) : undefined,
+    oldWarned: t.oldWarned === true || undefined,
   };
 }

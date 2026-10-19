@@ -3,7 +3,12 @@ import {
   RAIL_VEHICLES,
   cargoCount,
   isAvailable,
+  MAX_SERVICE_INTERVAL,
+  MIN_SERVICE_INTERVAL,
+  SERVICE_INTERVAL_DAYS,
+  baseReliability,
   isElectrified,
+  lifespan,
   longestPlatform,
   railVehicle,
   ratingParts,
@@ -145,6 +150,8 @@ function stationName(id: number): string {
 
 export function trainStatus(t: TrainInfo): string {
   if (t.status === 'depot') return 'In depot';
+  if (t.brokenDown) return 'Broken down';
+  if (t.serviceTrip) return 'Heading for a service';
   if (t.status === 'loading') return `Loading at ${stationName(t.lastStation)}`;
   if (t.status === 'stopped') return 'Stopped';
   if (t.depot >= 0) return 'Waiting to leave the depot';
@@ -200,6 +207,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
           {t.units.length} vehicles · {stats.length.toFixed(1)} tiles · {stats.power.toLocaleString()} kW
         </span>
       </div>
+      <Upkeep t={t} mine={mine} />
       {mine && (
         <div className="row wrap" style={{ marginTop: 10 }}>
           {t.status === 'depot' || t.status === 'stopped' ? (
@@ -244,6 +252,56 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
         warn={(o) => (o.kind === 'station' ? <PlatformWarning station={o.station} length={stats.length} /> : null)}
       />
     </Win>
+  );
+}
+
+/** Reliability, age and servicing of a train. */
+function Upkeep({ t, mine }: { t: TrainInfo; mine: boolean }) {
+  const date = useApp((s) => s.global?.date ?? 0);
+  const rel = Math.round((t.reliability ?? baseReliability(t.units)) * 100);
+  const age = (date - t.builtDays) / 365;
+  const life = lifespan(t.units);
+  const sinceService = date - (t.lastService ?? t.builtDays);
+  const interval = t.serviceInterval ?? SERVICE_INTERVAL_DAYS;
+  return (
+    <div className="kv" style={{ marginTop: 6 }}>
+      <span>Reliability</span>
+      <span className="row">
+        <span className="rating-bar" aria-hidden style={{ maxWidth: 90 }}>
+          <span style={{ width: `${rel}%`, background: rel < 50 ? 'var(--bad)' : rel < 75 ? 'var(--accent)' : 'var(--ok)' }} />
+        </span>
+        <b className="mono">{rel}%</b>
+        {(t.breakdowns ?? 0) > 0 && <span className="muted small">{t.breakdowns} breakdowns</span>}
+      </span>
+      <span>Age</span>
+      <span className={age >= life ? 'neg' : ''}>
+        {age.toFixed(1)} years <span className="muted small">(design life {life})</span>
+      </span>
+      <span>Service</span>
+      <span className="row small">
+        {sinceService} days ago · every
+        {mine ? (
+          <input
+            key={interval}
+            type="number"
+            min={MIN_SERVICE_INTERVAL}
+            max={MAX_SERVICE_INTERVAL}
+            step={10}
+            defaultValue={interval}
+            aria-label="Service interval (days)"
+            style={{ width: 58, padding: '2px 4px' }}
+            onBlur={(e) => {
+              const v = Math.round(+e.target.value);
+              if (v !== interval) act({ type: 'trainSettings', id: t.id, serviceInterval: v });
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          />
+        ) : (
+          ` ${interval}`
+        )}
+        days
+      </span>
+    </div>
   );
 }
 

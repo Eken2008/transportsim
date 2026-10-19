@@ -33,7 +33,7 @@ import { TileType } from '../world/constants.ts';
 import { signalKindOf, type SignalKind } from '../commands/signals.ts';
 import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
 import { PASSENGER_MASS, cargoCount, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
-import { advanceOrder, peekNextOrder } from './orders.ts';
+import { advanceOrder, needsService, peekNextOrder } from './orders.ts';
 
 /** km/h corresponding to 1 tile per second. Sets the game's sense of scale. */
 export const KMH_PER_TILE_PER_S = 28;
@@ -687,6 +687,13 @@ export class RailSystem {
     const stopAt = this.stopDistance(t, brakingDistance(t.speed) + 2);
     // Brake for the stop point, but creep the last bit so trains reach it exactly.
     let limit = Math.min(stats.maxSpeed, this.trackLimit(t), Math.max(speedForDistance(stopAt), stopAt > 0.01 ? CREEP_KMH : 0));
+    if (t.brokenDown) {
+      if (--t.brokenDown <= 0) {
+        t.brokenDown = 0;
+        this.state.dirtyTrains.add(t.id);
+      }
+      limit = 0;
+    }
     if (t.status === 'stopped') limit = 0;
 
     if (t.speed > limit) {
@@ -825,10 +832,15 @@ export class RailSystem {
 
     const tile = segTile(head);
     const order = t.orders[t.orderIndex];
-    if (map.layers.type[tile] === TileType.Depot && (t.toDepot || order?.kind === 'depot')) {
+    if (map.layers.type[tile] === TileType.Depot && (t.toDepot || t.serviceTrip || order?.kind === 'depot')) {
       const parkHere = t.toDepot;
+      const detour = t.serviceTrip && order?.kind !== 'depot';
+      t.serviceTrip = false;
       this.enterDepot(t, tile);
-      if (!parkHere && order) {
+      if (detour) {
+        // A service detour: carry on with the same order.
+        t.status = 'running';
+      } else if (!parkHere && order) {
         // A depot order: get serviced and carry on with the next order.
         this.recordArrival(t, order);
         advanceOrder(this.state, t);
@@ -886,6 +898,8 @@ export class RailSystem {
     advanceOrder(this.state, t);
     t.departedAt = this.state.tick;
     t.replanAt = 0;
+    // A service due: detour to the nearest depot first (unless the orders visit one anyway).
+    if (this.state.settings.breakdowns && needsService(this.state, t) && !t.orders.some((o) => o.kind === 'depot')) t.serviceTrip = true;
     this.plan(t);
   }
 
@@ -910,7 +924,7 @@ export class RailSystem {
   }
 
   private targetKey(t: Train): string | null {
-    if (t.toDepot) return 'depot';
+    if (t.toDepot || t.serviceTrip) return 'depot';
     const o = t.orders[t.orderIndex];
     if (!o) return null;
     if (o.kind === 'station') return `s${o.station}`;
@@ -919,7 +933,7 @@ export class RailSystem {
   }
 
   private goalFor(t: Train): PathGoal | null {
-    if (t.toDepot) return this.goalForOrder(t, { kind: 'depot' });
+    if (t.toDepot || t.serviceTrip) return this.goalForOrder(t, { kind: 'depot' });
     const o = t.orders[t.orderIndex];
     return o ? this.goalForOrder(t, o) : null;
   }
@@ -972,6 +986,12 @@ export class RailSystem {
     if (!path) {
       t.route = [];
       t.replanAt = this.state.tick + REPLAN_DELAY;
+      // No depot in reach: skip the service rather than wait for one.
+      if (t.serviceTrip) {
+        t.serviceTrip = false;
+        t.routeFor = '';
+        t.replanAt = 0;
+      }
       return;
     }
     // Run on through waypoints to the order after them, so trains don't brake for waypoints.

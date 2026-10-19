@@ -90,6 +90,16 @@ export interface Train {
   lastService?: number;
   /** 0..1, drops between services (breakdowns). */
   reliability?: number;
+  /** Ticks left standing still after a breakdown. */
+  brokenDown?: number;
+  /** Breakdowns so far. */
+  breakdowns?: number;
+  /** Detouring to the nearest depot for a service due (then carries on with its orders). */
+  serviceTrip?: boolean;
+  /** Days between services (default SERVICE_INTERVAL_DAYS). */
+  serviceInterval?: number;
+  /** Already told the owner it outlived its design life. */
+  oldWarned?: boolean;
 }
 
 export interface TrainStats {

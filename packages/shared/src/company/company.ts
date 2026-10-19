@@ -59,6 +59,10 @@ export interface Company {
   infrastructure: Infrastructure;
   /** Company value (money − loan + vehicles + property), updated monthly. */
   value: number;
+  /** Renew trains that outlive their design life when they visit a depot. */
+  autorenew: boolean;
+  /** Replacement rules: vehicle type → the type to replace it with on a depot visit. */
+  replace: Record<string, string>;
 }
 
 export function memberOf(c: Company, name: string): CompanyMember | undefined {

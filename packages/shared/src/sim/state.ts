@@ -2,6 +2,7 @@ import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, t
 import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
 import { PassengerSystem } from '../economy/passengers.ts';
+import { MaintenanceSystem } from '../vehicles/maintenance.ts';
 import { COSTS } from '../economy/costs.ts';
 import {
   BANKRUPT_QUARTERS,
@@ -70,6 +71,7 @@ export class GameState {
   readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
   readonly passengers: PassengerSystem;
+  readonly maintenance: MaintenanceSystem;
   /** Recent news, oldest first. */
   readonly news: NewsItem[] = [];
   /** News since the last sync flush (server broadcasts these). */
@@ -99,6 +101,8 @@ export class GameState {
     this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
     this.rail = new RailSystem(this);
     this.passengers = new PassengerSystem(this);
+    this.maintenance = new MaintenanceSystem(this);
+    this.rail.onService = (t) => this.maintenance.service(t);
     this.rail.onArrive = (t, s) => this.passengers.arrive(t, s);
     this.rail.onLoading = (t, s) => this.passengers.loading(t, s);
   }
@@ -139,6 +143,7 @@ export class GameState {
 
   private onNewDay(): void {
     this.passengers.daily();
+    this.maintenance.daily();
     this.billSharing();
     // Running costs for vehicles out of the depot, charged daily.
     for (const t of this.trains.values()) {
@@ -529,6 +534,8 @@ export class GameState {
       badQuarters: 0,
       infrastructure: emptyInfrastructure(),
       value: econ.startMoney,
+      autorenew: true,
+      replace: {},
     };
     this.companies.set(id, company);
     this.addMember(company, founder.name, 'owner');

@@ -4,7 +4,7 @@ import { client } from '../net/client.ts';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { Win, focusOn, useMyRole } from './windows.tsx';
 
-const ICONS: Record<NewsItem['kind'], string> = { company: '🏢', station: '🚉', finance: '💰', agreement: '🤝' };
+const ICONS: Record<NewsItem['kind'], string> = { company: '🏢', station: '🚉', finance: '💰', agreement: '🤝', vehicle: '🔧', accident: '💥' };
 
 function look(n: NewsItem): void {
   const w = client.world?.map.width;

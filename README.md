@@ -9,6 +9,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Stations and depots:** multi-platform stations and depots.
 > - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.
 > - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort, gradients and curve, bridge and track speed limits; pathfinding and reversing at termini.
+> - **Upkeep:** reliability that decays between services, breakdowns (a game setting), automatic service trips, ageing, autorenew and replacement rules.
 > - **Orders:** stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
 > - **Passengers:** destination-based passengers with payment by distance and journey time.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
