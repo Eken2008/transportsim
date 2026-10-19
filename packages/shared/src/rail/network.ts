@@ -33,6 +33,23 @@ export const segLength = (s: number) => pieceLength((s % 16) >> 1);
 /** Direction-independent key of the physical piece (for occupancy). */
 export const pieceKey = (s: number) => Math.floor(s / 16) * 8 + ((s % 16) >> 1);
 
+/**
+ * Whose track a train may run on. `uses[o]` lets it onto track owned by company `o`;
+ * `joins[a * 256 + b]` says whether the networks of owners `a` and `b` connect (the same owner,
+ * or a sharing agreement between them), so trains cross between owners only where joined.
+ * A plain owner number means that owner's track only.
+ */
+export interface TrackAccess {
+  uses: Uint8Array;
+  joins: Uint8Array;
+}
+export type Access = number | TrackAccess;
+
+export function mayEnter(access: Access, from: number, to: number): boolean {
+  if (typeof access === 'number') return to === access;
+  return access.uses[to] === 1 && access.joins[from * 256 + to] === 1;
+}
+
 export function isTrackTile(type: number): boolean {
   return type === TileType.Rail || type === TileType.Station || type === TileType.Depot;
 }
@@ -41,7 +58,7 @@ export function isTrackTile(type: number): boolean {
  * Segments a train can continue onto after leaving `s` through its exit edge. 90° turns are
  * not allowed. Depots can only be entered and left through their door edge.
  */
-export function nextSegments(map: GameMap, s: number, owner: number, out: number[] = []): number[] {
+export function nextSegments(map: GameMap, s: number, access: Access, out: number[] = []): number[] {
   out.length = 0;
   const tile = segTile(s);
   const td = segTd(s);
@@ -61,7 +78,7 @@ export function nextSegments(map: GameMap, s: number, owner: number, out: number
   if (isSpanTd(td)) {
     const far = headInfo(map, n);
     if (far && far.dir === entry) {
-      if (map.layers.owner[n] !== owner) return out;
+      if (!mayEnter(access, map.layers.owner[n]!, map.layers.owner[n]!)) return out;
       const p = hasPiece(map.layers.track[n]!, 0) ? 0 : 1;
       out.push(n * 16 + trackdir(p, PIECE_EDGES[p]![0] === entry ? 0 : 1));
     } else {
@@ -78,7 +95,7 @@ export function nextSegments(map: GameMap, s: number, owner: number, out: number
   if (there && there.dir === entry) return out; // can't climb onto a bridge from below
 
   const type = map.layers.type[n]!;
-  if (!isTrackTile(type) || map.layers.owner[n] !== owner) return out;
+  if (!isTrackTile(type) || !mayEnter(access, map.layers.owner[tile]!, map.layers.owner[n]!)) return out;
   if (type === TileType.Depot && entry !== depotExit(map.layers.data[n]!)) return out;
   // Only pieces explicitly linked to ours continue it.
   const bits = map.layers.track[n]!;
@@ -97,8 +114,8 @@ export function nextSegments(map: GameMap, s: number, owner: number, out: number
 }
 
 /** Whether segment `b` directly follows segment `a`. */
-export function segmentsConnect(map: GameMap, a: number, b: number, owner: number): boolean {
-  return nextSegments(map, a, owner).includes(b);
+export function segmentsConnect(map: GameMap, a: number, b: number, access: Access): boolean {
+  return nextSegments(map, a, access).includes(b);
 }
 
 /** Whether a segment's piece still exists on its tile (track may have been removed). */

@@ -32,7 +32,9 @@ export class OrdersTool implements Tool {
     if (st) {
       const tiles: { x: number; y: number }[] = [];
       for (let y = st.y0; y <= st.y1; y++) for (let x = st.x0; x <= st.x1; x++) tiles.push({ x, y });
-      const own = st.owner === client.world?.state.players.get(useApp.getState().room!.playerId)?.companyId;
+      const state = client.world?.state;
+      const company = state?.players.get(useApp.getState().room!.playerId)?.companyId;
+      const own = !!state && company != null && state.canUseStation(company, st);
       this.ghost.show(tiles, own ? '#58a6ff' : '#ff5a5f');
     } else {
       this.ghost.show([{ x: hit.tileX, y: hit.tileY }], '#8ea0b6');

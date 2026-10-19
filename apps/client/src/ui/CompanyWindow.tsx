@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
 import { Win, act, useMyRole } from './windows.tsx';
+import { SharingSection } from './SharingSection.tsx';
 
 /** Membership: found or join a company, answer requests, invite players, manage roles. */
 export function CompanyWindow({ w }: { w: GameWindow & { kind: 'company' } }) {
@@ -132,6 +133,8 @@ function MyCompany({ c, role }: { c: Company; role: CompanyRole }) {
       )}
 
       {canManage && <InviteForm outsiders={outsiders.map((p) => p.name)} roles={joinRoles} c={c} />}
+
+      <SharingSection c={c} canAct={roleAllows(role, 'build')} />
 
       <button
         className="danger"

@@ -1,6 +1,6 @@
 import type { GameMap } from '../world/map.ts';
 import { TileType } from '../world/constants.ts';
-import { nextSegments, segLength, segTd, segTile } from './network.ts';
+import { nextSegments, segLength, segTd, segTile, type Access } from './network.ts';
 import { TD_HEADING } from './track.ts';
 
 export interface PathGoal {
@@ -11,7 +11,8 @@ export interface PathGoal {
 }
 
 export interface PathOptions {
-  owner: number;
+  /** Whose track the train may use. */
+  access: Access;
   /** Extra cost for entering a segment (e.g. occupied track). */
   penalty?: (s: number) => number;
   maxNodes?: number;
@@ -97,7 +98,7 @@ export function findPath(map: GameMap, start: number, goal: PathGoal, opts: Path
     if (++expanded > maxNodes) return null;
     const gc = g.get(cur)!;
     const heading = TD_HEADING[segTd(cur)]!;
-    for (const n of nextSegments(map, cur, opts.owner, next)) {
+    for (const n of nextSegments(map, cur, opts.access, next)) {
       let cost = gc + segLength(n);
       if (TD_HEADING[segTd(n)] !== heading) cost += CURVE_PENALTY;
       if (opts.penalty) cost += opts.penalty(n);
@@ -149,7 +150,7 @@ export function depotGoal(map: GameMap, depots: number[]): PathGoal {
  * Extend a route that ends on a station platform to the platform's far end, following the
  * same station's tiles straight ahead (so the whole train fits and stops at the end).
  */
-export function extendThroughPlatform(map: GameMap, route: number[], owner: number): void {
+export function extendThroughPlatform(map: GameMap, route: number[], access: Access): void {
   if (route.length === 0) return;
   const next: number[] = [];
   for (let guard = 0; guard < 64; guard++) {
@@ -157,7 +158,7 @@ export function extendThroughPlatform(map: GameMap, route: number[], owner: numb
     const t = segTile(last);
     if (map.layers.type[t] !== TileType.Station) return;
     const id = map.layers.data[t];
-    const cand = nextSegments(map, last, owner, next).filter(
+    const cand = nextSegments(map, last, access, next).filter(
       (s) => map.layers.type[segTile(s)] === TileType.Station && map.layers.data[segTile(s)] === id,
     );
     if (cand.length !== 1) return;

@@ -83,6 +83,7 @@ export class ClientWorld {
     for (const c of g.companies) s.companies.set(c.id, c);
     s.players.clear();
     for (const p of g.players) s.players.set(p.id, p);
+    s.setAgreements(g.agreements);
   }
 
   applyTowns(towns: Town[], full: boolean): void {

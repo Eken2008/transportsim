@@ -266,7 +266,7 @@ export class RailSystem {
             const ny = y + EDGE_DY[e];
             if (nx < 0 || ny < 0 || nx >= w || ny >= map.height) continue;
             const nt = ny * w + nx;
-            if (!isTrackTile(type[nt]!) || owner[nt] !== owner[ct]) continue;
+            if (!isTrackTile(type[nt]!) || !this.state.joined(owner[ct]!, owner[nt]!)) continue;
             // Depot doors behave like signals: a depot is always its own block.
             if (type[nt] === TileType.Depot || type[ct] === TileType.Depot) continue;
             const entry = OPPOSITE_EDGE[e];
@@ -302,8 +302,7 @@ export class RailSystem {
   /** Red if the block beyond the signal on this tile/trackdir is occupied or claimed. */
   signalRed(tile: number, td: number): boolean {
     this.ensureBlocks();
-    const owner = this.state.map.layers.owner[tile]!;
-    for (const n of nextSegments(this.state.map, seg(tile, td), owner)) {
+    for (const n of nextSegments(this.state.map, seg(tile, td), this.state.blockAccess)) {
       const b = this.blockOf.get(pieceKey(n));
       if (b !== undefined && this.blockBusy(b, -1)) return true;
     }
@@ -345,7 +344,7 @@ export class RailSystem {
     const map = this.state.map;
     const s = depotExitSegment(map, t.depot);
     if (this.occupiedByOther(s, t.id)) return;
-    const beyond = nextSegments(map, s, t.owner).map((n) => this.blockOf.get(pieceKey(n)));
+    const beyond = nextSegments(map, s, this.state.accessFor(t.owner)).map((n) => this.blockOf.get(pieceKey(n)));
     if (beyond.some((b) => b !== undefined && this.blockBusy(b, t.id))) return;
     for (const b of beyond) if (b !== undefined) this.claims.set(b, t.id);
     t.path = [s];
@@ -478,7 +477,7 @@ export class RailSystem {
     const commit = brakingDistance(t.speed) + 1;
     for (const s of t.route) {
       if (d > horizon) return d;
-      if (!segmentsConnect(map, prev, s, t.owner)) return d; // route went stale
+      if (!segmentsConnect(map, prev, s, this.state.accessFor(t.owner))) return d; // route went stale
       if (this.signalFacing(prev)) {
         const b = this.blockOf.get(pieceKey(s));
         if (b !== undefined) {
@@ -506,7 +505,7 @@ export class RailSystem {
       const next = t.route[0];
       if (
         next === undefined ||
-        !segmentsConnect(map, head, next, t.owner) ||
+        !segmentsConnect(map, head, next, this.state.accessFor(t.owner)) ||
         this.occupiedByOther(next, t.id) ||
         (this.signalFacing(head) && this.blockBusy(this.blockOf.get(pieceKey(next)) ?? -1, t.id))
       ) {
@@ -556,7 +555,8 @@ export class RailSystem {
     if (this.state.tick >= t.replanAt) this.plan(t);
   }
 
-  private enterDepot(t: Train, tile: number): void {
+  /** Park the train inside the depot on `tile` (also used to tow trains home). */
+  enterDepot(t: Train, tile: number): void {
     this.releaseAll(t);
     this.dropClaims(t);
     t.path = [];
@@ -612,11 +612,12 @@ export class RailSystem {
     }
     const map = this.state.map;
     const penalty = (s: number) => (this.occupiedByOther(s, t.id) ? 6 : 0);
-    let path = findPath(map, t.path[0]!, goal, { owner: t.owner, penalty });
+    const access = this.state.accessFor(t.owner);
+    let path = findPath(map, t.path[0]!, goal, { access, penalty });
     if (!path && t.speed < 0.5) {
       // Try the other way round: plan from the tail segment, reversed.
       const tail = segReverse(t.path[t.path.length - 1]!);
-      const back = findPath(map, tail, goal, { owner: t.owner, penalty });
+      const back = findPath(map, tail, goal, { access, penalty });
       if (back && this.reverse(t)) {
         path = back;
         t.routeFor = `${this.state.trackVersion}:${key}`;
@@ -627,7 +628,7 @@ export class RailSystem {
       t.replanAt = this.state.tick + REPLAN_DELAY;
       return;
     }
-    extendThroughPlatform(map, path, t.owner);
+    extendThroughPlatform(map, path, access);
     t.route = path;
   }
 

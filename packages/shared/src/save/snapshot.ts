@@ -7,6 +7,7 @@ import { TileType } from '../world/constants.ts';
 import { recountTowns, type Town } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
+import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
 import { emptyInfrastructure, sanitizeFinances } from '../economy/finance.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
 import { GameState } from '../sim/state.ts';
@@ -34,6 +35,8 @@ export interface Snapshot {
   nextTrainId?: number;
   news?: NewsItem[];
   nextNewsId?: number;
+  agreements?: Agreement[];
+  nextAgreementId?: number;
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -57,6 +60,8 @@ export function takeSnapshot(state: GameState): Snapshot {
     nextTrainId: state.nextTrainId,
     news: state.news,
     nextNewsId: state.nextNewsId,
+    agreements: [...state.agreements.values()],
+    nextAgreementId: state.nextAgreementId,
   };
 }
 
@@ -166,6 +171,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   state.rail.rebuildOccupancy();
   state.countInfrastructure();
   for (const c of state.companies.values()) if (!c.value) c.value = state.companyValue(c);
+  state.setAgreements(sanitizeAgreements(snap.agreements, new Set(state.companies.keys())));
+  state.nextAgreementId = Math.max(num(snap.nextAgreementId, 1), ...[...state.agreements.keys()].map((k) => k + 1));
   state.news.push(...sanitizeNews(snap.news));
   state.nextNewsId = Math.max(num(snap.nextNewsId, 1), ...state.news.map((n) => n.id + 1));
   state.nextStationId = Math.max(num(snap.nextStationId, 0), ...[...state.stations.keys()].map((k) => k + 1));

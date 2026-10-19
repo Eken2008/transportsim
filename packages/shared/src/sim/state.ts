@@ -16,6 +16,9 @@ import {
 } from '../economy/finance.ts';
 import { demolishTile, refreshStations } from '../commands/station.ts';
 import { OWNER_NONE, TileType } from '../world/constants.ts';
+import type { Agreement } from '../company/sharing.ts';
+import { isSpanTd } from '../rail/track.ts';
+import { segTd, segTile, type TrackAccess } from '../rail/network.ts';
 import { NEWS_HISTORY, type NewsItem, type NewsKind } from '../news/news.ts';
 import { RailSystem } from '../vehicles/railSystem.ts';
 import type { Train } from '../vehicles/train.ts';
@@ -73,11 +76,23 @@ export class GameState {
   private nextPlayerId = 1;
   /** Bumped whenever track topology changes (invalidates routes, signal blocks). */
   trackVersion = 0;
+  /** Track sharing agreements by id. */
+  readonly agreements = new Map<number, Agreement>();
+  nextAgreementId = 1;
+  /** joins[a * 256 + b]: the networks of owners a and b connect (see TrackAccess). */
+  private readonly joins = new Uint8Array(256 * 256);
+  private readonly accessCache = new Map<number, TrackAccess>();
+  /** Access for signal blocks: any owner, wherever networks are joined. */
+  readonly blockAccess: TrackAccess;
+  /** (host * 256 + guest) -> ticks guest trains spent on host track since the last bill. */
+  private readonly sharingTicks = new Map<number, number>();
 
   constructor(settings: GameSettings, map: GameMap, date?: number) {
     this.settings = settings;
     this.map = map;
     this.date = date ?? daysFromYmd(settings.startYear, 0, 1);
+    for (let o = 0; o < 256; o++) this.joins[o * 257] = 1;
+    this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
     this.rail = new RailSystem(this);
     this.passengers = new PassengerSystem(this);
     this.rail.onArrive = (t, s) => this.passengers.arrive(t, s);
@@ -101,6 +116,7 @@ export class GameState {
   step(): TickEvents {
     this.tick++;
     this.rail.step();
+    if (this.agreements.size > 0) this.countSharing();
     const ev: TickEvents = { newDay: false, newMonth: false, newYear: false };
     if (++this.dayTick >= TICKS_PER_DAY) {
       this.dayTick = 0;
@@ -119,6 +135,7 @@ export class GameState {
 
   private onNewDay(): void {
     this.passengers.daily();
+    this.billSharing();
     // Running costs for vehicles out of the depot, charged daily.
     for (const t of this.trains.values()) {
       if (t.status === 'depot') continue;
@@ -218,6 +235,14 @@ export class GameState {
 
   /** Remove a company with all its trains and infrastructure (bankruptcy). */
   dissolveCompany(id: number): void {
+    // Other companies' trains on its track go home first, and lose orders for its stations.
+    for (const a of [...this.agreements.values()]) if (a.host === id || a.guest === id) this.agreements.delete(a.id);
+    this.agreementsChanged();
+    for (const t of [...this.trains.values()]) {
+      if (t.owner === id) continue;
+      this.dropOrdersFor(t, id);
+      if (this.isOnTrackOf(t, id)) this.towHome(t);
+    }
     for (const t of [...this.trains.values()]) {
       if (t.owner !== id) continue;
       this.rail.removeFromWorld(t);
@@ -242,6 +267,146 @@ export class GameState {
   }
 
   // ---- rail network hooks (filled in by the train/signal systems) -------------
+
+  // ---- track sharing --------------------------------------------------------
+
+  /** Whose track `company`'s trains may use. */
+  accessFor(company: number): TrackAccess {
+    let a = this.accessCache.get(company);
+    if (!a) {
+      const uses = new Uint8Array(256);
+      uses[company] = 1;
+      for (const ag of this.agreements.values()) if (ag.status === 'active' && ag.guest === company) uses[ag.host] = 1;
+      a = { uses, joins: this.joins };
+      this.accessCache.set(company, a);
+    }
+    return a;
+  }
+
+  /** Whether the networks of two owners connect (the same owner, or an active agreement). */
+  joined(a: number, b: number): boolean {
+    return this.joins[a * 256 + b] === 1;
+  }
+
+  agreementBetween(host: number, guest: number): Agreement | undefined {
+    for (const a of this.agreements.values()) if (a.host === host && a.guest === guest) return a;
+    return undefined;
+  }
+
+  /** Whether `company`'s trains may call at a station (its own, or shared with it). */
+  canUseStation(company: number, st: Station): boolean {
+    if (st.owner === company) return true;
+    const a = this.agreementBetween(st.owner, company);
+    return a?.status === 'active' && a.stations;
+  }
+
+  /** Rebuild access after agreements change; routes and signal blocks are recomputed. */
+  agreementsChanged(): void {
+    this.joins.fill(0);
+    for (let o = 0; o < 256; o++) this.joins[o * 257] = 1;
+    for (const a of this.agreements.values()) {
+      if (a.status !== 'active') continue;
+      this.joins[a.host * 256 + a.guest] = 1;
+      this.joins[a.guest * 256 + a.host] = 1;
+    }
+    this.accessCache.clear();
+    this.onTrackChanged();
+  }
+
+  /** Replace all agreements (client mirror, save restore). */
+  setAgreements(list: readonly Agreement[]): void {
+    this.agreements.clear();
+    for (const a of list) this.agreements.set(a.id, a);
+    this.agreementsChanged();
+  }
+
+  /**
+   * End (or withdraw) an agreement. The guest's trains on the host's track are towed to their
+   * nearest depot, and lose their orders for the host's stations. Returns how many were towed.
+   */
+  endAgreement(a: Agreement): number {
+    this.agreements.delete(a.id);
+    if (a.status !== 'active') return 0;
+    this.agreementsChanged();
+    let towed = 0;
+    for (const t of [...this.trains.values()]) {
+      if (t.owner !== a.guest) continue;
+      this.dropOrdersFor(t, a.host);
+      if (this.isOnTrackOf(t, a.host)) {
+        this.towHome(t);
+        towed++;
+      }
+    }
+    return towed;
+  }
+
+  /** Is any part of the train on track owned by `owner` (spans count as the ground below)? */
+  private isOnTrackOf(t: Train, owner: number): boolean {
+    const o = this.map.layers.owner;
+    return t.path.some((s) => !isSpanTd(segTd(s)) && o[segTile(s)] === owner);
+  }
+
+  private dropOrdersFor(t: Train, owner: number): void {
+    const keep = t.orders.filter((o) => o.kind !== 'station' || this.stations.get(o.station)?.owner !== owner);
+    if (keep.length === t.orders.length) return;
+    t.orders = keep;
+    t.orderIndex = keep.length ? Math.min(t.orderIndex, keep.length - 1) : 0;
+    t.routeFor = '';
+    this.dirtyTrains.add(t.id);
+  }
+
+  /** Put a train straight into its company's nearest depot, or sell it if there is none. */
+  towHome(t: Train): void {
+    const w = this.map.width;
+    const head = t.path.length ? segTile(t.path[0]!) : Math.max(0, t.depot);
+    const hx = head % w;
+    const hy = (head - hx) / w;
+    let best = -1;
+    let bestD = Infinity;
+    for (const d of this.depots) {
+      if (this.map.layers.owner[d] !== t.owner) continue;
+      const dx = (d % w) - hx;
+      const dy = Math.floor(d / w) - hy;
+      if (dx * dx + dy * dy < bestD) {
+        bestD = dx * dx + dy * dy;
+        best = d;
+      }
+    }
+    if (best >= 0) {
+      this.rail.enterDepot(t, best);
+      return;
+    }
+    this.addMoney(t.owner, resaleValue(t.value, (this.date - t.builtDays) / 365), 'vehicles');
+    this.rail.removeFromWorld(t);
+    this.trains.delete(t.id);
+    this.dirtyTrains.delete(t.id);
+    this.removedTrains.add(t.id);
+  }
+
+  /** Count ticks guest trains spend on other companies' track (billed daily). */
+  private countSharing(): void {
+    const owner = this.map.layers.owner;
+    for (const t of this.trains.values()) {
+      if (t.path.length === 0) continue;
+      const s = t.path[0]!;
+      if (isSpanTd(segTd(s))) continue;
+      const o = owner[segTile(s)]!;
+      if (o === t.owner || o === OWNER_NONE) continue;
+      const k = o * 256 + t.owner;
+      this.sharingTicks.set(k, (this.sharingTicks.get(k) ?? 0) + 1);
+    }
+  }
+
+  private billSharing(): void {
+    for (const [k, ticks] of this.sharingTicks) {
+      const a = this.agreementBetween(k >> 8, k & 255);
+      if (a?.status !== 'active' || a.fee <= 0) continue;
+      const fee = (a.fee * ticks) / TICKS_PER_DAY;
+      this.addMoney(a.guest, -fee, 'sharing');
+      this.addMoney(a.host, fee, 'sharing');
+    }
+    this.sharingTicks.clear();
+  }
 
   onTrackChanged(): void {
     this.trackVersion++;

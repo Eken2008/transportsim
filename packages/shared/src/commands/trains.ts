@@ -173,7 +173,7 @@ export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
       if (o?.kind === 'station') {
         const st = isInt(o.station) ? state.stations.get(o.station) : undefined;
         if (!st) return fail('Unknown station');
-        if (st.owner !== ctx.companyId) return fail(`${st.name} belongs to another company`);
+        if (!state.canUseStation(ctx.companyId!, st)) return fail(`${st.name} belongs to another company`);
         orders.push({ kind: 'station', station: st.id, fullLoad: o.fullLoad === true || undefined });
       } else if (o?.kind === 'depot') {
         orders.push({ kind: 'depot' });

@@ -336,8 +336,25 @@ try {
   await b.screenshot({ path: `${outDir}/04-guest.png` });
   check((await a.locator('.chat-log').innerText()).includes('Bob joined'), 'host sees guest join message');
 
+  // Bob founds his own company and asks to use Alice's track; Alice accepts.
+  const bobFound = b.locator('.window', { hasText: 'Found a company' });
+  await bobFound.getByRole('textbox', { name: 'Company name' }).fill('Bob Lines');
+  await bobFound.getByRole('button', { name: 'Found', exact: true }).click();
+  await b.locator('.money').waitFor({ timeout: 5000 });
+  const bobCo = b.locator('.window', { hasText: 'Track sharing' });
+  await bobCo.getByRole('combobox', { name: 'Direction' }).selectOption('guest');
+  await bobCo.getByRole('button', { name: 'Propose' }).click();
+  await a.getByText('Bob Lines proposes using your track').waitFor({ timeout: 5000 });
+  await a.locator('.company-btn').click();
+  const aliceCo = a.locator('.window', { hasText: 'Track sharing' });
+  await aliceCo.locator('.list-row', { hasText: 'Bob Lines may use our track' }).getByRole('button', { name: 'Accept' }).click();
+  await a.waitForTimeout(600);
+  check(/Bob Lines may use our track and stations[\s\S]*since/.test(await aliceCo.innerText()), 'track sharing agreement accepted');
+  await a.screenshot({ path: `${outDir}/04g-sharing.png` });
+  while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
+
   // Bob asks to join Alice's company; Alice accepts him as a manager.
-  await b.locator('.window', { hasText: 'Join a company' }).getByRole('button', { name: 'Ask to join' }).click();
+  await b.locator('.window', { hasText: 'Other companies' }).getByRole('button', { name: 'Ask to join' }).click();
   await a.getByText('Bob asks to join').waitFor({ timeout: 5000 });
   await a.locator('.company-btn').click();
   const members = a.locator('.window', { hasText: 'Asking to join' });

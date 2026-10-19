@@ -938,3 +938,15 @@ details.rating summary > span:nth-child(1) {
 details.rating .kv {
   margin-top: 8px;
 }
+
+/* Track sharing */
+form.propose {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+form.propose label {
+  white-space: nowrap;
+  gap: 4px;
+}

@@ -1,5 +1,6 @@
 import type { Command } from '../commands/index.ts';
 import type { Company } from '../company/company.ts';
+import type { Agreement } from '../company/sharing.ts';
 import type { GameSettings, ServerLimits } from '../sim/settings.ts';
 import type { Player } from '../sim/state.ts';
 import type { NewsItem } from '../news/news.ts';
@@ -32,6 +33,7 @@ export interface GlobalState {
   speed: GameSpeed;
   companies: Company[];
   players: Player[];
+  agreements: Agreement[];
 }
 
 export type ChatChannel = 'all' | 'company';

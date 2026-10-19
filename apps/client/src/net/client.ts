@@ -183,6 +183,14 @@ class AppClient {
       const old = new Set(was?.id === company.id ? was.requests : []);
       for (const name of company.requests) if (!old.has(name)) toast(`${name} asks to join ${company.name} — press C to answer`, 'info', 8000);
     }
+    if (company && roleAllows(role, 'build')) {
+      const known = new Set(prev.agreements.map((a) => a.id));
+      for (const a of next.agreements) {
+        if (known.has(a.id) || a.proposedBy === company.id || (a.host !== company.id && a.guest !== company.id)) continue;
+        const from = next.companies.find((c) => c.id === a.proposedBy)?.name ?? 'Another company';
+        toast(`${from} proposes ${a.host === company.id ? 'using your track' : 'letting you use their track'} — press C to answer`, 'info', 8000);
+      }
+    }
     for (const c of next.companies) {
       const invited = c.invites.some((x) => x.name === me.name);
       const wasInvited = prev.companies.find((o) => o.id === c.id)?.invites.some((x) => x.name === me.name);
