@@ -1,3 +1,5 @@
+import type { Infrastructure, QuarterRecord } from '../economy/finance.ts';
+
 /**
  * Member roles, most powerful first:
  * - owner: everything, including membership, roles and company settings
@@ -49,6 +51,14 @@ export interface Company {
   /** Players invited to join, with the role they will get. */
   invites: CompanyMember[];
   foundedDays: number;
+  /** Quarterly books, oldest first; the last record is the current quarter. */
+  finances: QuarterRecord[];
+  /** Quarters in a row that ended with negative money. */
+  badQuarters: number;
+  /** Infrastructure owned, counted monthly. */
+  infrastructure: Infrastructure;
+  /** Company value (money − loan + vehicles + property), updated monthly. */
+  value: number;
 }
 
 export function memberOf(c: Company, name: string): CompanyMember | undefined {

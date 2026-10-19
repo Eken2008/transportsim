@@ -7,6 +7,7 @@ import { TileType } from '../world/constants.ts';
 import { recountTowns, type Town } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
+import { emptyInfrastructure, sanitizeFinances } from '../economy/finance.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
 import { GameState } from '../sim/state.ts';
 import { TICKS_PER_DAY, daysFromYmd } from '../sim/date.ts';
@@ -105,6 +106,10 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       requests: Array.isArray(c.requests) ? c.requests.map(String).slice(0, 16) : [],
       invites: sanitizeMembers(c.invites, false).slice(0, 16),
       foundedDays: num(c.foundedDays, state.date),
+      finances: sanitizeFinances(c.finances, state.date),
+      badQuarters: Math.max(0, Math.floor(num(c.badQuarters, 0))),
+      infrastructure: emptyInfrastructure(),
+      value: num(c.value, 0),
     });
   }
   for (const t of Array.isArray(snap.towns) ? snap.towns : []) {
@@ -157,6 +162,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   }
   state.nextTrainId = Math.max(num(snap.nextTrainId, 0), ...[...state.trains.keys()].map((k) => k + 1));
   state.rail.rebuildOccupancy();
+  state.countInfrastructure();
+  for (const c of state.companies.values()) if (!c.value) c.value = state.companyValue(c);
   state.news.push(...sanitizeNews(snap.news));
   state.nextNewsId = Math.max(num(snap.nextNewsId, 1), ...state.news.map((n) => n.id + 1));
   state.nextStationId = Math.max(num(snap.nextStationId, 0), ...[...state.stations.keys()].map((k) => k + 1));

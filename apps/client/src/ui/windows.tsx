@@ -18,6 +18,7 @@ import { formatMoney } from './format.ts';
 import { catchmentRect, residentsIn } from '../game/catchment.ts';
 import { CompanyWindow } from './CompanyWindow.tsx';
 import { NewsWindow } from './NewsWindow.tsx';
+import { FinancesWindow, LeagueWindow } from './FinancesWindow.tsx';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
 export function useTick(ms: number): void {
@@ -117,6 +118,10 @@ export function WindowLayer() {
             return <CompanyWindow key={key} w={w} />;
           case 'news':
             return <NewsWindow key={key} w={w} />;
+          case 'finances':
+            return <FinancesWindow key={key} w={w} />;
+          case 'league':
+            return <LeagueWindow key={key} w={w} />;
         }
       })}
     </>

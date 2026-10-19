@@ -22,6 +22,7 @@ export * from './town/road.ts';
 export * from './town/houses.ts';
 export * from './town/towns.ts';
 export * from './economy/costs.ts';
+export * from './economy/finance.ts';
 export * from './economy/passengers.ts';
 export * from './commands/index.ts';
 export * from './protocol/messages.ts';

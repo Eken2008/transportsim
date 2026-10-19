@@ -1,4 +1,5 @@
 import type { Permission } from '../company/company.ts';
+import type { LedgerCategory } from '../economy/finance.ts';
 import type { GameState } from '../sim/state.ts';
 
 export interface CommandContext {
@@ -22,6 +23,8 @@ export interface CommandHandler<C> {
   needsCompany: boolean;
   /** Role permission the command needs (company commands only); defaults to 'build'. */
   permission?: Permission | ((cmd: C) => Permission);
+  /** Ledger category for the cost; defaults to 'construction'. null moves money off the books (loans). */
+  category?: LedgerCategory | null;
 }
 
 export const fail = (error: string): PlanResult => ({ ok: false, error });

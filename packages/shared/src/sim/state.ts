@@ -2,6 +2,20 @@ import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, t
 import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
 import { PassengerSystem } from '../economy/passengers.ts';
+import { COSTS } from '../economy/costs.ts';
+import {
+  BANKRUPT_QUARTERS,
+  LEDGER_QUARTERS,
+  emptyInfrastructure,
+  emptyLedger,
+  quarterOf,
+  resaleValue,
+  yearlyMaintenance,
+  type Infrastructure,
+  type LedgerCategory,
+} from '../economy/finance.ts';
+import { demolishTile, refreshStations } from '../commands/station.ts';
+import { OWNER_NONE, TileType } from '../world/constants.ts';
 import { NEWS_HISTORY, type NewsItem, type NewsKind } from '../news/news.ts';
 import { RailSystem } from '../vehicles/railSystem.ts';
 import type { Train } from '../vehicles/train.ts';
@@ -110,8 +124,7 @@ export class GameState {
       if (t.status === 'depot') continue;
       const daily = this.cost(this.rail.statsOf(t).runningCost) / 365;
       t.profitThisYear -= daily;
-      const c = this.companies.get(t.owner);
-      if (c) c.money -= daily;
+      this.addMoney(t.owner, -daily, 'running');
     }
   }
 
@@ -124,10 +137,108 @@ export class GameState {
   }
 
   private onNewMonth(): void {
-    // Monthly loan interest, scaled by difficulty (simple model for now).
+    const econ = ECONOMY[this.settings.economy];
+    this.countInfrastructure();
     for (const c of this.companies.values()) {
-      if (c.loan > 0) c.money -= Math.round((c.loan * 0.04) / 12);
+      if (c.loan > 0) this.addMoney(c.id, -Math.round((c.loan * econ.interestRate) / 12), 'interest');
+      this.addMoney(c.id, -Math.round(this.cost(yearlyMaintenance(c.infrastructure)) / 12), 'property');
+      c.value = this.companyValue(c);
     }
+    if (ymdFromDays(this.date).month % 3 === 0) this.onNewQuarter();
+  }
+
+  /** Close the books for the quarter; companies in the red for too long go bankrupt. */
+  private onNewQuarter(): void {
+    for (const c of [...this.companies.values()]) {
+      if (c.money >= 0) c.badQuarters = 0;
+      else {
+        c.badQuarters++;
+        const extra = { company: c.id };
+        if (c.badQuarters >= BANKRUPT_QUARTERS) {
+          this.addNews('finance', `${c.name} has gone bankrupt! Its trains, track and stations are removed`, extra);
+          this.dissolveCompany(c.id);
+          continue;
+        } else if (c.badQuarters === BANKRUPT_QUARTERS - 1) {
+          this.addNews('finance', `${c.name} goes bankrupt at the end of this quarter unless it has money again`, extra);
+        } else {
+          this.addNews('finance', `${c.name} is in financial trouble: borrow money or sell trains to stay afloat`, extra);
+        }
+      }
+      c.finances.push({ ...quarterOf(this.date), ledger: emptyLedger() });
+      if (c.finances.length > LEDGER_QUARTERS) c.finances.splice(0, c.finances.length - LEDGER_QUARTERS);
+    }
+  }
+
+  /** Change a company's money, booking it under `category` (null: off the books, e.g. loans). */
+  addMoney(companyId: number, delta: number, category: LedgerCategory | null): void {
+    const c = this.companies.get(companyId);
+    if (!c) return;
+    c.money += delta;
+    const q = c.finances[c.finances.length - 1];
+    if (category && q) q.ledger[category] += delta;
+  }
+
+  /** Count every company's track, stations, depots and signals (for maintenance and value). */
+  countInfrastructure(): void {
+    const counts = new Map<number, Infrastructure>();
+    for (const c of this.companies.values()) counts.set(c.id, emptyInfrastructure());
+    const { type, owner, track, signals } = this.map.layers;
+    for (let i = 0; i < type.length; i++) {
+      const o = owner[i]!;
+      if (o === OWNER_NONE) continue;
+      const infra = counts.get(o);
+      if (!infra) continue;
+      const t = type[i];
+      if (t === TileType.Rail) {
+        let bits = track[i]!;
+        let n = 0;
+        while (bits) {
+          n += bits & 1;
+          bits >>= 1;
+        }
+        infra.track += Math.max(1, n);
+        const sig = signals[i]!;
+        for (let p = 0; p < 6; p++) if ((sig >> (p * 2)) & 3) infra.signals++;
+      } else if (t === TileType.Station) infra.stations++;
+      else if (t === TileType.Depot) infra.depots++;
+    }
+    for (const [id, infra] of counts) this.companies.get(id)!.infrastructure = infra;
+  }
+
+  /** Money − loan + resale value of trains + half the cost of building the property again. */
+  companyValue(c: Company): number {
+    let vehicles = 0;
+    for (const t of this.trains.values()) if (t.owner === c.id) vehicles += resaleValue(t.value, (this.date - t.builtDays) / 365);
+    const i = c.infrastructure;
+    const property = this.cost(
+      (i.track * COSTS.railPiece + i.stations * COSTS.stationTile + i.depots * COSTS.depot + i.signals * COSTS.signal) / 2,
+    );
+    return Math.round(c.money - c.loan + vehicles + property);
+  }
+
+  /** Remove a company with all its trains and infrastructure (bankruptcy). */
+  dissolveCompany(id: number): void {
+    for (const t of [...this.trains.values()]) {
+      if (t.owner !== id) continue;
+      this.rail.removeFromWorld(t);
+      this.trains.delete(t.id);
+      this.dirtyTrains.delete(t.id);
+      this.removedTrains.add(t.id);
+    }
+    const { type, owner } = this.map.layers;
+    const dirty = new Set<number>();
+    const stations = new Set<number>();
+    for (let i = 0; i < type.length; i++) {
+      if (owner[i] !== id) continue;
+      const t = type[i];
+      if (t !== TileType.Rail && t !== TileType.Station && t !== TileType.Depot) continue;
+      const st = demolishTile(this, i, dirty);
+      if (st !== null) stations.add(st);
+    }
+    refreshStations(this, stations);
+    this.onTrackChanged();
+    this.companies.delete(id);
+    for (const p of this.players.values()) if (p.companyId === id) p.companyId = null;
   }
 
   // ---- rail network hooks (filled in by the train/signal systems) -------------
@@ -222,6 +333,10 @@ export class GameState {
       requests: [],
       invites: [],
       foundedDays: this.date,
+      finances: [{ ...quarterOf(this.date), ledger: emptyLedger() }],
+      badQuarters: 0,
+      infrastructure: emptyInfrastructure(),
+      value: econ.startMoney,
     };
     this.companies.set(id, company);
     this.addMember(company, founder.name, 'owner');

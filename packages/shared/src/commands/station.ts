@@ -12,6 +12,7 @@ import { linkPlaced, unlinkPieces } from '../rail/links.ts';
 import { EDGE_DX, EDGE_DY, Piece, hasPiece } from '../rail/track.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { CROSSING_FLAG } from './track.ts';
+import type { GameState } from '../sim/state.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
 /** Build a rectangular rail station: `length` tiles along `axis`, `platforms` tracks side by side. */
@@ -181,6 +182,59 @@ export const buildDepotHandler: CommandHandler<BuildDepotCommand> = {
   },
 };
 
+/**
+ * Remove the track, station, depot or bridge/tunnel head on a tile, leaving rough land (or the
+ * road of a level crossing). Callers check ownership and trains, call `refreshStations` with the
+ * returned station ids and `state.onTrackChanged()` afterwards. Returns the station id if the
+ * tile was part of a station.
+ */
+export function demolishTile(state: GameState, i: number, dirtyChunks: Set<number>): number | null {
+  const map = state.map;
+  const touch = (t: number) => {
+    const tx = t % map.width;
+    map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
+  };
+  for (const t of unlinkPieces(map, i, map.layers.track[i]!)) touch(t);
+  const type = map.layers.type[i];
+  let station: number | null = null;
+  const info = type === TileType.Rail ? headInfo(map, i) : null;
+  if (info) {
+    // Touch the span so chunks under/over it rebuild too.
+    const far = otherHead(map, i, info);
+    const step = EDGE_DX[info.dir] + EDGE_DY[info.dir] * map.width;
+    for (let t = i + step; far >= 0 && t !== far; t += step) touch(t);
+    map.setClear(i, Ground.Rough, 0);
+  } else if (type === TileType.Rail) {
+    state.removeSignalsOn(i, map.layers.track[i]!);
+    const data = map.layers.data[i]!;
+    if (data & CROSSING_FLAG) {
+      map.layers.type[i] = TileType.Road;
+      map.layers.owner[i] = OWNER_NONE;
+      map.layers.data[i] = data & 0xf;
+      map.layers.track[i] = 0;
+    } else {
+      map.setClear(i, Ground.Rough, 0);
+    }
+  } else {
+    if (type === TileType.Station) station = map.layers.data[i]!;
+    if (type === TileType.Depot) state.depots.delete(i);
+    map.setClear(i, Ground.Rough, 0);
+  }
+  touch(i);
+  return station;
+}
+
+/** After demolishing station tiles: shrink the stations, deleting those with no tiles left. */
+export function refreshStations(state: GameState, ids: Iterable<number>): void {
+  for (const id of ids) {
+    const st = state.stations.get(id);
+    if (!st) continue;
+    recomputeStationExtent(state.map, st);
+    if (st.tiles === 0) state.deleteStation(id);
+    else state.markStationDirty(id);
+  }
+}
+
 export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
   needsCompany: true,
   plan(state, ctx, cmd): PlanResult {
@@ -260,60 +314,19 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
       commit() {
         const dirtyChunks = new Set<number>();
         const stations = new Set<number>();
-        let track = false;
         for (const { i, kind } of jobs) {
-          const x = i % map.width;
-          const y = (i - x) / map.width;
-          if (kind !== 'trees') {
-            for (const t of unlinkPieces(map, i, map.layers.track[i]!)) {
-              const tx = t % map.width;
-              map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
-            }
-          }
           if (kind === 'trees') {
             const ground = (map.layers.data[i]! >> 3) & 7;
             map.setClear(i, ground as Ground, 0);
-          } else if (kind === 'structure') {
-            // Touch the span so chunks under/over it rebuild too.
-            const info = headInfo(map, i);
-            if (info) {
-              const far = otherHead(map, i, info);
-              const step = EDGE_DX[info.dir] + EDGE_DY[info.dir] * map.width;
-              for (let t = i + step; far >= 0 && t !== far; t += step) {
-                const tx = t % map.width;
-                map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
-              }
-            }
-            map.setClear(i, Ground.Rough, 0);
-            track = true;
-          } else if (kind === 'rail') {
-            state.removeSignalsOn(i, map.layers.track[i]!);
-            const data = map.layers.data[i]!;
-            if (data & CROSSING_FLAG) {
-              map.layers.type[i] = TileType.Road;
-              map.layers.owner[i] = OWNER_NONE;
-              map.layers.data[i] = data & 0xf;
-              map.layers.track[i] = 0;
-            } else {
-              map.setClear(i, Ground.Rough, 0);
-            }
-            track = true;
+            const x = i % map.width;
+            map.touchTile(x, (i - x) / map.width, dirtyChunks);
           } else {
-            if (kind === 'station') stations.add(map.layers.data[i]!);
-            if (kind === 'depot') state.depots.delete(i);
-            map.setClear(i, Ground.Rough, 0);
-            track = true;
+            const st = demolishTile(state, i, dirtyChunks);
+            if (st !== null) stations.add(st);
           }
-          map.touchTile(x, y, dirtyChunks);
         }
-        for (const id of stations) {
-          const st = state.stations.get(id);
-          if (!st) continue;
-          recomputeStationExtent(map, st);
-          if (st.tiles === 0) state.deleteStation(id);
-          else state.markStationDirty(id);
-        }
-        if (track) state.onTrackChanged();
+        refreshStations(state, stations);
+        if (jobs.some((j) => j.kind !== 'trees')) state.onTrackChanged();
         return { dirtyChunks };
       },
     };

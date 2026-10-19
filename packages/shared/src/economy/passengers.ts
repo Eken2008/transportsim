@@ -166,8 +166,7 @@ export class PassengerSystem {
     t.cargo = keep;
     if (income > 0) {
       t.profitThisYear += income;
-      const c = this.state.companies.get(t.owner);
-      if (c) c.money += income;
+      this.state.addMoney(t.owner, income, 'income');
       this.events.push({ tile: st.y * this.state.map.width + st.x, amount: income, owner: t.owner });
     }
     this.load(t, st);

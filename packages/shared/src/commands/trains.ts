@@ -1,3 +1,4 @@
+import { resaleValue } from '../economy/finance.ts';
 import { ymdFromDays } from '../sim/date.ts';
 import { TileType } from '../world/constants.ts';
 import { isAvailable, railVehicle } from '../vehicles/catalog.ts';
@@ -43,6 +44,7 @@ const noEffects = () => ({ dirtyChunks: new Set<number>() });
 
 export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
   needsCompany: true,
+  category: 'vehicles',
   plan(state, ctx, cmd): PlanResult {
     const { depot, units } = cmd;
     const map = state.map;
@@ -101,6 +103,7 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
 export const trainActionHandler: CommandHandler<TrainActionCommand> = {
   needsCompany: true,
   permission: (cmd) => (cmd.action === 'sell' ? 'build' : 'operate'),
+  category: 'vehicles',
   plan(state, ctx, cmd): PlanResult {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
     if (!t || t.owner !== ctx.companyId) return fail('Not your train');
@@ -136,8 +139,7 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
         };
       case 'sell': {
         if (t.status !== 'depot') return fail('Trains can only be sold inside a depot');
-        const age = (state.date - t.builtDays) / 365;
-        const refund = Math.round(t.value * Math.max(0.2, 0.85 - age * 0.04));
+        const refund = resaleValue(t.value, (state.date - t.builtDays) / 365);
         return {
           ok: true,
           cost: -refund,
@@ -198,6 +200,7 @@ export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
 
 export const editConsistHandler: CommandHandler<EditConsistCommand> = {
   needsCompany: true,
+  category: 'vehicles',
   plan(state, ctx, cmd): PlanResult {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
     if (!t || t.owner !== ctx.companyId) return fail('Not your train');

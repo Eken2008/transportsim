@@ -46,6 +46,7 @@ import {
   type RemoveMemberCommand,
   type SetMemberRoleCommand,
 } from './company.ts';
+import { loanHandler, type LoanCommand } from './finance.ts';
 import { roleAllows } from '../company/company.ts';
 import type { CommandContext, CommandHandler, CommandEffects } from './types.ts';
 
@@ -57,6 +58,7 @@ export * from './trains.ts';
 export * from './signals.ts';
 export * from './structures.ts';
 export * from './company.ts';
+export * from './finance.ts';
 
 export type Command =
   | TerraformCommand
@@ -80,7 +82,8 @@ export type Command =
   | InvitePlayerCommand
   | SetMemberRoleCommand
   | RemoveMemberCommand
-  | CompanySettingsCommand;
+  | CompanySettingsCommand
+  | LoanCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -106,6 +109,7 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   setMemberRole: setMemberRoleHandler,
   removeMember: removeMemberHandler,
   companySettings: companySettingsHandler,
+  loan: loanHandler,
 };
 
 const PERMISSION_ERRORS = {
@@ -147,6 +151,9 @@ export function executeCommand(
   }
   if (dryRun) return { ok: true, cost: plan.cost, effects: null };
   const effects = plan.commit();
-  if (company) company.money -= plan.cost;
+  if (company && plan.cost !== 0) {
+    const category = handler.category === undefined ? 'construction' : handler.category;
+    state.addMoney(company.id, -plan.cost, category);
+  }
   return { ok: true, cost: plan.cost, effects };
 }

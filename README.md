@@ -74,6 +74,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | Click                                            | Open a depot, station (show its catchment) or train (rearrange vehicles in a depot) |
 | `T`                                              | Train list                                                   |
 | `C`                                              | Company: found or join one, members, roles, invitations      |
+| `F` / `L`                                        | Finances (books, loans, infrastructure) / company league     |
 | `Esc`                                            | Deselect tool        |
 | `Space`                                          | Pause (host only)    |
 | `?`                                              | Help                 |

@@ -1,6 +1,6 @@
 import { COMPANY_COLORS, COMPANY_ROLES, ROLE_LABELS, roleAllows, type Company, type CompanyRole } from '@transportsim/shared';
 import { useState } from 'react';
-import { useApp, type GameWindow } from '../store.ts';
+import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
 import { Win, act, useMyRole } from './windows.tsx';
 
@@ -79,6 +79,14 @@ function MyCompany({ c, role }: { c: Company; role: CompanyRole }) {
         <b>{ROLE_LABELS[role]}</b>
         <span>Money</span>
         <b className={`mono ${c.money < 0 ? 'neg' : ''}`}>{formatMoney(c.money)}</b>
+      </div>
+      <div className="row" style={{ marginTop: 8 }}>
+        <button style={{ flex: 1 }} onClick={() => openWindow({ kind: 'finances', id: c.id })} title="Finances (F)">
+          💰 Finances
+        </button>
+        <button style={{ flex: 1 }} onClick={() => openWindow({ kind: 'league', id: 0 })} title="Company league (L)">
+          🏆 League
+        </button>
       </div>
       {isOwner && <CompanySettings c={c} />}
 

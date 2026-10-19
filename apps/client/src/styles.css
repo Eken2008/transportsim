@@ -859,3 +859,40 @@ ol.consist .grip {
     display: none;
   }
 }
+
+/* Finances */
+.notice.warn {
+  margin: 0 0 10px;
+  border-color: rgba(255, 107, 107, 0.6);
+  background: rgba(255, 107, 107, 0.12);
+}
+.table-scroll {
+  overflow-x: auto;
+}
+table.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.ledger th {
+  font-weight: 600;
+  font-size: 12px;
+  text-align: right;
+  padding: 0 0 6px 8px;
+  line-height: 1.25;
+}
+table.ledger td {
+  text-align: right;
+  padding: 3px 0 3px 8px;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.ledger td:first-child {
+  text-align: left;
+  padding-left: 0;
+  color: var(--muted);
+}
+table.ledger tr.total td {
+  border-top: 1px solid var(--line-strong);
+  font-weight: 600;
+}

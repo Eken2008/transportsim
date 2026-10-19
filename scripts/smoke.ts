@@ -202,6 +202,19 @@ try {
   check(newsText.includes('Alice founds Alice Rail'), 'news window lists the company founding');
   check(newsText.includes('first train arrives'), 'news reports the first train at a station');
   await newsWin.locator('button[aria-label="Close"]').click();
+  // Books and a loan
+  await a.keyboard.press('KeyF');
+  const fin = a.locator('.window', { hasText: 'finances' });
+  await fin.waitFor({ timeout: 5000 });
+  check((await fin.innerText()).includes('Construction'), 'finances window shows the books');
+  const money = (s: string) => Number(s.replace(/[^0-9-]/g, ''));
+  const beforeLoan = money(await a.locator('.money').innerText());
+  await fin.getByRole('button', { name: 'Borrow £10,000' }).click();
+  await a.waitForTimeout(600);
+  const afterLoan = money(await a.locator('.money').innerText());
+  check(afterLoan - beforeLoan > 9000, `borrowed money (${beforeLoan} → ${afterLoan})`);
+  await a.screenshot({ path: `${outDir}/03e-finances.png` });
+  await fin.locator('button[aria-label="Close"]').click();
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 1, y: s.y - 4, yaw: 0.7, pitch: 0.75, distance: 18 }), { x: sx, y: sy });
   await a.waitForTimeout(2500);
   await a.screenshot({ path: `${outDir}/03b-track.png` });
@@ -373,7 +386,6 @@ try {
   await a2.waitForTimeout(2500);
   const resumedMoney = await a2.locator('.money').innerText();
   // Running costs keep ticking, so allow a small drift between saving and reading the value.
-  const money = (s: string) => Number(s.replace(/[^0-9-]/g, ''));
   check(Math.abs(money(resumedMoney) - money(savedMoney)) < Math.max(500, money(savedMoney) * 0.01), `resumed game keeps company money (${savedMoney} → ${resumedMoney})`);
   await a2.screenshot({ path: `${outDir}/06-resumed.png` });
 } catch (e) {

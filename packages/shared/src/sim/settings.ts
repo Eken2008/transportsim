@@ -43,9 +43,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
 };
 
 export const ECONOMY = {
-  easy: { startMoney: 1_000_000, maxLoan: 2_000_000, costFactor: 0.75 },
-  normal: { startMoney: 500_000, maxLoan: 1_000_000, costFactor: 1 },
-  hard: { startMoney: 250_000, maxLoan: 500_000, costFactor: 1.35 },
+  easy: { startMoney: 1_000_000, maxLoan: 2_000_000, costFactor: 0.75, interestRate: 0.03 },
+  normal: { startMoney: 500_000, maxLoan: 1_000_000, costFactor: 1, interestRate: 0.045 },
+  hard: { startMoney: 250_000, maxLoan: 500_000, costFactor: 1.35, interestRate: 0.06 },
 } as const satisfies Record<EconomyDifficulty, unknown>;
 
 export interface ServerLimits {
