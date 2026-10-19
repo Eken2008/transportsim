@@ -1,58 +1,11 @@
 import { TileType } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
 import { shipStep } from './waterways.ts';
+import { MinHeap } from '../util/heap.ts';
 
 /** Most tiles a ship route search looks at before giving up. */
 const MAX_EXPANSIONS = 120_000;
 const DIAG = Math.SQRT2;
-
-/** Binary min-heap of [priority, tile]. */
-class Heap {
-  private p: number[] = [];
-  private v: number[] = [];
-  get size() {
-    return this.v.length;
-  }
-  push(prio: number, val: number): void {
-    const p = this.p;
-    const v = this.v;
-    let i = v.length;
-    p.push(prio);
-    v.push(val);
-    while (i > 0) {
-      const parent = (i - 1) >> 1;
-      if (p[parent]! <= prio) break;
-      p[i] = p[parent]!;
-      v[i] = v[parent]!;
-      i = parent;
-    }
-    p[i] = prio;
-    v[i] = val;
-  }
-  pop(): number {
-    const p = this.p;
-    const v = this.v;
-    const top = v[0]!;
-    const lp = p.pop()!;
-    const lv = v.pop()!;
-    if (v.length) {
-      let i = 0;
-      for (;;) {
-        const l = i * 2 + 1;
-        if (l >= v.length) break;
-        const r = l + 1;
-        const c = r < v.length && p[r]! < p[l]! ? r : l;
-        if (p[c]! >= lp) break;
-        p[i] = p[c]!;
-        v[i] = v[c]!;
-        i = c;
-      }
-      p[i] = lp;
-      v[i] = lv;
-    }
-    return top;
-  }
-}
 
 /**
  * Shortest sailing route from `start` to any of `targets` (tiles), as the tiles after `start`
@@ -85,7 +38,7 @@ export function findShipPath(map: GameMap, start: number, targets: ReadonlySet<n
   const g = new Map<number, number>([[start, 0]]);
   const from = new Map<number, number>();
   const closed = new Set<number>();
-  const open = new Heap();
+  const open = new MinHeap();
   open.push(h(start), start);
   const water = (i: number) => map.layers.type[i] === TileType.Water && !blocked?.(i);
   let expanded = 0;

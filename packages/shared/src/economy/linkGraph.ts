@@ -1,4 +1,5 @@
 import type { CargoId } from './cargo.ts';
+import { MinHeap } from '../util/heap.ts';
 
 /**
  * Cargodist: who sends cargo where, and by which route. The input is plain data so it can be
@@ -80,11 +81,11 @@ export function solveLinkGraph(input: LinkGraphInput): LinkGraphResult {
     const first = new Map<number, number>();
     const prev = new Map<number, number>();
     const done = new Set<number>();
-    const queue: [number, number][] = [[0, src]];
-    while (queue.length) {
-      let bi = 0;
-      for (let i = 1; i < queue.length; i++) if (queue[i]![0] < queue[bi]![0]) bi = i;
-      const [d, u] = queue.splice(bi, 1)[0]!;
+    const queue = new MinHeap();
+    queue.push(0, src);
+    while (queue.size) {
+      const d = queue.peekKey();
+      const u = queue.pop();
       if (done.has(u)) continue;
       done.add(u);
       for (const e of out.get(u) ?? []) {
@@ -93,7 +94,7 @@ export function solveLinkGraph(input: LinkGraphInput): LinkGraphResult {
           dist.set(e.to, nd);
           prev.set(e.to, u);
           first.set(e.to, u === src ? e.to : first.get(u)!);
-          queue.push([nd, e.to]);
+          queue.push(nd, e.to);
         }
       }
     }

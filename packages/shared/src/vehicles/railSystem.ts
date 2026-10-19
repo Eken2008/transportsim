@@ -33,7 +33,7 @@ import { TileType } from '../world/constants.ts';
 import { signalKindOf, type SignalKind } from '../commands/signals.ts';
 import { CROSSING_FLAG } from '../commands/track.ts';
 import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
-import { cargoMass, isRailVehicle, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
+import { cargoMass, isRailVehicle, routeKey, targetCode, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
 import { advanceOrder, needsService, peekNextOrder } from './orders.ts';
 import { DERAIL_OVERSPEED } from '../incidents/rail.ts';
 
@@ -653,7 +653,7 @@ export class RailSystem {
     if (t.status === 'depot') {
       t.status = 'running';
       t.route = [];
-      t.routeFor = '';
+      t.routeFor = -1;
       t.speed = 0;
     } else if (t.status === 'stopped') {
       t.status = 'running';
@@ -684,7 +684,7 @@ export class RailSystem {
   /** Toggle heading for the nearest depot. */
   sendToDepot(t: Train): void {
     t.toDepot = !t.toDepot;
-    t.routeFor = '';
+    t.routeFor = -1;
   }
 
   /** Turn the train around (only when stopped and fully out of the depot). */
@@ -699,7 +699,7 @@ export class RailSystem {
     t.pos = segLength(last) - (covered - len);
     t.path = newPath;
     t.route = [];
-    t.routeFor = '';
+    t.routeFor = -1;
     t.speed = 0;
     this.dropClaims(t);
     this.dropReservations(t, true);
@@ -730,8 +730,20 @@ export class RailSystem {
     return map.layers.type[tile] === TileType.Rail && (map.layers.data[tile]! & CROSSING_FLAG) !== 0;
   }
 
+  /** Level crossing tiles, found again whenever track or roads change. */
+  private crossingTiles = new Set<number>();
+  private crossingsFor = '';
+
   private updateCrossings(): void {
+    const ver = `${this.state.trackVersion}:${this.state.roadVersion}`;
+    if (ver !== this.crossingsFor) {
+      this.crossingsFor = ver;
+      this.crossingTiles.clear();
+      const { type, data } = this.state.map.layers;
+      for (let i = 0; i < type.length; i++) if (type[i] === TileType.Rail && data[i]! & CROSSING_FLAG) this.crossingTiles.add(i);
+    }
     this.closedCrossings.clear();
+    if (this.crossingTiles.size === 0) return;
     for (const t of this.state.trains.values()) {
       if (!isRailVehicle(t) || t.path.length === 0) continue;
       for (const s of t.path) if (this.isCrossing(segTile(s))) this.closedCrossings.add(segTile(s));
@@ -766,7 +778,7 @@ export class RailSystem {
     }
 
     const target = this.targetKey(t);
-    if (target !== null && t.routeFor !== `${this.state.trackVersion}:${target}` && this.state.tick >= t.replanAt) {
+    if (target >= 0 && t.routeFor !== routeKey(this.state.trackVersion, target) && this.state.tick >= t.replanAt) {
       this.plan(t);
     }
 
@@ -1010,7 +1022,7 @@ export class RailSystem {
     t.status = 'depot';
     t.depot = tile;
     t.toDepot = false;
-    t.routeFor = '';
+    t.routeFor = -1;
     t.lastService = this.state.date;
     this.onService?.(t);
     this.state.dirtyTrains.add(t.id);
@@ -1050,13 +1062,8 @@ export class RailSystem {
     t.departedAt = this.state.tick;
   }
 
-  private targetKey(t: Train): string | null {
-    if (t.toDepot || t.serviceTrip) return 'depot';
-    const o = t.orders[t.orderIndex];
-    if (!o) return null;
-    if (o.kind === 'station') return `s${o.station}`;
-    if (o.kind === 'waypoint') return `w${o.waypoint}`;
-    return o.kind === 'depot' ? 'depot' : null;
+  private targetKey(t: Train): number {
+    return targetCode(t);
   }
 
   private goalFor(t: Train): PathGoal | null {
@@ -1086,7 +1093,7 @@ export class RailSystem {
   plan(t: Train): void {
     const key = this.targetKey(t);
     const goal = this.goalFor(t);
-    t.routeFor = `${this.state.trackVersion}:${key}`;
+    t.routeFor = routeKey(this.state.trackVersion, key);
     if (!goal) {
       t.route = [];
       t.replanAt = this.state.tick + REPLAN_DELAY;
@@ -1107,7 +1114,7 @@ export class RailSystem {
       const back = findPath(map, tail, goal, { access, penalty });
       if (back && this.reverse(t)) {
         path = back;
-        t.routeFor = `${this.state.trackVersion}:${key}`;
+        t.routeFor = routeKey(this.state.trackVersion, key);
       }
     }
     if (!path) {
@@ -1116,7 +1123,7 @@ export class RailSystem {
       // No depot in reach: skip the service rather than wait for one.
       if (t.serviceTrip) {
         t.serviceTrip = false;
-        t.routeFor = '';
+        t.routeFor = -1;
         t.replanAt = 0;
       }
       return;

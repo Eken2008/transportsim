@@ -359,7 +359,7 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
     orderIndex: num(t.orderIndex, 0),
     toDepot: t.toDepot === true,
     route: [],
-    routeFor: '',
+    routeFor: -1,
     replanAt: 0,
     loadTicks: num(t.loadTicks, 0),
     cargo: (Array.isArray(t.cargo) ? t.cargo : [])

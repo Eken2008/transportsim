@@ -133,7 +133,7 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
           orderIndex: 0,
           toDepot: false,
           route: [],
-          routeFor: '',
+          routeFor: -1,
           replanAt: 0,
           loadTicks: 0,
           cargo: [],
@@ -264,7 +264,7 @@ export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
         const same = current?.kind === 'station' ? orders.findIndex((o) => o.kind === 'station' && o.station === current.station) : -1;
         t.orderIndex = same >= 0 ? same : 0;
         settleOrders(state, t);
-        t.routeFor = '';
+        t.routeFor = -1;
         state.dirtyTrains.add(t.id);
         return noEffects();
       },

@@ -2,6 +2,7 @@ import type { GameMap } from '../world/map.ts';
 import { TileType } from '../world/constants.ts';
 import { nextSegments, segLength, segTd, segTile, type Access } from './network.ts';
 import { TD_HEADING } from './track.ts';
+import { MinHeap } from '../util/heap.ts';
 
 export interface PathGoal {
   /** Is this segment a goal? */
@@ -18,55 +19,6 @@ export interface PathOptions {
   maxNodes?: number;
 }
 
-/** Binary min-heap keyed by f-score. */
-class Heap {
-  private keys: number[] = [];
-  private vals: number[] = [];
-  get size() {
-    return this.keys.length;
-  }
-  push(key: number, val: number) {
-    const k = this.keys;
-    const v = this.vals;
-    let i = k.length;
-    k.push(key);
-    v.push(val);
-    while (i > 0) {
-      const p = (i - 1) >> 1;
-      if (k[p]! <= key) break;
-      k[i] = k[p]!;
-      v[i] = v[p]!;
-      i = p;
-    }
-    k[i] = key;
-    v[i] = val;
-  }
-  pop(): number {
-    const k = this.keys;
-    const v = this.vals;
-    const top = v[0]!;
-    const lk = k.pop()!;
-    const lv = v.pop()!;
-    if (k.length > 0) {
-      let i = 0;
-      const n = k.length;
-      for (;;) {
-        const l = i * 2 + 1;
-        if (l >= n) break;
-        const r = l + 1;
-        const c = r < n && k[r]! < k[l]! ? r : l;
-        if (k[c]! >= lk) break;
-        k[i] = k[c]!;
-        v[i] = v[c]!;
-        i = c;
-      }
-      k[i] = lk;
-      v[i] = lv;
-    }
-    return top;
-  }
-}
-
 const CURVE_PENALTY = 0.15;
 
 /**
@@ -77,7 +29,7 @@ export function findPath(map: GameMap, start: number, goal: PathGoal, opts: Path
   const maxNodes = opts.maxNodes ?? 60_000;
   const g = new Map<number, number>();
   const parent = new Map<number, number>();
-  const open = new Heap();
+  const open = new MinHeap();
   const w = map.width;
   const h0 = (s: number) => {
     const t = segTile(s);

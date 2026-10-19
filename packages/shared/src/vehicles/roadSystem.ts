@@ -18,7 +18,7 @@ import { ROADSTOP_TRUCK } from '../town/road.ts';
 import { isBus } from './catalog.ts';
 import { advanceOrder, needsService } from './orders.ts';
 import { BRAKE_KMH_PER_S, DWELL_TICKS, KMH_PER_TILE_PER_S, brakingDistance, speedForDistance } from './railSystem.ts';
-import { cargoMass, type Order, type Train, type TrainMotion } from './train.ts';
+import { cargoMass, routeKey, targetCode, type Order, type Train, type TrainMotion } from './train.ts';
 
 const DT = 1 / TICKS_PER_SECOND;
 /** Road vehicles stop this far (tiles) behind the vehicle in front. */
@@ -45,11 +45,23 @@ export class RoadSystem {
 
   constructor(private readonly state: GameState) {}
 
+  /** Lane keys by segment, valid for one road network version. */
+  private lanes = new Map<number, number>();
+  private lanesFor = -1;
+
   private laneKey(s: number): number {
-    const tile = rsTile(s);
-    const map = this.state.map;
-    if (isUTurn(s) || isJunction(map, tile) || map.layers.type[tile] === TileType.RoadDepot) return tile * 8 + 7;
-    return tile * 8 + rsExit(s);
+    if (this.lanesFor !== this.state.roadVersion) {
+      this.lanesFor = this.state.roadVersion;
+      this.lanes.clear();
+    }
+    let k = this.lanes.get(s);
+    if (k === undefined) {
+      const tile = rsTile(s);
+      const map = this.state.map;
+      k = isUTurn(s) || isJunction(map, tile) || map.layers.type[tile] === TileType.RoadDepot ? tile * 8 + 7 : tile * 8 + rsExit(s);
+      this.lanes.set(s, k);
+    }
+    return k;
   }
 
   private occupiedByOther(s: number, id: number): boolean {
@@ -126,7 +138,7 @@ export class RoadSystem {
     if (t.status === 'depot') {
       t.status = 'running';
       t.route = [];
-      t.routeFor = '';
+      t.routeFor = -1;
       t.speed = 0;
     } else if (t.status === 'stopped') t.status = 'running';
   }
@@ -137,7 +149,7 @@ export class RoadSystem {
 
   sendToDepot(t: Train): void {
     t.toDepot = !t.toDepot;
-    t.routeFor = '';
+    t.routeFor = -1;
   }
 
   /** Turn round where it stands (road vehicles can always turn). */
@@ -151,7 +163,7 @@ export class RoadSystem {
     t.path = t.path.map(rsReverse).reverse();
     t.pos = Math.max(0, rsLength(last) - Math.max(0, covered - len));
     t.route = [];
-    t.routeFor = '';
+    t.routeFor = -1;
     for (const s of t.path) this.occupy(t, s);
     return true;
   }
@@ -165,7 +177,7 @@ export class RoadSystem {
     t.status = 'depot';
     t.depot = tile;
     t.toDepot = false;
-    t.routeFor = '';
+    t.routeFor = -1;
     t.lastService = this.state.date;
     this.onService?.(t);
     this.state.dirtyTrains.add(t.id);
@@ -198,7 +210,7 @@ export class RoadSystem {
       return;
     }
     const key = this.targetKey(t);
-    if (key !== null && t.routeFor !== `${this.state.roadVersion}:${key}` && this.state.tick >= t.replanAt) this.plan(t);
+    if (key >= 0 && t.routeFor !== routeKey(this.state.roadVersion, key) && this.state.tick >= t.replanAt) this.plan(t);
 
     const stats = this.state.rail.statsOf(t);
     const stopAt = this.stopDistance(t, brakingDistance(t.speed) + 2);
@@ -316,12 +328,9 @@ export class RoadSystem {
     this.plan(t);
   }
 
-  private targetKey(t: Train): string | null {
-    if (t.toDepot || t.serviceTrip) return 'depot';
-    const o = t.orders[t.orderIndex];
-    if (!o) return null;
-    if (o.kind === 'station') return `s${o.station}`;
-    return o.kind === 'depot' ? 'depot' : null;
+  private targetKey(t: Train): number {
+    const code = targetCode(t);
+    return code % 4 === 2 ? -1 : code; // no waypoints on roads
   }
 
   /** Tiles a vehicle may finish its route on for an order. */
@@ -347,7 +356,7 @@ export class RoadSystem {
 
   plan(t: Train): void {
     const key = this.targetKey(t);
-    t.routeFor = `${this.state.roadVersion}:${key}`;
+    t.routeFor = routeKey(this.state.roadVersion, key);
     const o = t.orders[t.orderIndex];
     const goals = t.toDepot || t.serviceTrip ? this.goalTiles(t, 'depot') : o ? this.goalTiles(t, o) : new Set<number>();
     const penalty = (s: number) => (this.occupiedByOther(s, t.id) ? 3 : 0);
@@ -357,7 +366,7 @@ export class RoadSystem {
       const back = findRoadPath(this.state.map, rsReverse(t.path[t.path.length - 1]!), goals, penalty);
       if (back && this.reverse(t)) {
         path = back;
-        t.routeFor = `${this.state.roadVersion}:${key}`;
+        t.routeFor = routeKey(this.state.roadVersion, key);
       }
     }
     if (!path) {
@@ -365,7 +374,7 @@ export class RoadSystem {
       t.replanAt = this.state.tick + REPLAN_DELAY;
       if (t.serviceTrip) {
         t.serviceTrip = false;
-        t.routeFor = '';
+        t.routeFor = -1;
         t.replanAt = 0;
       }
       return;

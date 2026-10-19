@@ -282,6 +282,7 @@ export class GameState {
         this.map.touchTile(x, (i - x) / this.map.width);
       }
       if (changed.length) this.dirtyTowns.add(t.id);
+      if (changed.some((i) => this.map.layers.type[i] === TileType.Road)) this.onRoadsChanged();
     }
   }
 
@@ -481,7 +482,7 @@ export class GameState {
     if (keep.length === t.orders.length) return;
     t.orders = keep;
     t.orderIndex = keep.length ? Math.min(t.orderIndex, keep.length - 1) : 0;
-    t.routeFor = '';
+    t.routeFor = -1;
     this.dirtyTrains.add(t.id);
   }
 
@@ -551,7 +552,7 @@ export class GameState {
       if (keep.length === t.orders.length) continue;
       t.orders = keep;
       t.orderIndex = keep.length ? Math.min(t.orderIndex, keep.length - 1) : 0;
-      t.routeFor = '';
+      t.routeFor = -1;
       this.dirtyTrains.add(t.id);
     }
   }

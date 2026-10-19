@@ -52,7 +52,7 @@ export function advanceOrder(state: GameState, t: Train): void {
   if (t.orders.length === 0) return;
   t.orderIndex = (t.orderIndex + 1) % t.orders.length;
   settleOrders(state, t);
-  t.routeFor = '';
+  t.routeFor = -1;
   state.dirtyTrains.add(t.id);
 }
 

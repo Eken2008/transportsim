@@ -108,12 +108,14 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
       cost: state.cost(cost),
       commit() {
         const dirtyChunks = new Set<number>();
+        let roads = false;
         for (const [i, bits] of add) {
           const x = i % map.width;
           const y = (i - x) / map.width;
           const type = map.layers.type[i];
           if (type === TileType.Road) {
             map.layers.data[i] = (map.layers.data[i]! & 0xf) | CROSSING_FLAG;
+            roads = true;
           } else if (type !== TileType.Rail) {
             map.layers.data[i] = 0;
           }
@@ -128,6 +130,7 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
           map.touchTile(tx, (t - tx) / map.width, dirtyChunks);
         }
         state.onTrackChanged();
+        if (roads) state.onRoadsChanged();
         return { dirtyChunks };
       },
     };
@@ -173,6 +176,7 @@ export const removeTrackHandler: CommandHandler<RemoveTrackCommand> = {
               map.layers.owner[i] = OWNER_NONE;
               map.layers.data[i] = data & 0xf;
               map.layers.track[i] = 0;
+              state.onRoadsChanged();
             } else {
               map.setClear(i, Ground.Rough, 0);
             }

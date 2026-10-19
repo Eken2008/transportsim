@@ -132,7 +132,7 @@ export class ClientWorld {
     for (const t of trains) {
       this.trains.set(t.id, t);
       // Mirror into the game state so command previews (e.g. editing a consist) can validate.
-      this.state.trains.set(t.id, { ...t, path: [], pos: 0, route: [], routeFor: '', replanAt: 0 });
+      this.state.trains.set(t.id, { ...t, path: [], pos: 0, route: [], routeFor: -1, replanAt: 0 });
       this.state.rail.invalidateStats(this.state.trains.get(t.id)!);
     }
     for (const id of removed) {

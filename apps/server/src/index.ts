@@ -25,7 +25,15 @@ const server = Bun.serve<SocketData, never>({
       return new Response('WebSocket upgrade failed', { status: 400 });
     }
     if (url.pathname === '/health') {
-      return Response.json({ ok: true, rooms: lobby.rooms.size });
+      const rooms = [...lobby.rooms.values()].map((r) => ({
+        id: r.id,
+        players: r.connectedCount,
+        vehicles: r.state.trains.size,
+        stepMs: Math.round(r.stats.stepMs * 1000) / 1000,
+        steps: r.stats.steps,
+        bytesOut: r.stats.bytesOut,
+      }));
+      return Response.json({ ok: true, rooms: lobby.rooms.size, games: rooms });
     }
     return serveStatic(url.pathname);
   },

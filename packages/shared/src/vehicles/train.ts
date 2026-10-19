@@ -87,6 +87,22 @@ export interface ShipState {
   ver?: number;
 }
 
+/**
+ * A number naming a network version and a target (`code` from `targetCode`), compared each tick
+ * to see whether a vehicle's route is still current.
+ */
+export const routeKey = (version: number, code: number) => version * 0x400000 + code;
+
+/** The target of a vehicle's current order as a number: depot 3, station id*4+1, waypoint id*4+2; -1 if none. */
+export function targetCode(t: Train): number {
+  if (t.toDepot || t.serviceTrip) return 3;
+  const o = t.orders[t.orderIndex];
+  if (!o) return -1;
+  if (o.kind === 'station') return o.station * 4 + 1;
+  if (o.kind === 'waypoint') return o.waypoint * 4 + 2;
+  return o.kind === 'depot' ? 3 : -1;
+}
+
 /** Is this a train (not a road vehicle or aircraft)? */
 export const isRailVehicle = (t: { mode?: string }) => !t.mode || t.mode === 'rail';
 
@@ -122,8 +138,8 @@ export interface Train {
   toDepot: boolean;
   /** Planned segments beyond the head. */
   route: number[];
-  /** What the current route was planned for: `${trackVersion}:${target}`. */
-  routeFor: string;
+  /** What the current route was planned for (see `routeKey`); -1 = nothing. */
+  routeFor: number;
   /** Earliest tick to retry planning after a failure. */
   replanAt: number;
   /** Ticks left at the current platform. */

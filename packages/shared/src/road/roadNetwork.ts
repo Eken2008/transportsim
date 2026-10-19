@@ -3,6 +3,7 @@ import { EDGE_DX, EDGE_DY, EDGE_MID_X, EDGE_MID_Y, OPPOSITE_EDGE, type Edge } fr
 import { oneWayAllows, roadBitsAt, ROAD_EDGE_BITS } from '../town/road.ts';
 import { TileType } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
+import { MinHeap } from '../util/heap.ts';
 
 /**
  * Road vehicles move along *road segments*: a tile crossed from one edge to another, packed as
@@ -111,14 +112,13 @@ export function findRoadPath(map: GameMap, start: number, goals: ReadonlySet<num
   };
   const g = new Map<number, number>([[start, 0]]);
   const prev = new Map<number, number>();
-  const open: [number, number][] = [[h(start), start]];
+  const open = new MinHeap();
+  open.push(h(start), start);
   const closed = new Set<number>();
   const next: number[] = [];
   let expanded = 0;
-  while (open.length) {
-    let bi = 0;
-    for (let i = 1; i < open.length; i++) if (open[i]![0] < open[bi]![0]) bi = i;
-    const [, cur] = open.splice(bi, 1)[0]!;
+  while (open.size) {
+    const cur = open.pop();
     if (closed.has(cur)) continue;
     closed.add(cur);
     if (cur !== start && goals.has(rsTile(cur))) {
@@ -132,7 +132,7 @@ export function findRoadPath(map: GameMap, start: number, goals: ReadonlySet<num
       if (cost < (g.get(n) ?? Infinity)) {
         g.set(n, cost);
         prev.set(n, cur);
-        open.push([cost + h(n), n]);
+        open.push(cost + h(n), n);
       }
     }
   }

@@ -66,6 +66,8 @@ export class Room {
   private readonly banned = new Set<string>();
   private chunkCache = new Map<number, { version: number; bytes: Uint8Array }>();
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** Load figures for /health and the load test: smoothed ms per sim step, bytes sent. */
+  readonly stats = { stepMs: 0, steps: 0, bytesOut: 0 };
   private hostCloseTimer: ReturnType<typeof setTimeout> | null = null;
   private lastStepAt = 0;
   private stepDebt = 0;
@@ -348,7 +350,11 @@ export class Room {
       this.stepDebt = Math.min(this.stepDebt + (dt / 1000) * TICKS_PER_SECOND * this.speed, MAX_CATCHUP_STEPS);
       while (this.stepDebt >= 1) {
         this.stepDebt--;
+        const t0 = performance.now();
         const ev = this.state.step();
+        const ms = performance.now() - t0;
+        this.stats.stepMs = this.stats.steps === 0 ? ms : this.stats.stepMs * 0.98 + ms * 0.02;
+        this.stats.steps++;
         if (ev.newDay) this.globalDirty = true;
         if (ev.newMonth) this.maybeAutosave();
       }
@@ -428,7 +434,9 @@ export class Room {
       for (const c of s.subscribed) {
         const v = versions[c]!;
         if (s.sentVersions.get(c) === v) continue;
-        s.conn.send(this.chunkBytes(c, v));
+        const bytes = this.chunkBytes(c, v);
+        this.stats.bytesOut += bytes.length;
+        s.conn.send(bytes);
         s.sentVersions.set(c, v);
         if (--budget === 0) break;
       }
@@ -533,12 +541,15 @@ export class Room {
   // ---- helpers ---------------------------------------------------------------
 
   send(session: Session, msg: ServerMessage): void {
-    session.conn.send(encodeFrame(msg));
+    const bytes = encodeFrame(msg);
+    this.stats.bytesOut += bytes.length;
+    session.conn.send(bytes);
   }
 
   broadcast(msg: ServerMessage): void {
     if (this.sessions.size === 0) return;
     const bytes = encodeFrame(msg);
+    this.stats.bytesOut += bytes.length * this.sessions.size;
     for (const s of this.sessions) s.conn.send(bytes);
   }
 

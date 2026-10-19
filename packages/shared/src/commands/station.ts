@@ -217,6 +217,7 @@ export function demolishTile(state: GameState, i: number, dirtyChunks: Set<numbe
       map.layers.data[i] = data & 0xf;
       map.layers.track[i] = 0;
       map.layers.railType[i] = 0;
+      state.onRoadsChanged();
     } else {
       map.setClear(i, Ground.Rough, 0);
     }
