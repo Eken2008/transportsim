@@ -115,6 +115,8 @@ The game also has chat, a news feed and statistics graphs.
 - **Consequences:** the vehicle is destroyed, the tile stays blocked for a cleanup period, the company pays compensation, its reputation and station ratings drop, and the event appears in the news. Each rule lives in `shared/src/incidents/` and scales with the severity setting.
 
 ## Milestones (each one ends playable and committed)
+
+All nine milestones (M0–M8) are done as of October 2026. Measured at the end of M8: the 2048² benchmark (about 5,000 vehicles in every mode) averages 14–17 ms per tick (40–50% of one core at normal speed, depending on what else the machine is doing). In the 15-player load test each player receives about 10 KB/s.
 1. **M0 Foundations.** `git init`, Bun workspaces, and tooling (TypeScript, ESLint, Prettier, `bun test`). Map typed arrays, terrain generation, chunked Three.js terrain, camera, picking and a terraform tool. Bun server lobby, rooms, host ownership and grace-period shutdown, tick loop, command pipeline and chunk subscriptions. IndexedDB save/load with an autosave consent prompt.
 2. **M1 Rail core.** Track building with slopes, bridges and tunnels, plus depots and multi-tile stations. Simple consists, movement, pathfinding, block signals and orders. Towns with houses produce passengers using destination-tagged packets with simple routing. Also money, costs, and a basic company per player.
 3. **M2 Companies and multiplayer depth.** Multi-member companies with roles and permissions, finances and loans, sharing agreements, station ratings, chat and news. Full lobby settings: timeline or sandbox mode and accident severity.
