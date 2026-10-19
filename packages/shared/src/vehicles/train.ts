@@ -49,6 +49,30 @@ export interface CargoPacket {
   at?: number;
 }
 
+export type AirPhase = 'taxi' | 'gate' | 'hold' | 'takeoff' | 'flying' | 'holding' | 'landing';
+
+/** An aircraft's position (tiles; z in tiles above the ground) and what it is doing. */
+export interface AirState {
+  phase: AirPhase;
+  x: number;
+  y: number;
+  z: number;
+  heading: number;
+  /** Station of the airport it is at (on the ground) or flying to. */
+  airport: number;
+  /** Points to move through (x, y, z), first is next. */
+  legs: [number, number, number][];
+  /** Gate it holds at its airport, if any. */
+  gate?: number;
+  /** Landing to visit the hangar (service or depot order). */
+  toHangar?: boolean;
+  /** Where a taxiing aircraft is going: a gate, the runway hold point, the hangar, or waiting for a gate. */
+  goal?: 'gate' | 'hold' | 'hangar' | 'waitGate';
+}
+
+/** Is this a train (not a road vehicle or aircraft)? */
+export const isRailVehicle = (t: { mode?: string }) => !t.mode || t.mode === 'rail';
+
 export interface TrainUnit {
   type: string;
   /** Cargo a refittable wagon carries (default: its first cargo). */
@@ -57,8 +81,10 @@ export interface TrainUnit {
 
 export interface Train {
   id: number;
-  /** Rail (default) or road: a bus or truck, moved by the road system. */
-  mode?: 'rail' | 'road';
+  /** Rail (default), road (a bus or truck) or air (an aircraft). */
+  mode?: 'rail' | 'road' | 'air';
+  /** Aircraft only: where it is and what it is doing. */
+  air?: AirState;
   owner: number;
   name: string;
   units: TrainUnit[];
@@ -191,4 +217,6 @@ export interface TrainMotion {
   speed: number;
   /** Next few planned segments, so clients can extrapolate past the head segment. */
   ahead: number[];
+  /** Aircraft: x, y, z (tiles), heading (radians), speed (tiles per second). */
+  air?: [number, number, number, number, number];
 }

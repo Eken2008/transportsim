@@ -70,6 +70,28 @@ export function installDebugHook(r: GameRenderer): () => void {
       const i = map.tileIndex(x, y);
       return { type: map.layers.type[i], data: map.layers.data[i], track: map.layers.track[i], signals: map.layers.signals[i], corners: map.tileCorners(x, y) };
     },
+    /** The nearest w×h area of clear land to (x, y) (its north-west corner), searching outwards. */
+    findClear(x: number, y: number, w: number, h: number) {
+      const map = client.world!.map;
+      const clear = (x0: number, y0: number) => {
+        for (let ty = y0; ty < y0 + h; ty++) {
+          for (let tx = x0; tx < x0 + w; tx++) if (!map.inBounds(tx, ty) || map.layers.type[map.tileIndex(tx, ty)] !== TileType.Clear) return false;
+        }
+        return true;
+      };
+      for (let r = 0; r < 60; r++) {
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) === r && clear(x + dx, y + dy)) return { x: x + dx, y: y + dy };
+          }
+        }
+      }
+      return null;
+    },
+    /** Vehicles as the client knows them. */
+    trains() {
+      return [...(client.world?.trains.values() ?? [])].map((t) => ({ id: t.id, mode: t.mode, status: t.status, name: t.name }));
+    },
     /** A straight town road tile near (x, y) where a level crossing could go. */
     findCrossingSpot(x: number, y: number) {
       const map = client.world!.map;

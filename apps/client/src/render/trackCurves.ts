@@ -97,7 +97,8 @@ export class TrackCurves {
 
   private piecesTouching(tile: number, edge: number): number[] {
     const out: number[] = [];
-    if (this.map.layers.type[tile] === TileType.RoadStop) return out; // road bits, not track
+    const type = this.map.layers.type[tile];
+    if (type === TileType.RoadStop || type === TileType.Airport) return out; // road bits or airport roles, not track
     const bits = this.map.layers.track[tile]!;
     for (let p = 0; p < 6; p++) {
       const [e0, e1] = PIECE_EDGES[p]!;

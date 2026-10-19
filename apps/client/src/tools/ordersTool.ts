@@ -1,4 +1,4 @@
-import { TileType, WAYPOINT_FLAG, type Order } from '@transportsim/shared';
+import { AirportRole, TileType, WAYPOINT_FLAG, type Order } from '@transportsim/shared';
 import { client } from '../net/client.ts';
 import type { AreaGhost } from '../render/areaGhost.ts';
 import type { TerrainHit } from '../render/picking.ts';
@@ -16,6 +16,7 @@ export class OrdersTool implements Tool {
     if (!map) return null;
     const i = map.tileIndex(hit.tileX, hit.tileY);
     const type = map.layers.type[i];
+    if (type === TileType.Airport) return map.layers.track[i] === AirportRole.Hangar ? null : map.layers.data[i]!;
     return type === TileType.Station || type === TileType.RoadStop ? map.layers.data[i]! : null;
   }
 
@@ -26,7 +27,7 @@ export class OrdersTool implements Tool {
     const station = this.stationAt(hit);
     if (station !== null) return { kind: 'station', station };
     const i = map.tileIndex(hit.tileX, hit.tileY);
-    if (map.layers.type[i] === TileType.Depot || map.layers.type[i] === TileType.RoadDepot) return { kind: 'depot' };
+    if (map.layers.type[i] === TileType.Depot || map.layers.type[i] === TileType.RoadDepot || map.layers.type[i] === TileType.Airport) return { kind: 'depot' };
     if (map.layers.type[i] === TileType.Rail && map.layers.data[i]! & WAYPOINT_FLAG) {
       const wp = [...(client.world?.state.waypoints.values() ?? [])].find((w) => w.tile === i);
       if (wp) return { kind: 'waypoint', waypoint: wp.id };

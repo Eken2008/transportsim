@@ -2,6 +2,7 @@ import type { GameMap } from '../world/map.ts';
 import { TileType } from '../world/constants.ts';
 import type { Town } from '../town/towns.ts';
 import type { CargoId } from '../economy/cargo.ts';
+import type { AirportInfo } from '../air/airports.ts';
 
 export interface Station {
   id: number;
@@ -28,6 +29,8 @@ export interface Station {
   supplies?: CargoId[];
   /** Industries in its catchment. */
   industries?: number[];
+  /** The station's airport, if it has one. */
+  airport?: AirportInfo;
   /** 0..255 like OpenTTD; affects how much cargo the station receives. */
   rating: number;
   /** Day a train last picked up passengers here. */
@@ -88,7 +91,8 @@ export function recomputeStationExtent(map: GameMap, st: Station): void {
   for (let y = sy0; y <= sy1; y++) {
     for (let x = sx0; x <= sx1; x++) {
       const i = map.tileIndex(x, y);
-      if ((map.layers.type[i] !== TileType.Station && map.layers.type[i] !== TileType.RoadStop) || map.layers.data[i] !== st.id) continue;
+      const t = map.layers.type[i];
+      if ((t !== TileType.Station && t !== TileType.RoadStop && t !== TileType.Airport) || map.layers.data[i] !== st.id) continue;
       n++;
       if (x < x0) x0 = x;
       if (y < y0) y0 = y;

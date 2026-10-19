@@ -33,7 +33,7 @@ import { TileType } from '../world/constants.ts';
 import { signalKindOf, type SignalKind } from '../commands/signals.ts';
 import { CROSSING_FLAG } from '../commands/track.ts';
 import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
-import { cargoMass, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
+import { cargoMass, isRailVehicle, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
 import { advanceOrder, needsService, peekNextOrder } from './orders.ts';
 import { DERAIL_OVERSPEED } from '../incidents/rail.ts';
 
@@ -365,7 +365,7 @@ export class RailSystem {
     this.occ.clear();
     this.blockUse.clear();
     this.claims.clear();
-    for (const t of this.state.trains.values()) if (t.mode !== 'road') for (const s of t.path) this.occupy(t, s);
+    for (const t of this.state.trains.values()) if (isRailVehicle(t)) for (const s of t.path) this.occupy(t, s);
     for (const k of this.wrecks.keys()) this.markOccupied(k, WRECK);
     this.blockRes.clear();
     for (const [k, id] of this.reserved) this.countReservation(k, id, 1);
@@ -627,7 +627,7 @@ export class RailSystem {
 
   depotHasVehicles(tile: number): boolean {
     for (const t of this.state.trains.values()) {
-      if (t.mode === 'road') continue;
+      if (!isRailVehicle(t)) continue;
       if (t.status === 'depot' && t.depot === tile) return true;
       if (t.path.some((s) => segTile(s) === tile)) return true;
     }
@@ -717,7 +717,7 @@ export class RailSystem {
     this.ensureBlocks();
     this.updateCrossings();
     for (const t of this.state.trains.values()) {
-      if (t.status === 'depot' || t.mode === 'road') continue;
+      if (t.status === 'depot' || !isRailVehicle(t)) continue;
       this.stepTrain(t);
     }
   }
@@ -733,7 +733,7 @@ export class RailSystem {
   private updateCrossings(): void {
     this.closedCrossings.clear();
     for (const t of this.state.trains.values()) {
-      if (t.mode === 'road' || t.path.length === 0) continue;
+      if (!isRailVehicle(t) || t.path.length === 0) continue;
       for (const s of t.path) if (this.isCrossing(segTile(s))) this.closedCrossings.add(segTile(s));
       let d = segLength(t.path[0]!) - t.pos;
       for (const s of t.route) {

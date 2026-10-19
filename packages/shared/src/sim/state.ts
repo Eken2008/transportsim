@@ -22,6 +22,7 @@ import {
   type LedgerCategory,
 } from '../economy/finance.ts';
 import { demolishTile, refreshStations } from '../commands/station.ts';
+import { removeAirport } from '../commands/airport.ts';
 import { OWNER_NONE, TileType } from '../world/constants.ts';
 import type { Agreement } from '../company/sharing.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
@@ -31,6 +32,9 @@ import { segTd, segTile, type TrackAccess } from '../rail/network.ts';
 import { NEWS_HISTORY, type NewsItem, type NewsKind } from '../news/news.ts';
 import { RailSystem } from '../vehicles/railSystem.ts';
 import { RoadSystem } from '../vehicles/roadSystem.ts';
+import { AirSystem } from '../vehicles/airSystem.ts';
+import { hangarTile } from '../air/airports.ts';
+import { isRailVehicle } from '../vehicles/train.ts';
 import type { Train } from '../vehicles/train.ts';
 import { GameMap } from '../world/map.ts';
 import { generateTerrain } from '../world/terrain.ts';
@@ -93,6 +97,7 @@ export class GameState {
   readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
   readonly road: RoadSystem;
+  readonly air: AirSystem;
   readonly cargo: CargoSystem;
   readonly maintenance: MaintenanceSystem;
   readonly incidents: IncidentSystem;
@@ -128,6 +133,10 @@ export class GameState {
     this.rail = new RailSystem(this);
     this.road = new RoadSystem(this);
     this.road.crossingClosed = (tile) => this.rail.closedCrossings.has(tile);
+    this.air = new AirSystem(this);
+    this.air.onService = (t) => this.maintenance.service(t);
+    this.air.onArrive = (t, s) => this.cargo.arrive(t, s);
+    this.air.onLoading = (t, s) => this.cargo.loading(t, s);
     this.cargo = new CargoSystem(this);
     this.maintenance = new MaintenanceSystem(this);
     this.rail.onService = (t) => this.maintenance.service(t);
@@ -136,6 +145,7 @@ export class GameState {
     this.road.onLoading = (t, s) => this.cargo.loading(t, s);
     this.incidents = new IncidentSystem(this);
     this.maintenance.onBreakdown = (t) => this.incidents.onBreakdown(t);
+    this.air.onLanded = (t, st) => this.incidents.onLanded(t, st);
     this.rail.onArrive = (t, s) => this.cargo.arrive(t, s);
     this.rail.onLoading = (t, s) => this.cargo.loading(t, s);
   }
@@ -160,6 +170,7 @@ export class GameState {
     this.tick++;
     this.rail.step();
     this.road.step();
+    this.air.step();
     if (this.agreements.size > 0) this.countSharing();
     const ev: TickEvents = { newDay: false, newMonth: false, newYear: false };
     if (++this.dayTick >= TICKS_PER_DAY) {
@@ -314,8 +325,8 @@ export class GameState {
         infra.track += Math.max(1, n);
         const sig = signals[i]!;
         for (let p = 0; p < 6; p++) if ((sig >> (p * 2)) & 3) infra.signals++;
-      } else if (t === TileType.Station) infra.stations++;
-      else if (t === TileType.Depot) infra.depots++;
+      } else if (t === TileType.Station || t === TileType.RoadStop || t === TileType.Airport) infra.stations++;
+      else if (t === TileType.Depot || t === TileType.RoadDepot) infra.depots++;
     }
     for (const [id, infra] of counts) this.companies.get(id)!.infrastructure = infra;
   }
@@ -348,10 +359,17 @@ export class GameState {
     for (let i = 0; i < type.length; i++) {
       if (owner[i] !== id) continue;
       const t = type[i];
-      if (t !== TileType.Rail && t !== TileType.Station && t !== TileType.Depot) continue;
+      if (t === TileType.Airport) {
+        stations.add(this.map.layers.data[i]!);
+        removeAirport(this, this.map.layers.data[i]!);
+        continue;
+      }
+      if (t !== TileType.Rail && t !== TileType.Station && t !== TileType.Depot && t !== TileType.RoadStop && t !== TileType.RoadDepot) continue;
       const st = demolishTile(this, i, dirty);
       if (st !== null) stations.add(st);
     }
+    // Its roads stay, as public roads.
+    for (let i = 0; i < type.length; i++) if (owner[i] === id && type[i] === TileType.Road) owner[i] = OWNER_NONE;
     refreshStations(this, stations);
     this.onTrackChanged();
     this.companies.delete(id);
@@ -423,7 +441,7 @@ export class GameState {
     this.agreementsChanged();
     let towed = 0;
     for (const t of [...this.trains.values()]) {
-      if (t.owner !== a.guest || t.mode === 'road') continue;
+      if (t.owner !== a.guest || !isRailVehicle(t)) continue;
       this.dropOrdersFor(t, a.host);
       if (this.isOnTrackOf(t, a.host)) {
         this.towHome(t);
@@ -456,7 +474,7 @@ export class GameState {
     const hy = (head - hx) / w;
     let best = -1;
     let bestD = Infinity;
-    for (const d of t.mode === 'road' ? this.roadDepots : this.depots) {
+    for (const d of t.mode === 'road' ? this.roadDepots : t.mode === 'air' ? this.hangars(t.owner) : this.depots) {
       if (this.map.layers.owner[d] !== t.owner) continue;
       const dx = (d % w) - hx;
       const dy = Math.floor(d / w) - hy;
@@ -477,7 +495,7 @@ export class GameState {
   private countSharing(): void {
     const owner = this.map.layers.owner;
     for (const t of this.trains.values()) {
-      if (t.path.length === 0 || t.mode === 'road') continue;
+      if (t.path.length === 0 || !isRailVehicle(t)) continue;
       const s = t.path[0]!;
       if (isSpanTd(segTd(s))) continue;
       const o = owner[segTile(s)]!;
@@ -551,8 +569,15 @@ export class GameState {
   }
 
   /** The system that moves a vehicle: rail for trains, road for buses and trucks. */
-  systemOf(t: Train): RailSystem | RoadSystem {
-    return t.mode === 'road' ? this.road : this.rail;
+  systemOf(t: Train): RailSystem | RoadSystem | AirSystem {
+    return t.mode === 'road' ? this.road : t.mode === 'air' ? this.air : this.rail;
+  }
+
+  /** Hangar tiles of a company's airports. */
+  hangars(company: number): number[] {
+    const out: number[] = [];
+    for (const st of this.stations.values()) if (st.airport && st.owner === company) out.push(hangarTile(this.map, st.airport));
+    return out;
   }
 
   /** Take a vehicle out of the world for good (sold, crashed, its company gone). */

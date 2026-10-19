@@ -1,4 +1,5 @@
 import {
+  AIRPORT_TYPES,
   BRIDGE_TYPES,
   COMPANY_COLORS,
   GAME_SPEEDS,
@@ -85,6 +86,7 @@ export function GameScreen() {
       <BridgeOptions />
       <RailTypeOptions />
       <RoadStopOptions />
+      <AirportOptions />
       <Toolbar />
       <Chat />
       <StatusBar fps={stats.fps} chunks={stats.chunks} />
@@ -212,7 +214,7 @@ function HostBanner() {
   );
 }
 
-type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | 'rail' | 'road' };
+type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | 'rail' | 'road' | 'air' };
 
 const TOOLS: ToolDef[] = [
   { id: 'raise', icon: '⛰', label: 'Raise land (drag for area)', key: '1', menu: 'main' },
@@ -232,6 +234,7 @@ const TOOLS: ToolDef[] = [
   { id: 'roadStop', icon: '🚏', label: 'Bus or truck stop (on straight road)', key: 'H', menu: 'road' },
   { id: 'roadDepot', icon: '🅿', label: 'Road vehicle depot', key: 'J', menu: 'road' },
   { id: 'oneWay', icon: '⬆', label: 'One-way road (click to cycle)', key: 'K', menu: 'road' },
+  { id: 'airport', icon: '🛫', label: 'Airport (needs flat land; click its north-west corner)', key: 'Y', menu: 'air' },
   { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', menu: 'main' },
 ];
 
@@ -251,21 +254,23 @@ function ToolButton({ t }: { t: ToolDef }) {
   );
 }
 
-type Menu = 'rail' | 'road';
+type Menu = 'rail' | 'road' | 'air';
 const MENUS: { id: Menu; icon: string; label: string }[] = [
   { id: 'rail', icon: '🚆', label: 'Railways' },
   { id: 'road', icon: '🛣', label: 'Roads' },
+  { id: 'air', icon: '✈', label: 'Airports' },
 ];
+const MENU_NAMES: Record<Menu, string> = { rail: 'Rail', road: 'Road', air: 'Air' };
 
 function Toolbar() {
   const tool = useApp((s) => s.tool);
   const [chosen, setChosen] = useState<Menu | null>(null);
   const toolMenu = TOOLS.find((t) => t.id === tool)?.menu;
-  const open: Menu | null = toolMenu === 'rail' || toolMenu === 'road' ? toolMenu : chosen;
+  const open: Menu | null = toolMenu && toolMenu !== 'main' ? toolMenu : chosen;
   return (
     <>
       {open && (
-        <div className="panel toolbar submenu" role="toolbar" aria-label={`${open === 'rail' ? 'Rail' : 'Road'} tools`}>
+        <div className="panel toolbar submenu" role="toolbar" aria-label={`${MENU_NAMES[open]} tools`}>
           {TOOLS.filter((t) => t.menu === open).map((t) => (
             <ToolButton key={t.id} t={t} />
           ))}
@@ -297,9 +302,6 @@ function Toolbar() {
             <span className="key">▴</span>
           </button>
         ))}
-        <button className="tool-btn" disabled data-tip="Airports — planned" aria-label="Airports (planned)">
-          <span style={{ fontSize: 20 }}>✈</span>
-        </button>
         <button className="tool-btn" disabled data-tip="Docks — planned" aria-label="Docks (planned)">
           <span style={{ fontSize: 20 }}>⚓</span>
         </button>
@@ -307,6 +309,33 @@ function Toolbar() {
         <ToolButton t={TOOLS.find((t) => t.id === 'bulldoze')!} />
       </div>
     </>
+  );
+}
+
+function AirportOptions() {
+  const tool = useApp((s) => s.tool);
+  const kind = useApp((s) => s.airportKind);
+  if (tool !== 'airport') return null;
+  return (
+    <div className="panel tool-options" role="radiogroup" aria-label="Airport kind">
+      <span className="muted">Airport</span>
+      <div className="seg">
+        {(['small', 'large'] as const).map((k) => {
+          const t = AIRPORT_TYPES[k];
+          return (
+            <button
+              key={k}
+              className={kind === k ? 'primary' : ''}
+              aria-pressed={kind === k}
+              title={`${t.w}×${t.h} tiles, ${t.gates} gates, from ${t.intro}${k === 'large' ? '; heavy jets need one' : ''}`}
+              onClick={() => useApp.setState({ airportKind: k })}
+            >
+              {t.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

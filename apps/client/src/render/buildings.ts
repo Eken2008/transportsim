@@ -1,4 +1,5 @@
 import {
+  AirportRole,
   CHUNK_SIZE,
   EDGE_MID_X,
   EDGE_MID_Y,
@@ -167,6 +168,7 @@ const STOP_ROOF = lin('#4a6a8a');
 const STOP_YELLOW = lin('#e8c547');
 const GARAGE = lin('#8d8a84');
 const GARAGE_DOOR = lin('#2a2d31');
+const ROOF_GREY = lin('#6c7178');
 
 /** Road surfaces for a chunk (roads, road stops and depots; level crossings are drawn with the track). */
 export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): void {
@@ -178,6 +180,10 @@ export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): v
       const type = map.layers.type[i];
       if (type === TileType.RoadDepot) {
         addRoadDepot(g, map, x, y, map.layers.data[i]! & 3);
+        continue;
+      }
+      if (type === TileType.Airport) {
+        addAirportTile(g, map, x, y, map.layers.track[i]!);
         continue;
       }
       if (type !== TileType.Road && type !== TileType.RoadStop) continue;
@@ -227,6 +233,58 @@ function addStopFurniture(g: GeoBuilder, x: number, y: number, h: number, alongX
       g.color(GARAGE_DOOR).aabb(x0, h, z0, x0 + 0.02, h + 0.26, z0 + 0.02);
       g.color(GARAGE_DOOR).aabb(x1 - 0.02, h, z1 - 0.02, x1, h + 0.26, z1);
       g.color(STOP_ROOF).aabb(x0 - 0.02, h + 0.26, z0 - 0.02, x1 + 0.02, h + 0.29, z1 + 0.02); // shelter roof
+    }
+  }
+}
+
+const RUNWAY = lin('#3d4045');
+const TAXIWAY = lin('#5a5e63');
+const CONCRETE = lin('#a8a59e');
+const TAXI_LINE = lin('#e0b83a');
+const TERMINAL = lin('#c9d3da');
+const TERMINAL_GLASS = lin('#3b5770');
+const HANGAR = lin('#7f8a93');
+
+/** One airport tile, by its role (runway along the north row, gates and hangar along the south). */
+function addAirportTile(g: GeoBuilder, map: GameMap, x: number, y: number, role: number): void {
+  const h = map.cornerHeight(x, y) * HEIGHT_SCALE + 0.012;
+  const isRole = (dx: number, r: number) => map.inBounds(x + dx, y) && map.layers.type[map.tileIndex(x + dx, y)] === TileType.Airport && map.layers.track[map.tileIndex(x + dx, y)] === r;
+  switch (role) {
+    case AirportRole.Runway: {
+      g.color(RUNWAY).aabb(x, h - 0.01, y, x + 1, h, y + 1);
+      g.color(MARKING);
+      g.aabb(x, h, y + 0.08, x + 1, h + 0.003, y + 0.11); // edge lines
+      g.aabb(x, h, y + 0.89, x + 1, h + 0.003, y + 0.92);
+      g.aabb(x + 0.15, h, y + 0.48, x + 0.6, h + 0.003, y + 0.52); // centre dash
+      // Threshold stripes at either end
+      for (const end of [isRole(-1, AirportRole.Runway) ? null : x + 0.06, isRole(1, AirportRole.Runway) ? null : x + 0.82]) {
+        if (end === null) continue;
+        for (let k = 0; k < 5; k++) g.aabb(end, h, y + 0.18 + k * 0.14, end + 0.12, h + 0.003, y + 0.24 + k * 0.14);
+      }
+      break;
+    }
+    case AirportRole.Taxiway:
+      g.color(TAXIWAY).aabb(x, h - 0.01, y, x + 1, h, y + 1);
+      g.color(TAXI_LINE).aabb(x, h, y + 0.48, x + 1, h + 0.003, y + 0.52);
+      break;
+    case AirportRole.Apron:
+      g.color(CONCRETE).aabb(x, h - 0.01, y, x + 1, h, y + 1);
+      break;
+    case AirportRole.Terminal: {
+      g.color(CONCRETE).aabb(x, h - 0.01, y, x + 1, h, y + 1);
+      g.color(TAXI_LINE).aabb(x + 0.48, h, y, x + 0.52, h + 0.003, y + 0.35); // stand line
+      g.color(TERMINAL).aabb(x, h, y + 0.5, x + 1, h + 0.32, y + 0.98);
+      g.color(TERMINAL_GLASS).aabb(x + 0.04, h + 0.08, y + 0.495, x + 0.96, h + 0.26, y + 0.5);
+      g.color(ROOF_GREY).aabb(x - 0.005, h + 0.32, y + 0.48, x + 1.005, h + 0.35, y + 0.99);
+      g.color(TERMINAL).aabb(x + 0.44, h + 0.12, y + 0.3, x + 0.56, h + 0.22, y + 0.5); // jet bridge
+      break;
+    }
+    case AirportRole.Hangar: {
+      g.color(CONCRETE).aabb(x, h - 0.01, y, x + 1, h, y + 1);
+      g.color(HANGAR).aabb(x + 0.06, h, y + 0.3, x + 0.94, h + 0.34, y + 0.96);
+      g.color(STOP_ROOF).gable(x + 0.06, y + 0.3, x + 0.94, y + 0.96, h + 0.34, 0.12, 0.03, false);
+      g.color(GARAGE_DOOR).aabb(x + 0.14, h, y + 0.296, x + 0.86, h + 0.28, y + 0.3);
+      break;
     }
   }
 }

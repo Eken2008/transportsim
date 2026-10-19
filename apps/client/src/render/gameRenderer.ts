@@ -21,7 +21,7 @@ import { FloatingText } from './floatingText.ts';
 import { CrossingBooms } from './crossings.ts';
 import { SignalTool } from '../tools/signalTool.ts';
 import { BridgeTool, TunnelTool } from '../tools/structureTools.ts';
-import { TileType, type Piece } from '@transportsim/shared';
+import { AirportRole, TileType, type Piece } from '@transportsim/shared';
 import { openWindow } from '../store.ts';
 import { OrdersTool } from '../tools/ordersTool.ts';
 import { catchmentRect, rectTiles } from '../game/catchment.ts';
@@ -164,7 +164,8 @@ export class GameRenderer {
           s.signalOneWay !== prev.signalOneWay ||
           s.signalKind !== prev.signalKind ||
           s.railType !== prev.railType ||
-          s.roadStopKind !== prev.roadStopKind
+          s.roadStopKind !== prev.roadStopKind ||
+          s.airportKind !== prev.airportKind
         ) {
           this.tool?.invalidate?.();
           this.hoverDirty = true;
@@ -251,6 +252,7 @@ export class GameRenderer {
       case 'roadStop':
       case 'roadDepot':
       case 'oneWay':
+      case 'airport':
         this.tool = new RoadPlaceTool(this.area, id);
         break;
       case 'orders':
@@ -313,6 +315,8 @@ export class GameRenderer {
     if (type === TileType.Depot) openWindow({ kind: 'depot', id: i });
     else if (type === TileType.RoadDepot) openWindow({ kind: 'roadDepot', id: i });
     else if (type === TileType.RoadStop) openWindow({ kind: 'station', id: map.layers.data[i]! });
+    else if (type === TileType.Airport && map.layers.track[i] === AirportRole.Hangar) openWindow({ kind: 'hangar', id: i });
+    else if (type === TileType.Airport) openWindow({ kind: 'station', id: map.layers.data[i]! });
     else if (type === TileType.Station) openWindow({ kind: 'station', id: map.layers.data[i]! });
     else if (type === TileType.Industry) openWindow({ kind: 'industry', id: map.layers.data[i]! });
     else if ((type === TileType.House || type === TileType.Road) && map.layers.town[i]) openWindow({ kind: 'town', id: map.layers.town[i]! - 1 });

@@ -14,6 +14,7 @@ import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { CROSSING_FLAG } from './track.ts';
 import type { GameState } from '../sim/state.ts';
 import { removeRoadStop, roadTileClearCost } from './road.ts';
+import { airportClearCost, removeAirport } from './airport.ts';
 import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
@@ -270,7 +271,7 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
     if (!map.inBounds(ax, ay) || !map.inBounds(bx, by)) return fail('Out of bounds');
     if (bx - ax >= MAX_CLEAR || by - ay >= MAX_CLEAR) return fail('Area too large');
     const company = ctx.companyId!;
-    const jobs: { i: number; kind: 'trees' | 'rail' | 'station' | 'depot' | 'structure' }[] = [];
+    const jobs: { i: number; kind: 'trees' | 'rail' | 'station' | 'depot' | 'structure' | 'airport' }[] = [];
     const queued = new Set<number>();
     let cost = 0;
     let blocked: string | null = null;
@@ -330,6 +331,17 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
             jobs.push({ i, kind: type === TileType.RoadDepot ? 'depot' : 'station' });
             cost += c;
           }
+        } else if (type === TileType.Airport && own) {
+          const c = airportClearCost(state, i, company);
+          if (typeof c === 'string') {
+            blocked = `${c} (${x},${y})`;
+            continue;
+          }
+          const st = map.layers.data[i]!;
+          if (c !== null && !jobs.some((j) => j.kind === 'airport' && map.layers.data[j.i] === st)) {
+            jobs.push({ i, kind: 'airport' });
+            cost += c;
+          }
         } else if (type === TileType.Depot && own) {
           if (state.depotHasVehicles(i)) {
             blocked = `The depot at ${x},${y} still has vehicles`;
@@ -349,6 +361,12 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
         const dirtyChunks = new Set<number>();
         const stations = new Set<number>();
         for (const { i, kind } of jobs) {
+          if (kind === 'airport') {
+            const st = map.layers.data[i]!;
+            removeAirport(state, st);
+            stations.add(st);
+            continue;
+          }
           if (kind === 'trees') {
             const ground = (map.layers.data[i]! >> 3) & 7;
             map.setClear(i, ground as Ground, 0);

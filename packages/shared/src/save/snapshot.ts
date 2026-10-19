@@ -9,7 +9,7 @@ import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
-import { JUMP_CONDITIONS } from '../vehicles/train.ts';
+import { JUMP_CONDITIONS, type AirPhase, type AirState } from '../vehicles/train.ts';
 import { isCargo } from '../economy/cargo.ts';
 import { industryType, newIndustry, type CargoAmounts, type Industry } from '../economy/industries.ts';
 import type { StationPacket } from '../economy/cargoSystem.ts';
@@ -208,6 +208,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       lastVehicleAge: typeof s.lastVehicleAge === 'number' ? s.lastVehicleAge : undefined,
       // Saves from before first-arrival news: stations that had trains already count as served.
       firstArrival: typeof s.firstArrival === 'number' ? s.firstArrival : typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
+      airport:
+        s.airport && (s.airport.kind === 'small' || s.airport.kind === 'large') ? { kind: s.airport.kind, x: num(s.airport.x, 0), y: num(s.airport.y, 0) } : undefined,
     });
   }
   if (!snap.layers?.links) linkAllByGeometry(map); // saves from before explicit links
@@ -230,6 +232,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   state.nextTrainId = Math.max(num(snap.nextTrainId, 0), ...[...state.trains.keys()].map((k) => k + 1));
   state.rail.rebuildOccupancy();
   state.road.rebuildOccupancy();
+  state.air.rebuild();
   state.countInfrastructure();
   for (const c of state.companies.values()) if (!c.value) c.value = state.companyValue(c);
   state.setAgreements(sanitizeAgreements(snap.agreements, new Set(state.companies.keys())));
@@ -277,6 +280,24 @@ function townStats(v: unknown): TownStats | undefined {
   return { passengers: num(s.passengers, 0), mail: num(s.mail, 0), goods: num(s.goods, 0), food: num(s.food, 0) };
 }
 
+const PHASES: AirPhase[] = ['taxi', 'gate', 'hold', 'takeoff', 'flying', 'holding', 'landing'];
+
+function sanitizeAir(a: AirState | undefined): AirState | undefined {
+  if (!a || !PHASES.includes(a.phase)) return undefined;
+  return {
+    phase: a.phase,
+    x: num(a.x, 0),
+    y: num(a.y, 0),
+    z: num(a.z, 0),
+    heading: num(a.heading, 0),
+    airport: num(a.airport, -1),
+    legs: (Array.isArray(a.legs) ? a.legs : []).filter((l) => Array.isArray(l) && l.length === 3 && l.every((n) => typeof n === 'number')).slice(0, 16),
+    gate: typeof a.gate === 'number' ? a.gate : undefined,
+    toHangar: a.toHangar === true || undefined,
+    goal: a.goal === 'gate' || a.goal === 'hold' || a.goal === 'hangar' || a.goal === 'waitGate' ? a.goal : undefined,
+  };
+}
+
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
 const STATUSES = ['depot', 'running', 'stopped', 'loading'] as const;
@@ -289,14 +310,18 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
   if (units.length === 0) return null;
   const ints = (a: unknown) => (Array.isArray(a) ? a.filter((n): n is number => Number.isInteger(n) && n >= 0) : []);
   const status = STATUSES.includes(t.status as never) ? t.status! : 'stopped';
-  const path = status === 'depot' ? [] : ints(t.path);
+  const path = status === 'depot' || t.mode === 'air' ? [] : ints(t.path);
+  const air = t.mode === 'air' && status !== 'depot' ? sanitizeAir(t.air) : undefined;
+  // An aircraft out of its hangar is wherever its air state says; without one it is lost.
+  if (t.mode === 'air' && status !== 'depot' && !air) return null;
   return {
     id: t.id,
-    mode: t.mode === 'road' ? 'road' : undefined,
+    mode: t.mode === 'road' || t.mode === 'air' ? t.mode : undefined,
+    air,
     owner: num(t.owner, 0),
     name: String(t.name ?? 'Train').slice(0, 40),
     units,
-    status: path.length === 0 && status !== 'depot' ? 'stopped' : status,
+    status: path.length === 0 && status !== 'depot' && !air ? 'stopped' : status,
     depot: num(t.depot, -1),
     path,
     pos: num(t.pos, 0),

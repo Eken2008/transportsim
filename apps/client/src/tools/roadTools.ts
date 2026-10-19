@@ -1,4 +1,4 @@
-import { EDGE_DX, EDGE_DY, TileType, roadBitsAt, ROAD_EDGE_BITS, OPPOSITE_EDGE, type Command } from '@transportsim/shared';
+import { AIRPORT_TYPES, EDGE_DX, EDGE_DY, TileType, roadBitsAt, ROAD_EDGE_BITS, OPPOSITE_EDGE, type Command } from '@transportsim/shared';
 import { client } from '../net/client.ts';
 import type { AreaGhost } from '../render/areaGhost.ts';
 import type { TerrainHit } from '../render/picking.ts';
@@ -97,11 +97,21 @@ export class RoadPlaceTool implements Tool {
 
   constructor(
     private readonly ghost: AreaGhost,
-    private readonly kind: 'roadStop' | 'roadDepot' | 'oneWay',
+    private readonly kind: 'roadStop' | 'roadDepot' | 'oneWay' | 'airport',
   ) {}
+
+  /** Tiles the thing being placed covers (an airport's north-west corner is under the cursor). */
+  private footprint(hit: TerrainHit): { x: number; y: number }[] {
+    if (this.kind !== 'airport') return [{ x: hit.tileX, y: hit.tileY }];
+    const t = AIRPORT_TYPES[useApp.getState().airportKind];
+    const out: { x: number; y: number }[] = [];
+    for (let dy = 0; dy < t.h; dy++) for (let dx = 0; dx < t.w; dx++) out.push({ x: hit.tileX + dx, y: hit.tileY + dy });
+    return out;
+  }
 
   private command(hit: TerrainHit): { cmd: Command; arrow?: { x: number; y: number; edge: number } } {
     const { tileX: x, tileY: y } = hit;
+    if (this.kind === 'airport') return { cmd: { type: 'buildAirport', x, y, kind: useApp.getState().airportKind } };
     if (this.kind === 'roadStop') return { cmd: { type: 'buildRoadStop', x, y, kind: useApp.getState().roadStopKind } };
     if (this.kind === 'oneWay') return { cmd: { type: 'setOneWay', x, y } };
     // Depot: face a neighbouring road if there is one, else the side of the tile clicked.
@@ -135,7 +145,7 @@ export class RoadPlaceTool implements Tool {
     if (key === this.lastKey) return;
     this.lastKey = key;
     const r = client.preview(cmd);
-    this.ghost.show([{ x: hit.tileX, y: hit.tileY }], r?.ok ? OK : BAD, arrow);
+    this.ghost.show(this.footprint(hit), r?.ok ? OK : BAD, arrow);
     useApp.setState({
       hover: {
         x: hit.tileX,

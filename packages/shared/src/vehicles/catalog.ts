@@ -22,14 +22,17 @@ export type UnitModel =
   | 'truck'
   | 'tankertruck'
   | 'flatbed'
-  | 'tipper';
+  | 'tipper'
+  | 'prop'
+  | 'jet'
+  | 'jumbo';
 
 export interface RailVehicleType {
   id: string;
   name: string;
   kind: 'loco' | 'wagon';
-  /** Road vehicles (buses and trucks); rail if absent. */
-  mode?: 'road';
+  /** Road vehicles (buses and trucks) or aircraft; rail if absent. */
+  mode?: 'road' | 'air';
   model: UnitModel;
   traction?: Traction;
   /** Cargoes a wagon can be refitted to carry; the first is the default. */
@@ -54,6 +57,8 @@ export interface RailVehicleType {
   lifespan: number;
   /** 0..1, how rarely it breaks down */
   reliability: number;
+  /** Aircraft that need a large airport. */
+  heavy?: boolean;
 }
 
 const loco = (v: Omit<RailVehicleType, 'kind' | 'capacity'> & { capacity?: number }): RailVehicleType => ({
@@ -134,8 +139,21 @@ export const ROAD_VEHICLES: readonly RailVehicleType[] = [
   road({ id: 'livestock_truck', name: 'Livestock truck', model: 'truck', cargoes: ['livestock'], capacity: 15, length: 9, maxSpeed: 80, power: 160, tractiveEffort: 40, mass: 9, cost: 12_500, runningCost: 1_200, intro: 1935, retire: 2100, lifespan: 15, reliability: 0.88 }),
 ];
 
-/** Every vehicle type, rail and road. */
-export const ALL_VEHICLES: readonly RailVehicleType[] = [...RAIL_VEHICLES, ...ROAD_VEHICLES];
+const air = (v: Omit<RailVehicleType, 'kind' | 'mode' | 'tractiveEffort'>): RailVehicleType => ({ kind: 'loco', mode: 'air', tractiveEffort: 0, ...v });
+
+/** Aircraft, bought at airport hangars. Heavy ones need a large airport. */
+export const AIRCRAFT: readonly RailVehicleType[] = [
+  air({ id: 'mail_biplane', name: 'Mail biplane', model: 'prop', cargoes: ['mail'], capacity: 16, length: 12, maxSpeed: 200, power: 300, mass: 2, cost: 30_000, runningCost: 4_000, intro: 1925, retire: 1960, lifespan: 20, reliability: 0.75 }),
+  air({ id: 'prop_airliner', name: 'Prop airliner', model: 'prop', cargoes: ['passengers', 'mail'], capacity: 24, length: 14, maxSpeed: 260, power: 600, mass: 8, cost: 55_000, runningCost: 6_500, intro: 1932, retire: 1972, lifespan: 20, reliability: 0.8 }),
+  air({ id: 'skyliner', name: 'Skyliner turboprop', model: 'prop', cargoes: ['passengers', 'mail'], capacity: 60, length: 16, maxSpeed: 480, power: 3_000, mass: 25, cost: 140_000, runningCost: 12_000, intro: 1952, retire: 1995, lifespan: 25, reliability: 0.86 }),
+  air({ id: 'jetliner', name: 'Jetliner', model: 'jet', cargoes: ['passengers', 'mail'], capacity: 140, length: 20, maxSpeed: 850, power: 20_000, mass: 60, cost: 420_000, runningCost: 30_000, intro: 1960, retire: 2035, lifespan: 25, reliability: 0.9, heavy: true }),
+  air({ id: 'jumbo', name: 'Jumbo jet', model: 'jumbo', cargoes: ['passengers', 'mail'], capacity: 380, length: 26, maxSpeed: 900, power: 60_000, mass: 160, cost: 1_100_000, runningCost: 70_000, intro: 1971, retire: 2100, lifespan: 25, reliability: 0.93, heavy: true }),
+  air({ id: 'regional_jet', name: 'Regional jet', model: 'jet', cargoes: ['passengers', 'mail'], capacity: 80, length: 16, maxSpeed: 780, power: 12_000, mass: 30, cost: 300_000, runningCost: 20_000, intro: 1992, retire: 2100, lifespan: 25, reliability: 0.95 }),
+  air({ id: 'cargo_jet', name: 'Cargo jet', model: 'jet', cargoes: ['goods', 'mail', 'food'], capacity: 70, length: 20, maxSpeed: 850, power: 20_000, mass: 60, cost: 400_000, runningCost: 28_000, intro: 1975, retire: 2100, lifespan: 25, reliability: 0.92, heavy: true }),
+];
+
+/** Every vehicle type, rail, road and air. */
+export const ALL_VEHICLES: readonly RailVehicleType[] = [...RAIL_VEHICLES, ...ROAD_VEHICLES, ...AIRCRAFT];
 
 const BY_ID = new Map(ALL_VEHICLES.map((v) => [v.id, v]));
 /** Any vehicle type by id (rail or road). */

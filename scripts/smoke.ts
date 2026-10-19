@@ -73,7 +73,22 @@ try {
   const chunks = Number((await a.locator('.statusbar').innerText()).match(/(\d+) chunks/)?.[1] ?? 0);
   check(chunks > 0, `terrain chunks rendered (${chunks})`);
 
-  // Raise terrain at screen center
+  type Hook = {
+    spawn: { x: number; y: number };
+    view(v: object): void;
+    tileToScreen(x: number, y: number): { x: number; y: number };
+    command(cmd: object): Promise<{ ok: boolean; error?: string }>;
+    findClear(x: number, y: number, w: number, h: number): { x: number; y: number } | null;
+  };
+  const hook = <T>(fn: (h: Hook, arg: never) => T, arg?: unknown) =>
+    a.evaluate(([f, x]) => new Function('h', 'arg', `return (${f})(h, arg)`)((window as unknown as { transportsim: Hook }).transportsim, x), [fn.toString(), arg] as const) as Promise<T>;
+  const spawn = await hook((h) => h.spawn);
+  // Money for the building below, whatever the land costs to level.
+  await hook((h) => h.command({ type: 'loan', action: 'borrow', amount: 500_000 }));
+  // Raise terrain on clear land near the start
+  const clearSpot = await hook((h, s: { x: number; y: number }) => h.findClear(s.x + 6, s.y + 6, 8, 8), spawn);
+  if (clearSpot) await hook((h, s: { x: number; y: number }) => h.view({ x: s.x + 4, y: s.y + 4 }), clearSpot);
+  await a.waitForTimeout(1500);
   await a.keyboard.press('Digit1');
   const box = (await a.locator('canvas').boundingBox())!;
   const cx = box.x + box.width / 2;
@@ -96,15 +111,6 @@ try {
 
   // Level a known area via the command API (track needs suitable slopes), then lay a
   // straight line and a diagonal staircase by dragging the real rail tool between tiles.
-  type Hook = {
-    spawn: { x: number; y: number };
-    view(v: object): void;
-    tileToScreen(x: number, y: number): { x: number; y: number };
-    command(cmd: object): Promise<{ ok: boolean; error?: string }>;
-  };
-  const hook = <T>(fn: (h: Hook, arg: never) => T, arg?: unknown) =>
-    a.evaluate(([f, x]) => new Function('h', 'arg', `return (${f})(h, arg)`)((window as unknown as { transportsim: Hook }).transportsim, x), [fn.toString(), arg] as const) as Promise<T>;
-  const spawn = await hook((h) => h.spawn);
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y, yaw: 0.6, pitch: 0.75, distance: 30 }), spawn);
   await a.waitForTimeout(3000);
   await a.screenshot({ path: `${outDir}/02b-town.png` });
@@ -500,6 +506,79 @@ try {
   // Running costs keep ticking, so allow a small drift between saving and reading the value.
   check(Math.abs(money(resumedMoney) - money(savedMoney)) < Math.max(500, money(savedMoney) * 0.01), `resumed game keeps company money (${savedMoney} → ${resumedMoney})`);
   await a2.screenshot({ path: `${outDir}/06-resumed.png` });
+
+  // Airports need a later start year: a separate game from 1960. One airport is built with the
+  // air tool, one by command; an aircraft bought in the hangar flies between them.
+  const ctxD = await browser.newContext({ viewport: { width: 1400, height: 860 } });
+  const d = await ctxD.newPage();
+  lastPage = d;
+  d.on('pageerror', (e) => console.log(`[D pageerror] ${e.message}`));
+  await d.goto(`http://localhost:${PORT}/`);
+  await d.getByText('Connected').waitFor({ timeout: 10_000 });
+  await d.getByPlaceholder('Player name').fill('Dana');
+  await d.locator('label.field', { hasText: 'Seed' }).locator('input').fill('424242');
+  await d.locator('label.field', { hasText: 'Sea level' }).locator('input').fill('0');
+  await d.locator('label.field', { hasText: 'Start year' }).locator('input').fill('1960');
+  await d.getByRole('button', { name: 'Create game' }).click();
+  await d.getByText('Allow autosaves?').waitFor({ timeout: 30_000 });
+  await d.getByRole('button', { name: 'Not now' }).click();
+  const danaWin = d.locator('.window', { hasText: 'Found a company' });
+  await danaWin.getByRole('textbox', { name: 'Company name' }).fill('Dana Air');
+  await danaWin.getByRole('button', { name: 'Found', exact: true }).click();
+  await d.locator('.money').waitFor({ timeout: 5000 });
+  type DHook = { spawn: { x: number; y: number }; view(v: object): void; tileToScreen(x: number, y: number): { x: number; y: number }; command(cmd: object): Promise<{ ok: boolean; error?: string }>; tile(x: number, y: number): { type: number; data: number }; trains(): { id: number; mode?: string }[] };
+  const dh = <T>(fn: (h: DHook, arg: never) => T, arg?: unknown) =>
+    d.evaluate(([f, x]) => new Function('h', 'arg', `return (${f})(h, arg)`)((window as unknown as { transportsim: DHook }).transportsim, x), [fn.toString(), arg] as const) as Promise<T>;
+  const dClick = async (x: number, y: number) => {
+    const p = await dh((h, t: number[]) => h.tileToScreen(t[0]!, t[1]!), [x, y]);
+    await d.mouse.move(p.x, p.y, { steps: 3 });
+    await d.waitForTimeout(300);
+    await d.mouse.down();
+    await d.mouse.up();
+    await d.waitForTimeout(800);
+  };
+  await dh((h) => h.command({ type: 'loan', action: 'borrow', amount: 600_000 }));
+  const dSpawn = await dh((h) => h.spawn);
+  const flatSpots: { x: number; y: number }[] = [];
+  for (const [dx, dy] of [[14, 0], [-20, 0], [0, 14], [0, -16], [20, 20], [-24, -20], [30, 0], [-30, 10], [10, -30], [-10, 30]] as const) {
+    const at = { x: dSpawn.x + dx, y: dSpawn.y + dy };
+    const lv = await dh((h, t: { x: number; y: number }) => h.command({ type: 'terraform', x0: t.x - 1, y0: t.y - 1, x1: t.x + 6, y1: t.y + 4, mode: 'level', level: 4 }), at);
+    if (lv.ok) flatSpots.push(at);
+    if (flatSpots.length === 2) break;
+  }
+  check(flatSpots.length === 2, `levelled land for two airports (${flatSpots.length})`);
+  const [ap1, ap2] = flatSpots;
+  if (ap1 && ap2) {
+    await dh((h, s: { x: number; y: number }) => h.view({ x: s.x + 2.5, y: s.y + 1.5, yaw: 0.35, pitch: 1.05, distance: 20 }), ap1);
+    await d.waitForTimeout(2500);
+    await d.getByRole('button', { name: 'Airports tools' }).click();
+    await d.keyboard.press('KeyY');
+    await dClick(ap1.x, ap1.y);
+    check((await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap1.x + 2, ap1.y + 1])).type === 10, 'built an airport with the air tool');
+    const built = await dh((h, t: { x: number; y: number }) => h.command({ type: 'buildAirport', x: t.x, y: t.y, kind: 'small' }), ap2);
+    check(built.ok, `built a second airport by command${built.ok ? '' : `: ${built.error}`}`);
+    await d.keyboard.press('Escape');
+    await dClick(ap1.x, ap1.y + 2); // the hangar
+    const hangarWin = d.locator('.window', { hasText: 'hangar' });
+    await hangarWin.waitFor({ timeout: 5000 });
+    await hangarWin.getByRole('button', { name: /^Buy for/ }).click();
+    await hangarWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
+    const planeWin = d.locator('.window', { has: d.locator('ol.orders') }).last();
+    const home = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap1.x, ap1.y])).data;
+    const away = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap2.x, ap2.y])).data;
+    const planeId = await dh((h) => h.trains().filter((t) => t.mode === 'air').at(-1)?.id ?? -1);
+    const r = await dh((h, o: number[]) => h.command({ type: 'setOrders', id: o[0], orders: [{ kind: 'station', station: o[1] }, { kind: 'station', station: o[2] }] }), [planeId, home, away]);
+    check(r.ok, `gave the aircraft orders${r.ok ? '' : `: ${r.error}`}`);
+    await d.waitForTimeout(800);
+    await planeWin.getByRole('button', { name: /Start/ }).click();
+    await d.waitForTimeout(6000);
+    const planeStatus = await planeWin.locator('.kv b').first().innerText();
+    check(/Heading|Loading/.test(planeStatus), `aircraft is flying (${planeStatus})`);
+    while ((await d.locator('.window').count()) > 0) await d.locator('.window button[aria-label="Close"]').first().click();
+    await dh((h, s: { x: number; y: number }) => h.view({ x: s.x + 2.5, y: s.y + 1.5, yaw: 0.6, pitch: 0.6, distance: 9 }), ap1);
+    await d.waitForTimeout(1500);
+    await d.screenshot({ path: `${outDir}/07-airport.png` });
+  }
 } catch (e) {
   failed = true;
   console.error(e);

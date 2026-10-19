@@ -180,7 +180,8 @@ export function addTrack(
     for (let x = x0; x < x0 + CHUNK_SIZE; x++) {
       const i = map.tileIndex(x, y);
       const bits = map.layers.track[i]!;
-      if (bits === 0 || map.layers.type[i] === TileType.RoadStop) continue; // road stops keep road bits there
+      // Road stops keep road bits there, airports their tile roles.
+      if (bits === 0 || map.layers.type[i] === TileType.RoadStop || map.layers.type[i] === TileType.Airport) continue;
       if (map.layers.type[i] === TileType.Rail && map.layers.data[i]! & CROSSING_FLAG) {
         // Road surface under the crossing, perpendicular to the track.
         const roadPiece = hasPiece(bits, 0) ? 1 : 0;

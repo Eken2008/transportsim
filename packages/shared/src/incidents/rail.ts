@@ -3,7 +3,9 @@ import { TICKS_PER_DAY } from '../sim/date.ts';
 import type { AccidentSeverity } from '../sim/settings.ts';
 import type { GameState } from '../sim/state.ts';
 import { Random } from '../util/random.ts';
-import { cargoCount, type Train } from '../vehicles/train.ts';
+import { cargoCount, isRailVehicle, type Train } from '../vehicles/train.ts';
+import { isHeavy } from '../vehicles/airSystem.ts';
+import type { Station } from '../rail/station.ts';
 
 export interface AccidentRules {
   /** How far (tiles) a driver sees a train ahead that signals don't protect against. */
@@ -52,6 +54,15 @@ export class IncidentSystem {
   /** A breakdown at speed may be a brake failure: the train coasts for a while, ignoring signals. */
   onBreakdown(t: Train): void {
     const rules = this.rules;
+    if (t.mode === 'air') {
+      // An aircraft breaking down in flight may crash.
+      const flying = t.air && ['flying', 'holding', 'takeoff', 'landing'].includes(t.air.phase);
+      if (rules && flying && this.rng.chance(rules === ACCIDENT_RULES.realistic ? 0.1 : 0.02)) {
+        this.wreck([t], this.tileOf(t), `${t.name} crashes after an engine failure${this.placeName(this.tileOf(t))}`, false);
+      }
+      return;
+    }
+    if (t.mode === 'road') return;
     if (!rules || t.speed < 30 || !this.rng.chance(rules.brakeFailChance)) return;
     t.brakeFail = Math.round(TICKS_PER_DAY * 0.8);
   }
@@ -76,6 +87,22 @@ export class IncidentSystem {
     this.wreck(victims, tile, `${train.name} hits ${names} at a level crossing${this.placeName(tile)}`, false);
   }
 
+  /** An aircraft too heavy for a small airport may crash on landing, closing its runway. */
+  onLanded(t: Train, airport: Station): void {
+    const rules = this.rules;
+    if (!rules || airport.airport?.kind !== 'small' || !isHeavy(t.units[0]!.type)) return;
+    if (!this.rng.chance(rules === ACCIDENT_RULES.realistic ? 0.08 : 0.02)) return;
+    this.state.air.runwayClosed.set(airport.id, this.state.tick + rules.cleanupDays * TICKS_PER_DAY);
+    this.wreck([t], this.tileOf(t), `${t.name} crashes landing at ${airport.name}, too small an airport for it`, false);
+  }
+
+  private tileOf(t: Train): number {
+    const w = this.state.map.width;
+    const x = Math.max(0, Math.min(w - 1, Math.floor(t.air?.x ?? 0)));
+    const y = Math.max(0, Math.min(this.state.map.height - 1, Math.floor(t.air?.y ?? 0)));
+    return y * w + x;
+  }
+
   derail(t: Train): void {
     if (t.path.length === 0) return;
     this.wreck([t], segTile(t.path[0]!), `${t.name} derails on a curve${this.placeName(segTile(t.path[0]!))}`);
@@ -92,7 +119,7 @@ export class IncidentSystem {
       const n = cargoCount(t);
       aboard += n;
       byOwner.set(t.owner, (byOwner.get(t.owner) ?? 0) + n);
-      if (t.mode !== 'road') for (const s of t.path) pieces.push(pieceKey(s));
+      if (isRailVehicle(t)) for (const s of t.path) pieces.push(pieceKey(s));
       state.removeVehicle(t);
     }
     if (blockTrack) for (const k of pieces) state.rail.addWreck(k, until);
@@ -106,7 +133,8 @@ export class IncidentSystem {
     }
     const people = aboard > 0 ? `; ${aboard} passengers were aboard` : '';
     const owners = [...byOwner.keys()].map((o) => state.companies.get(o)?.name).filter(Boolean);
-    state.addNews('accident', `Rail accident! ${what}${people}. ${owners.join(' and ')} must pay compensation`, {
+    const head = trains[0]!.mode === 'air' ? 'Air crash!' : 'Rail accident!';
+    state.addNews('accident', `${head} ${what}${people}. ${owners.join(' and ')} must pay compensation`, {
       company: trains[0]!.owner,
       tile,
     });

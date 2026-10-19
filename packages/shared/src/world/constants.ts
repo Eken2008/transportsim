@@ -22,6 +22,8 @@ export const TileType = {
   RoadStop: 8,
   /** Road vehicle depot: data bits 0-1 = exit edge. */
   RoadDepot: 9,
+  /** Airport tile (part of a station): data = station id, track = AirportRole. */
+  Airport: 10,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 

@@ -224,6 +224,24 @@ Each part ends with green tests and a commit.
    - **Client:** draws road vehicles, and depot windows sell them.
 3. **Level crossings and traffic.** A crossing closes while a train is on it or about to arrive, and road vehicles wait in front of it. With accidents on, a train hitting a road vehicle on the crossing destroys the road vehicle, with compensation and news.
 
+### M6 in detail
+Each part ends with green tests and a commit.
+1. **Airports.**
+   - **Types:** small (5×3, 2 gates, from 1930) and large (7×4, 4 gates, from 1955), on flat land. Each has a runway along X, a taxiway, gates in front of the terminal, and a hangar.
+   - **Stations:** an airport joins or makes a station, one airport per station, so cargo, catchment and ratings work as for other stops.
+   - **Building and removal:** a build command, and bulldozing removes the whole airport.
+   - **Client:** draws runway markings, taxiway, terminal and hangar, and builds airports from an Air menu.
+2. **Aircraft.**
+   - **Data model:** aircraft are Trains with `mode: 'air'`, carrying passengers and mail. They range from 1930s props to jets and wide-bodies, and large aircraft need a large airport.
+   - **Movement:** a state machine with continuous positions: parked in the hangar, then taxiing to a gate, loading, taxiing to the runway, taking off, cruising to the destination, holding while its runway is busy, landing and taxiing to a gate. One aircraft uses a runway at a time, and gates are reserved.
+   - **Servicing:** service and depot orders land at a hangar.
+   - **Client:** aircraft are drawn in 3D with motion extrapolated between updates, and a hangar window sells them.
+3. **Air incidents.** With accidents on:
+   - an aircraft that breaks down in flight may crash;
+   - an aircraft too heavy for a small airport may crash on landing, which closes the runway for cleanup.
+
+   The owner pays compensation and the news reports it.
+
 ## Key dependencies
 `three`, `react`, `react-dom`, `zustand`, `vite`, `@vitejs/plugin-react`, `msgpackr`, `simplex-noise`, `idb` (a small IndexedDB wrapper) and `concurrently` (to run client and server together in dev). The server uses Bun's built-in `Bun.serve` WebSockets, so it needs no `ws` package, and tests use `bun test`.
 

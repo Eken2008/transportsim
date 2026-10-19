@@ -53,6 +53,52 @@ function g2windows(g: GeoBuilder, r: number, count: number): void {
   }
 }
 
+/** A flat four-cornered plate (wing or fin), visible from both sides. */
+function plate(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3): void {
+  g.quad(a, b, c, d);
+  g.quad(d, c, b, a);
+}
+
+/** An aircraft: fuselage along X, wings across Z; `swept` for jets. */
+function aircraft(body: GeoBuilder, d: GeoBuilder, r: number, swept: boolean, engines: number[], hump: boolean): void {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const y = 0.03 + r;
+  d.color(lin('#e9ecef')).cylinderX(-0.42, 0.4, y, 0, r, 10); // fuselage
+  d.cylinderX(0.4, 0.47, y - r * 0.15, 0, r * 0.7, 10); // nose
+  d.cylinderX(-0.5, -0.42, y + r * 0.3, 0, r * 0.55, 8); // tail cone
+  if (hump) d.cylinderX(0.12, 0.38, y + r * 0.55, 0, r * 0.6, 8);
+  d.color(GLASS).aabb(0.38, y + r * 0.1, -r * 0.6, 0.44, y + r * 0.5, r * 0.6); // cockpit
+  windowsBand2(d, -0.36, 0.32, y + r * 0.2, y + r * 0.45, r, swept ? 10 : 6);
+  body.aabb(-0.42, y - r * 0.15, -r - 0.003, 0.4, y - r * 0.02, r + 0.003); // cheat line
+  const wy = y - r * 0.5;
+  if (swept) {
+    for (const s of [1, -1]) plate(body, v(0.14, wy, s * r), v(-0.12, wy, s * r), v(-0.24, wy + 0.02, s * 0.46), v(-0.14, wy + 0.02, s * 0.46));
+    for (const s of [1, -1]) plate(body, v(-0.36, y, s * r * 0.5), v(-0.48, y, s * r * 0.5), v(-0.52, y + 0.01, s * 0.17), v(-0.45, y + 0.01, s * 0.17));
+    plate(body, v(-0.34, y + r * 0.6, 0), v(-0.48, y + r * 0.6, 0), v(-0.54, y + r + 0.15, 0), v(-0.45, y + r + 0.15, 0));
+  } else {
+    body.aabb(-0.02, wy, -0.44, 0.13, wy + 0.015, 0.44);
+    body.aabb(-0.5, y + 0.005, -0.16, -0.41, y + 0.018, 0.16);
+    plate(body, v(-0.38, y + r * 0.6, 0), v(-0.5, y + r * 0.6, 0), v(-0.5, y + r + 0.12, 0), v(-0.43, y + r + 0.12, 0));
+  }
+  d.color(STEEL);
+  for (const z of engines) {
+    if (swept) d.cylinderX(-0.06 - Math.abs(z) * 0.25, 0.08 - Math.abs(z) * 0.25, wy - 0.03, z, 0.028, 8);
+    else {
+      d.cylinderX(0.02, 0.16, wy, z, 0.03, 8);
+      d.color(DARK).aabb(0.16, wy - 0.07, z - 0.006, 0.17, wy + 0.07, z + 0.006);
+      d.color(STEEL);
+    }
+  }
+  d.color(DARK);
+  for (const x of [0.3, -0.08]) d.aabb(x - 0.015, 0, -0.03, x + 0.015, 0.03, 0.03); // wheels
+}
+
+function windowsBand2(g: GeoBuilder, x0: number, x1: number, y0: number, y1: number, r: number, count: number): void {
+  g.color(GLASS);
+  const step = (x1 - x0) / count;
+  for (let i = 0; i < count; i++) g.aabb(x0 + step * (i + 0.25), y0, -r - 0.002, x0 + step * (i + 0.75), y1, r + 0.002);
+}
+
 function build(model: UnitModel): UnitGeo {
   const body = new GeoBuilder().color(WHITE);
   const d = new GeoBuilder();
@@ -213,6 +259,15 @@ function build(model: UnitModel): UnitGeo {
       }
       break;
     }
+    case 'prop':
+      aircraft(body, d, 0.06, false, [-0.18, 0.18], false);
+      break;
+    case 'jet':
+      aircraft(body, d, 0.07, true, [-0.17, 0.17], false);
+      break;
+    case 'jumbo':
+      aircraft(body, d, 0.09, true, [-0.14, 0.14, -0.3, 0.3], true);
+      break;
     case 'stockcar': {
       bogies(d, [-0.28, 0.28]);
       body.aabb(-0.5, FLOOR, -W, 0.5, 0.09, W);
@@ -250,4 +305,7 @@ export const UNIT_MODELS: Record<UnitModel, UnitGeo> = {
   tankertruck: build('tankertruck'),
   flatbed: build('flatbed'),
   tipper: build('tipper'),
+  prop: build('prop'),
+  jet: build('jet'),
+  jumbo: build('jumbo'),
 };

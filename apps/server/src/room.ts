@@ -439,10 +439,16 @@ export class Room {
   private sendPositions(): void {
     this.sendSignals();
     const map = this.state.map;
-    const running = [...this.state.trains.values()].filter((t) => t.path.length > 0);
+    const running = [...this.state.trains.values()].filter((t) => t.path.length > 0 || (t.air && t.status !== 'depot'));
     if (running.length === 0 || this.sessions.size === 0) return;
     const chunksOf = running.map((t) => {
       const set = new Set<number>();
+      if (t.air) {
+        const cx = Math.max(0, Math.min(map.chunksX - 1, Math.floor(t.air.x / CHUNK_SIZE)));
+        const cy = Math.max(0, Math.min(map.chunksY - 1, Math.floor(t.air.y / CHUNK_SIZE)));
+        set.add(cy * map.chunksX + cx);
+        return set;
+      }
       for (const s of [t.path[0]!, t.path[t.path.length - 1]!]) {
         const tile = segTile(s);
         const x = tile % map.width;
@@ -452,7 +458,7 @@ export class Room {
     });
     for (const s of this.sessions) {
       const trains = running.filter((_, i) => [...chunksOf[i]!].some((c) => s.subscribed.has(c)));
-      if (trains.length) this.send(s, { t: 'trainPos', trains: trains.map((t) => this.state.rail.motion(t)) });
+      if (trains.length) this.send(s, { t: 'trainPos', trains: trains.map((t) => this.state.systemOf(t).motion(t)) });
     }
   }
 

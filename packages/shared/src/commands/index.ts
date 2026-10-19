@@ -49,6 +49,7 @@ import {
 import { loanHandler, type LoanCommand } from './finance.ts';
 import { convertRailHandler, type ConvertRailCommand } from './convert.ts';
 import { buildWaypointHandler, removeWaypointHandler, type BuildWaypointCommand, type RemoveWaypointCommand } from './waypoint.ts';
+import { buildAirportHandler, type BuildAirportCommand } from './airport.ts';
 import { trainSettingsHandler, vehicleSettingsHandler, type TrainSettingsCommand, type VehicleSettingsCommand } from './maintenance.ts';
 import {
   buildRoadDepotHandler,
@@ -87,6 +88,7 @@ export * from './convert.ts';
 export * from './waypoint.ts';
 export * from './maintenance.ts';
 export * from './road.ts';
+export * from './airport.ts';
 
 export type Command =
   | TerraformCommand
@@ -124,7 +126,8 @@ export type Command =
   | RemoveRoadCommand
   | SetOneWayCommand
   | BuildRoadDepotCommand
-  | BuildRoadStopCommand;
+  | BuildRoadStopCommand
+  | BuildAirportCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -164,6 +167,7 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   setOneWay: setOneWayHandler,
   buildRoadDepot: buildRoadDepotHandler,
   buildRoadStop: buildRoadStopHandler,
+  buildAirport: buildAirportHandler,
 };
 
 const PERMISSION_ERRORS = {

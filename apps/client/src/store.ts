@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
 
-export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders' | 'signal' | 'bridge' | 'tunnel' | 'convert' | 'waypoint' | 'road' | 'removeRoad' | 'roadStop' | 'roadDepot' | 'oneWay';
+export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders' | 'signal' | 'bridge' | 'tunnel' | 'convert' | 'waypoint' | 'road' | 'removeRoad' | 'roadStop' | 'roadDepot' | 'oneWay' | 'airport';
 
 export interface StationOptions {
   axis: 0 | 1;
@@ -71,6 +71,8 @@ export interface AppState {
   signalOneWay: boolean;
   /** Road stop tool builds bus (passengers, mail) or truck (freight) stops. */
   roadStopKind: 'bus' | 'truck';
+  /** Airport tool builds a small or a large airport. */
+  airportKind: 'small' | 'large';
   /** Track type for new track, stations, depots, bridges, tunnels and conversion. */
   railType: number;
   /** Kind of signal the signal tool places. */
@@ -100,7 +102,8 @@ export type GameWindow =
   | { kind: 'game'; id: 0 }
   | { kind: 'industry'; id: number }
   | { kind: 'town'; id: number }
-  | { kind: 'roadDepot'; id: number };
+  | { kind: 'roadDepot'; id: number }
+  | { kind: 'hangar'; id: number };
 
 export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
 
@@ -138,6 +141,7 @@ export const useApp = create<AppState>(() => ({
   signalKind: 'block',
   railType: 0,
   roadStopKind: 'bus',
+  airportKind: 'small',
   showReservations: false,
   catchmentFor: null,
   trainsRev: 0,
