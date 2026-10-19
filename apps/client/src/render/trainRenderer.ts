@@ -6,6 +6,8 @@ import {
   isSpanTd,
   pieceLength,
   railVehicle,
+  roadSegPoint,
+  rsLength,
   segHeights,
   segLength,
   segPoint,
@@ -14,6 +16,7 @@ import {
   spanOver,
   tdPiece,
   type GameMap,
+  type TrainMotion,
   type UnitModel,
 } from '@transportsim/shared';
 import * as THREE from 'three';
@@ -143,6 +146,10 @@ export class TrainRenderer {
       const info = this.world.trains.get(id);
       if (!info || m.path.length === 0) continue;
       const dt = Math.min(MAX_EXTRAPOLATION, (now - at) / 1000);
+      if (info.mode === 'road') {
+        this.placeRoadVehicle(id, info.owner, info.units[0]!.type, m, dt, speedMultiplier);
+        continue;
+      }
       let pos = m.pos + (m.speed / KMH_PER_TILE_PER_S) * speedMultiplier * dt;
       const segs = this.segs;
       segs.length = 0;
@@ -192,6 +199,51 @@ export class TrainRenderer {
       mm.detail.instanceMatrix.needsUpdate = true;
       if (mm.body.instanceColor) mm.body.instanceColor.needsUpdate = true;
     }
+  }
+
+  /** A bus or truck: along its road segments, in its lane, following the ground. */
+  private placeRoadVehicle(id: number, owner: number, type: string, m: TrainMotion, dt: number, speedMultiplier: number): void {
+    const map = this.world.map;
+    const v = railVehicle(type);
+    if (!v) return;
+    const segs = this.segs;
+    segs.length = 0;
+    segs.push(...m.path);
+    let pos = m.pos + (m.speed / KMH_PER_TILE_PER_S) * speedMultiplier * dt;
+    let ai = 0;
+    while (pos > rsLength(segs[0]!) && ai < m.ahead.length) {
+      pos -= rsLength(segs[0]!);
+      segs.unshift(m.ahead[ai++]!);
+    }
+    pos = Math.min(pos, rsLength(segs[0]!));
+    const len = v.length / 16;
+    const at = (back: number, out: THREE.Vector3) => {
+      let d = pos - back;
+      let k = 0;
+      while (d < 0 && k < segs.length - 1) d += rsLength(segs[++k]!);
+      const p = roadSegPoint(map, segs[k]!, Math.max(0, d));
+      return out.set(p.x, map.heightAt(p.x, p.y) * HEIGHT_SCALE + 0.03, p.y);
+    };
+    at(0, _f);
+    at(len, _b);
+    const company = this.world.state.companies.get(owner);
+    const color = this.colors[(company?.color ?? 0) % this.colors.length]!;
+    const mm = this.meshesFor(v.model, 1);
+    const k = mm.count;
+    if (k >= mm.body.instanceMatrix.count) return;
+    _x.subVectors(_f, _b);
+    if (_x.lengthSq() < 1e-8) _x.set(1, 0, 0);
+    _x.normalize();
+    _z.crossVectors(_x, UP).normalize();
+    _y.crossVectors(_z, _x);
+    _m.makeBasis(_x, _y, _z);
+    _m.multiply(_s.makeScale(len, 1, 1));
+    _m.setPosition((_f.x + _b.x) / 2, (_f.y + _b.y) / 2, (_f.z + _b.z) / 2);
+    mm.body.setMatrixAt(k, _m);
+    mm.detail.setMatrixAt(k, _m);
+    mm.body.setColorAt(k, color);
+    mm.count++;
+    this.picks.push({ trainId: id, pos: new THREE.Vector3((_f.x + _b.x) / 2, (_f.y + _b.y) / 2 + 0.1, (_f.z + _b.z) / 2) });
   }
 
   dispose(): void {

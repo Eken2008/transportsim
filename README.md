@@ -11,6 +11,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort, gradients and curve, bridge and track speed limits; pathfinding and reversing at termini.
 > - **Upkeep:** reliability that decays between services, breakdowns (a game setting), automatic service trips, ageing, autorenew and replacement rules.
 > - **Accidents:** with accidents on, trains only see so far ahead, so unsafe signalling crashes trains; brake failures pass red signals, and on realistic, overspeed derails trains. Wreckage blocks the line for a while.
+> - **Road vehicles:** company roads, one-way roads, bus and truck stops, road depots; buses and trucks that keep left, queue and take junctions one at a time.
 > - **Orders:** stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
 > - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, routed by cargodist (demand to every reachable destination, transfers between trains), paid per leg by distance and journey time.
 > - **Industries:** mines, forests, farms and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food. Served industries grow, neglected ones close, new ones open. Optional inflation.
@@ -80,6 +81,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `9`                                              | Signals: click places, turns round, removes; kinds block, entry, exit, combo (pre-signals) and path; one-way; reservation overlay |
 | `B` / `N`                                        | Bridge (drag end to end) / tunnel (click a slope into a hill) |
 | `P`                                              | Waypoint: click straight track (click again to remove); trains pass through without stopping |
+| `G` `Z` `H` `J` `K`                              | Roads: build (drag; Ctrl removes), remove, bus/truck stop, road depot, one-way |
 | `V`                                              | Convert track type (drag an area); the rail tools choose standard, electrified or high-speed track |
 | `8`                                              | Bulldoze an area                                             |
 | Click                                            | Open a depot, station (show its catchment) or train (rearrange vehicles in a depot) |

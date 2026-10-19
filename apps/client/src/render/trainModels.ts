@@ -42,6 +42,17 @@ function windowsBand(g: GeoBuilder, x0: number, x1: number, y0: number, y1: numb
   }
 }
 
+/** Side windows of a road vehicle. */
+function g2windows(g: GeoBuilder, r: number, count: number): void {
+  g.color(GLASS);
+  const step = 0.86 / count;
+  for (let i = 0; i < count; i++) {
+    const a = -0.44 + step * (i + 0.15);
+    const b = -0.44 + step * (i + 0.85);
+    g.aabb(a, 0.17, -r - 0.004, b, 0.26, r + 0.004);
+  }
+}
+
 function build(model: UnitModel): UnitGeo {
   const body = new GeoBuilder().color(WHITE);
   const d = new GeoBuilder();
@@ -166,6 +177,42 @@ function build(model: UnitModel): UnitGeo {
       d.color(TIMBER).aabb(-0.46, FLOOR + 0.05, -W + 0.02, 0.46, 0.14, W - 0.02); // load
       break;
     }
+    case 'bus':
+    case 'coachbus': {
+      const R = 0.1;
+      d.color(DARK);
+      for (const x of [-0.3, 0.3]) d.cylinderX(x - 0.06, x + 0.06, 0.05, 0, 0.05, 6); // wheels
+      body.aabb(-0.5, 0.05, -R, 0.5, 0.3, R);
+      d.color(GLASS).aabb(0.49, 0.17, -R * 0.85, 0.505, 0.27, R * 0.85); // windscreen
+      g2windows(d, R, model === 'coachbus' ? 6 : 5);
+      d.color(ROOF).aabb(-0.49, 0.3, -R * 0.95, 0.49, 0.32, R * 0.95);
+      break;
+    }
+    case 'truck':
+    case 'tankertruck':
+    case 'flatbed':
+    case 'tipper': {
+      const R = 0.1;
+      d.color(DARK);
+      for (const x of [-0.32, -0.1, 0.32]) d.cylinderX(x - 0.06, x + 0.06, 0.05, 0, 0.05, 6);
+      d.color(DARK).aabb(-0.5, 0.05, -R * 0.8, 0.5, 0.08, R * 0.8); // chassis
+      body.aabb(0.22, 0.08, -R, 0.5, 0.3, R); // cab
+      d.color(GLASS).aabb(0.49, 0.18, -R * 0.85, 0.505, 0.27, R * 0.85);
+      if (model === 'truck') body.aabb(-0.5, 0.08, -R, 0.18, 0.31, R);
+      else if (model === 'tankertruck') d.color(lin('#c9c9c9')).cylinderX(-0.48, 0.18, 0.18, 0, 0.09, 10);
+      else if (model === 'flatbed') {
+        body.aabb(-0.5, 0.08, -R, 0.18, 0.11, R);
+        d.color(lin('#7a5230')).aabb(-0.46, 0.11, -R * 0.8, 0.14, 0.2, R * 0.8);
+      } else {
+        // Tipper body, tapered
+        const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+        body.aabb(-0.48, 0.1, -R, 0.18, 0.13, R);
+        body.quad(v(-0.48, 0.13, -R), v(0.18, 0.13, -R), v(0.18, 0.27, -R), v(-0.48, 0.24, -R));
+        body.quad(v(0.18, 0.13, R), v(-0.48, 0.13, R), v(-0.48, 0.24, R), v(0.18, 0.27, R));
+        d.color(LOAD).aabb(-0.46, 0.13, -R * 0.85, 0.16, 0.22, R * 0.85);
+      }
+      break;
+    }
     case 'stockcar': {
       bogies(d, [-0.28, 0.28]);
       body.aabb(-0.5, FLOOR, -W, 0.5, 0.09, W);
@@ -197,4 +244,10 @@ export const UNIT_MODELS: Record<UnitModel, UnitGeo> = {
   tanker: build('tanker'),
   flatwagon: build('flatwagon'),
   stockcar: build('stockcar'),
+  bus: build('bus'),
+  coachbus: build('coachbus'),
+  truck: build('truck'),
+  tankertruck: build('tankertruck'),
+  flatbed: build('flatbed'),
+  tipper: build('tipper'),
 };

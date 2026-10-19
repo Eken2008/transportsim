@@ -53,6 +53,7 @@ export const vehicleSettingsHandler: CommandHandler<VehicleSettingsCommand> = {
       if (rule.to !== null) {
         const to = typeof rule.to === 'string' ? railVehicle(rule.to) : undefined;
         if (!to) return fail('Unknown vehicle');
+        if (to.mode !== from.mode) return fail('Replace road vehicles with road vehicles, and rail with rail');
         if (to.kind !== from.kind) return fail(from.kind === 'loco' ? 'Replace engines with engines' : 'Replace wagons with wagons');
         if (to.id === from.id) return fail('Pick a different vehicle');
       }

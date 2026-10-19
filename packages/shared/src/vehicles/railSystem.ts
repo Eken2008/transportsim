@@ -362,7 +362,7 @@ export class RailSystem {
     this.occ.clear();
     this.blockUse.clear();
     this.claims.clear();
-    for (const t of this.state.trains.values()) for (const s of t.path) this.occupy(t, s);
+    for (const t of this.state.trains.values()) if (t.mode !== 'road') for (const s of t.path) this.occupy(t, s);
     for (const k of this.wrecks.keys()) this.markOccupied(k, WRECK);
     this.blockRes.clear();
     for (const [k, id] of this.reserved) this.countReservation(k, id, 1);
@@ -624,6 +624,7 @@ export class RailSystem {
 
   depotHasVehicles(tile: number): boolean {
     for (const t of this.state.trains.values()) {
+      if (t.mode === 'road') continue;
       if (t.status === 'depot' && t.depot === tile) return true;
       if (t.path.some((s) => segTile(s) === tile)) return true;
     }
@@ -712,7 +713,7 @@ export class RailSystem {
   step(): void {
     this.ensureBlocks();
     for (const t of this.state.trains.values()) {
-      if (t.status === 'depot') continue;
+      if (t.status === 'depot' || t.mode === 'road') continue;
       this.stepTrain(t);
     }
   }

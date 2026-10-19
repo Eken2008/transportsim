@@ -229,6 +229,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   }
   state.nextTrainId = Math.max(num(snap.nextTrainId, 0), ...[...state.trains.keys()].map((k) => k + 1));
   state.rail.rebuildOccupancy();
+  state.road.rebuildOccupancy();
   state.countInfrastructure();
   for (const c of state.companies.values()) if (!c.value) c.value = state.companyValue(c);
   state.setAgreements(sanitizeAgreements(snap.agreements, new Set(state.companies.keys())));
@@ -291,6 +292,7 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
   const path = status === 'depot' ? [] : ints(t.path);
   return {
     id: t.id,
+    mode: t.mode === 'road' ? 'road' : undefined,
     owner: num(t.owner, 0),
     name: String(t.name ?? 'Train').slice(0, 40),
     units,

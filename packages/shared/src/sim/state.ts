@@ -30,6 +30,7 @@ import { isSpanTd } from '../rail/track.ts';
 import { segTd, segTile, type TrackAccess } from '../rail/network.ts';
 import { NEWS_HISTORY, type NewsItem, type NewsKind } from '../news/news.ts';
 import { RailSystem } from '../vehicles/railSystem.ts';
+import { RoadSystem } from '../vehicles/roadSystem.ts';
 import type { Train } from '../vehicles/train.ts';
 import { GameMap } from '../world/map.ts';
 import { generateTerrain } from '../world/terrain.ts';
@@ -91,6 +92,7 @@ export class GameState {
   /** Tile indices that carry at least one signal. */
   readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
+  readonly road: RoadSystem;
   readonly cargo: CargoSystem;
   readonly maintenance: MaintenanceSystem;
   readonly incidents: IncidentSystem;
@@ -124,9 +126,13 @@ export class GameState {
     for (let o = 0; o < 256; o++) this.joins[o * 257] = 1;
     this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
     this.rail = new RailSystem(this);
+    this.road = new RoadSystem(this);
     this.cargo = new CargoSystem(this);
     this.maintenance = new MaintenanceSystem(this);
     this.rail.onService = (t) => this.maintenance.service(t);
+    this.road.onService = (t) => this.maintenance.service(t);
+    this.road.onArrive = (t, s) => this.cargo.arrive(t, s);
+    this.road.onLoading = (t, s) => this.cargo.loading(t, s);
     this.incidents = new IncidentSystem(this);
     this.maintenance.onBreakdown = (t) => this.incidents.onBreakdown(t);
     this.rail.onArrive = (t, s) => this.cargo.arrive(t, s);
@@ -152,6 +158,7 @@ export class GameState {
   step(): TickEvents {
     this.tick++;
     this.rail.step();
+    this.road.step();
     if (this.agreements.size > 0) this.countSharing();
     const ev: TickEvents = { newDay: false, newMonth: false, newYear: false };
     if (++this.dayTick >= TICKS_PER_DAY) {
@@ -333,13 +340,7 @@ export class GameState {
       this.dropOrdersFor(t, id);
       if (this.isOnTrackOf(t, id)) this.towHome(t);
     }
-    for (const t of [...this.trains.values()]) {
-      if (t.owner !== id) continue;
-      this.rail.removeFromWorld(t);
-      this.trains.delete(t.id);
-      this.dirtyTrains.delete(t.id);
-      this.removedTrains.add(t.id);
-    }
+    for (const t of [...this.trains.values()]) if (t.owner === id) this.removeVehicle(t);
     const { type, owner } = this.map.layers;
     const dirty = new Set<number>();
     const stations = new Set<number>();
@@ -421,7 +422,7 @@ export class GameState {
     this.agreementsChanged();
     let towed = 0;
     for (const t of [...this.trains.values()]) {
-      if (t.owner !== a.guest) continue;
+      if (t.owner !== a.guest || t.mode === 'road') continue;
       this.dropOrdersFor(t, a.host);
       if (this.isOnTrackOf(t, a.host)) {
         this.towHome(t);
@@ -446,7 +447,7 @@ export class GameState {
     this.dirtyTrains.add(t.id);
   }
 
-  /** Put a train straight into its company's nearest depot, or sell it if there is none. */
+  /** Put a vehicle straight into its company's nearest depot, or sell it if there is none. */
   towHome(t: Train): void {
     const w = this.map.width;
     const head = t.path.length ? segTile(t.path[0]!) : Math.max(0, t.depot);
@@ -454,7 +455,7 @@ export class GameState {
     const hy = (head - hx) / w;
     let best = -1;
     let bestD = Infinity;
-    for (const d of this.depots) {
+    for (const d of t.mode === 'road' ? this.roadDepots : this.depots) {
       if (this.map.layers.owner[d] !== t.owner) continue;
       const dx = (d % w) - hx;
       const dy = Math.floor(d / w) - hy;
@@ -464,21 +465,18 @@ export class GameState {
       }
     }
     if (best >= 0) {
-      this.rail.enterDepot(t, best);
+      this.systemOf(t).enterDepot(t, best);
       return;
     }
     this.addMoney(t.owner, resaleValue(t.value, (this.date - t.builtDays) / 365), 'vehicles');
-    this.rail.removeFromWorld(t);
-    this.trains.delete(t.id);
-    this.dirtyTrains.delete(t.id);
-    this.removedTrains.add(t.id);
+    this.removeVehicle(t);
   }
 
   /** Count ticks guest trains spend on other companies' track (billed daily). */
   private countSharing(): void {
     const owner = this.map.layers.owner;
     for (const t of this.trains.values()) {
-      if (t.path.length === 0) continue;
+      if (t.path.length === 0 || t.mode === 'road') continue;
       const s = t.path[0]!;
       if (isSpanTd(segTd(s))) continue;
       const o = owner[segTile(s)]!;
@@ -548,8 +546,20 @@ export class GameState {
 
   /** Is a road vehicle on this tile? */
   roadBusy(tile: number): boolean {
-    for (const t of this.trains.values()) if (t.mode === 'road' && t.path.some((s) => segTile(s) === tile)) return true;
-    return false;
+    return this.road.busy(tile);
+  }
+
+  /** The system that moves a vehicle: rail for trains, road for buses and trucks. */
+  systemOf(t: Train): RailSystem | RoadSystem {
+    return t.mode === 'road' ? this.road : this.rail;
+  }
+
+  /** Take a vehicle out of the world for good (sold, crashed, its company gone). */
+  removeVehicle(t: Train): void {
+    this.systemOf(t).removeFromWorld(t);
+    this.trains.delete(t.id);
+    this.dirtyTrains.delete(t.id);
+    this.removedTrains.add(t.id);
   }
 
   /** Is any road vehicle parked in (or on) the road depot on this tile? */

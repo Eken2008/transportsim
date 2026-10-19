@@ -332,6 +332,31 @@ try {
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y + 6.5, yaw: 0.6, pitch: 0.7, distance: 9 }), { x: sx, y: sy });
   await a.waitForTimeout(2000);
   await a.screenshot({ path: `${outDir}/04b2-roads.png` });
+  // A bus between two stops on that road.
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y + 6, yaw: 0.35, pitch: 1.05, distance: 26 }), { x: sx, y: sy });
+  await a.waitForTimeout(1200);
+  await a.keyboard.press('KeyH');
+  await clickTile(sx - 5, sy + 8);
+  await a.keyboard.press('Escape');
+  await clickTile(sx + 2, sy + 9);
+  const roadDepot = a.locator('.window', { hasText: 'Road depot' });
+  await roadDepot.getByRole('button', { name: /^Buy for/ }).click();
+  await roadDepot.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
+  const busWin = a.locator('.window', { has: a.locator('ol.orders') }).last();
+  await busWin.getByRole('button', { name: /Add stations/ }).click();
+  await clickTile(sx - 2, sy + 8);
+  await clickTile(sx - 5, sy + 8);
+  await busWin.getByRole('button', { name: 'Done adding' }).click();
+  check((await busWin.locator('ol.orders li').count()) === 2, 'bus got two stops');
+  if ((await busWin.locator('ol.orders li').count()) !== 2) console.log('  toasts:', await a.locator('.toast').allInnerTexts(), JSON.stringify(await tileAt(sx - 5, sy + 8)), JSON.stringify(await tileAt(sx - 2, sy + 8)));
+  await busWin.getByRole('button', { name: /Start/ }).click();
+  await a.waitForTimeout(5000);
+  const busStatus = await busWin.locator('.kv b').first().innerText();
+  check(/Heading|Loading/.test(busStatus), `bus is running (${busStatus})`);
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 3, y: s.y + 8, yaw: 0.6, pitch: 0.7, distance: 8 }), { x: sx, y: sy });
+  await a.waitForTimeout(1500);
+  await a.screenshot({ path: `${outDir}/04b3-bus.png` });
+  while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
 
   // Catchment from the station window
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y - 4, yaw: 0.35, pitch: 1.0, distance: 30 }), { x: sx, y: sy });
@@ -347,6 +372,7 @@ try {
   await stationWin.getByRole('button', { name: 'Hide catchment area' }).click();
   // Rearrange a parked train's vehicles
   while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
+  await hook((h) => h.command({ type: 'loan', action: 'borrow', amount: 200_000 }));
   await clickTile(sx - 11, sy - 4);
   const depot2 = a.locator('.window', { hasText: 'Train depot' });
   await depot2.getByRole('button', { name: /^Buy for/ }).click();

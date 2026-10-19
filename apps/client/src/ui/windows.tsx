@@ -1,6 +1,7 @@
 import {
   MAX_TRAIN_LENGTH,
   RAIL_VEHICLES,
+  ROAD_VEHICLES,
   CARGOS,
   CARGO_IDS,
   cargoAmount,
@@ -148,6 +149,8 @@ export function WindowLayer() {
             return <IndustryWindow key={key} w={w} />;
           case 'town':
             return <TownWindow key={key} w={w} />;
+          case 'roadDepot':
+            return <RoadDepotWindow key={key} w={w} />;
         }
       })}
     </>
@@ -430,6 +433,80 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
   );
 }
 
+/** Buy buses and trucks, and see the ones parked inside. */
+function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' } }) {
+  useApp((s) => s.trainsRev);
+  const global = useApp((s) => s.global);
+  const settings = useApp((s) => s.room?.settings);
+  const my = useMyRole();
+  const map = client.world?.map;
+  const year = global ? ymdFromDays(global.date).year : 1900;
+  const types = ROAD_VEHICLES.filter((v) => isAvailable(v, year, settings?.timeline ?? 'era'));
+  const [type, setType] = useState(types.filter((t) => t.cargoes?.[0] === 'passengers').at(-1)?.id ?? types[0]?.id ?? '');
+  const v = railVehicle(type) ?? types[0];
+  const [cargoChoice, setCargo] = useState<CargoId | ''>('');
+  const cargo = cargoChoice && v?.cargoes?.includes(cargoChoice) ? cargoChoice : v?.cargoes?.[0];
+  const inDepot = [...(client.world?.trains.values() ?? [])].filter((t) => t.status === 'depot' && t.depot === w.id);
+  const ours = map?.layers.owner[w.id] === my.companyId;
+  const canBuy = ours && roleAllows(my.role, 'build');
+  const canStart = ours && roleAllows(my.role, 'operate');
+  const x = map ? w.id % map.width : 0;
+  const y = map ? Math.floor(w.id / map.width) : 0;
+  return (
+    <Win w={w} title={`Road depot (${x}, ${y})`} width={360}>
+      <h4 style={{ marginTop: 0 }}>Inside</h4>
+      {inDepot.length === 0 && <p className="muted">No vehicles in this depot.</p>}
+      {inDepot.map((t) => (
+        <div className="list-row" key={t.id}>
+          <b style={{ flex: 1 }}>{t.name}</b>
+          <span className="muted small">{t.orders.length} orders</span>
+          <button onClick={() => openWindow({ kind: 'train', id: t.id })}>Open</button>
+          {canStart && (
+            <button className="primary" disabled={t.orders.length === 0} onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>
+              ▶
+            </button>
+          )}
+        </div>
+      ))}
+      {canBuy && v && (
+        <>
+          <h4>Buy a road vehicle</h4>
+          <div className="row" style={{ gap: 10 }}>
+            <label className="field" style={{ flex: 1, minWidth: 0 }}>
+              <span>Vehicle</span>
+              <select value={v.id} onChange={(e) => setType(e.target.value)}>
+                {types.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} — {t.capacity} {t.cargoes?.[0] === 'passengers' ? 'seats' : CARGOS[t.cargoes?.[0] ?? 'goods'].unit}, {t.maxSpeed} km/h
+                  </option>
+                ))}
+              </select>
+            </label>
+            {v.cargoes && v.cargoes.length > 1 && (
+              <label className="field" style={{ width: 110 }}>
+                <span>Carrying</span>
+                <select value={cargo} onChange={(e) => setCargo(e.target.value as CargoId)}>
+                  {v.cargoes.map((c) => (
+                    <option key={c} value={c}>
+                      {CARGOS[c].name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          <p className="muted small" style={{ margin: '0 0 10px' }}>
+            {cargo === 'passengers' ? 'A bus: uses bus stops.' : 'A truck: uses truck stops.'} Running cost {formatMoney(v.runningCost)}/yr.
+          </p>
+          <button className="primary" style={{ width: '100%' }} onClick={() => act({ type: 'buyTrain', depot: w.id, units: [{ type: v.id, cargo }] })}>
+            Buy for {formatMoney(v.cost)}
+          </button>
+        </>
+      )}
+    </Win>
+  );
+}
+
 function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
   useTick(1000);
   useApp((s) => s.trainsRev);
@@ -546,8 +623,8 @@ function TrainListWindow({ w }: { w: GameWindow & { kind: 'trains' } }) {
   const company = useMyCompany();
   const trains = [...(client.world?.trains.values() ?? [])].filter((t) => t.owner === company).sort((a, b) => a.id - b.id);
   return (
-    <Win w={w} title="Your trains" width={420}>
-      {trains.length === 0 && <p className="muted">No trains yet. Build a depot (7), click it, and buy one.</p>}
+    <Win w={w} title="Your vehicles" width={420}>
+      {trains.length === 0 && <p className="muted">No vehicles yet. Build a depot (7 for trains, J for road vehicles), click it, and buy one.</p>}
       {trains.map((t) => (
         <div className="list-row" key={t.id}>
           <b style={{ width: 70 }}>{t.name}</b>
@@ -585,6 +662,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
   useEffect(() => setDraft(JSON.parse(currentKey) as TrainUnit[]), [currentKey]);
 
   const editable = mine && t.status === 'depot';
+  const road = t.mode === 'road';
   const changed = JSON.stringify(draft) !== currentKey;
   const preview = changed ? client.preview({ type: 'editConsist', id: t.id, units: draft }) : null;
   const stats = trainStats(draft);
@@ -600,7 +678,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
   return (
     <>
       <h4>Vehicles</h4>
-      {!editable && mine && <p className="muted small" style={{ margin: '0 0 6px' }}>Send the train to a depot to rearrange, refit or change its vehicles.</p>}
+      {!editable && mine && <p className="muted small" style={{ margin: '0 0 6px' }}>{road ? 'Send it to a depot to refit it.' : 'Send the train to a depot to rearrange, refit or change its vehicles.'}</p>}
       <ol className="consist">
         {draft.map((u, i) => {
           const v = railVehicle(u.type);
@@ -624,7 +702,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
             >
               {editable && <span className="grip" aria-hidden>⋮⋮</span>}
               <span className={`unit-kind ${v?.kind ?? ''}`} style={cargo ? { borderColor: CARGOS[cargo].color } : undefined}>
-                {v?.kind === 'loco' ? 'Engine' : cargo ? CARGOS[cargo].name : 'Wagon'}
+                {v?.mode === 'road' ? (cargo === 'passengers' ? 'Bus' : 'Truck') : v?.kind === 'loco' ? 'Engine' : cargo ? CARGOS[cargo].name : 'Wagon'}
               </span>
               <span className="order-name">{v?.name ?? u.type}</span>
               {editable && v?.cargoes && v.cargoes.length > 1 && (
@@ -636,7 +714,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
                   ))}
                 </select>
               )}
-              {editable && (
+              {editable && !road && (
                 <>
                   <button className="ghost small" disabled={i === 0} aria-label="Move forward" onClick={() => move(i, i - 1)}>
                     ↑
@@ -655,7 +733,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
       </ol>
       {editable && (
         <>
-          <div className="row" style={{ marginBottom: 8 }}>
+          <div className="row" style={{ marginBottom: 8, display: road ? 'none' : undefined }}>
             <select value={toAdd} onChange={(e) => setToAdd(e.target.value)} style={{ flex: 1, minWidth: 0 }} aria-label="Vehicle to add">
               {available.map((v) => (
                 <option key={v.id} value={v.id}>

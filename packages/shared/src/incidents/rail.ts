@@ -84,11 +84,8 @@ export class IncidentSystem {
       const n = cargoCount(t);
       aboard += n;
       byOwner.set(t.owner, (byOwner.get(t.owner) ?? 0) + n);
-      for (const s of t.path) pieces.push(pieceKey(s));
-      state.rail.removeFromWorld(t);
-      state.trains.delete(t.id);
-      state.dirtyTrains.delete(t.id);
-      state.removedTrains.add(t.id);
+      if (t.mode !== 'road') for (const s of t.path) pieces.push(pieceKey(s));
+      state.removeVehicle(t);
     }
     for (const k of pieces) state.rail.addWreck(k, until);
     for (const [owner, n] of byOwner) {

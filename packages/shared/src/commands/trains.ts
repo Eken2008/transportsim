@@ -2,7 +2,9 @@ import { resaleValue } from '../economy/finance.ts';
 import { isElectrified } from '../rail/railTypes.ts';
 import { ymdFromDays } from '../sim/date.ts';
 import { TileType } from '../world/constants.ts';
-import { isAvailable, railVehicle, unitCargo } from '../vehicles/catalog.ts';
+import { isAvailable, isBus, railVehicle, unitCargo } from '../vehicles/catalog.ts';
+import { roadStationOk } from '../vehicles/roadSystem.ts';
+import { stationHas } from '../rail/station.ts';
 import { JUMP_CONDITIONS, trainStats, type Order, type Train, type TrainUnit } from '../vehicles/train.ts';
 import { advanceOrder, settleOrders } from '../vehicles/orders.ts';
 import { MAX_TRAIN_TILES } from '../vehicles/maintenance.ts';
@@ -76,9 +78,13 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
     const { depot } = cmd;
     const map = state.map;
     if (!isInt(depot) || depot < 0 || depot >= map.layers.type.length) return fail('Invalid depot');
-    if (map.layers.type[depot] !== TileType.Depot || map.layers.owner[depot] !== ctx.companyId) return fail('Not your depot');
+    const depotType = map.layers.type[depot];
+    if ((depotType !== TileType.Depot && depotType !== TileType.RoadDepot) || map.layers.owner[depot] !== ctx.companyId) return fail('Not your depot');
+    const road = depotType === TileType.RoadDepot;
     const parsed = parseUnits(cmd.units);
     if (typeof parsed === 'string') return fail(parsed);
+    if (parsed.some((u) => (railVehicle(u.type)!.mode === 'road') !== road)) return fail(road ? 'Road depots sell road vehicles' : 'Train depots sell rail vehicles');
+    if (road && parsed.length !== 1) return fail('A road vehicle is a single vehicle');
     const units = parsed.map((u) => u.type);
     const year = ymdFromDays(state.date).year;
     let cost = 0;
@@ -99,11 +105,13 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
       ok: true,
       cost: total,
       commit() {
-        const n = [...state.trains.values()].filter((t) => t.owner === ctx.companyId).length + 1;
+        const kind = road ? (isBus(parsed[0]!) ? 'Bus' : 'Truck') : 'Train';
+        const n = [...state.trains.values()].filter((t) => t.owner === ctx.companyId && t.name.startsWith(kind)).length + 1;
         const t: Train = {
           id: state.nextTrainId++,
+          mode: road ? 'road' : undefined,
           owner: ctx.companyId!,
-          name: `Train ${n}`,
+          name: `${kind} ${n}`,
           units: parsed,
           status: 'depot',
           depot,
@@ -139,7 +147,7 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
   plan(state, ctx, cmd): PlanResult {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
     if (!t || t.owner !== ctx.companyId) return fail('Not your train');
-    const rail = state.rail;
+    const rail = state.systemOf(t);
     switch (cmd.action) {
       case 'start': {
         const err = rail.canStart(t);
@@ -177,10 +185,7 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
           ok: true,
           cost: -refund,
           commit() {
-            rail.removeFromWorld(t);
-            state.trains.delete(t.id);
-            state.dirtyTrains.delete(t.id);
-            state.removedTrains.add(t.id);
+            state.removeVehicle(t);
             return noEffects();
           },
         };
@@ -209,8 +214,12 @@ export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
         const st = isInt(o.station) ? state.stations.get(o.station) : undefined;
         if (!st) return fail('Unknown station');
         if (!state.canUseStation(ctx.companyId!, st)) return fail(`${st.name} belongs to another company`);
+        if (t.mode === 'road' ? !roadStationOk(state, t, st.id) : !stationHas(state.map, st, 'rail')) {
+          return fail(t.mode === 'road' ? `${st.name} has no ${isBus(t.units[0]!) ? 'bus' : 'truck'} stop` : `${st.name} has no platforms`);
+        }
         orders.push({ kind: 'station', station: st.id, fullLoad: o.fullLoad === true || undefined, wait: days(o.wait), travel });
       } else if (o?.kind === 'waypoint') {
+        if (t.mode === 'road') return fail('Waypoints are for trains');
         const wp = isInt(o.waypoint) ? state.waypoints.get(o.waypoint) : undefined;
         if (!wp) return fail('Unknown waypoint');
         if (!state.accessFor(ctx.companyId!).uses[wp.owner]) return fail(`${wp.name} is on another company's track`);
@@ -255,6 +264,8 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
     if (t.status !== 'depot') return fail('Trains can only be changed inside a depot');
     const parsed = parseUnits(cmd.units);
     if (typeof parsed === 'string') return fail(parsed);
+    if (t.mode === 'road' && (parsed.length !== 1 || parsed[0]!.type !== t.units[0]!.type)) return fail('Road vehicles can only be refitted');
+    if (t.mode !== 'road' && parsed.some((u) => railVehicle(u.type)!.mode === 'road')) return fail('That is a road vehicle');
     const units = parsed.map((u) => u.type);
     const year = ymdFromDays(state.date).year;
     // Multiset difference between old and new consists.

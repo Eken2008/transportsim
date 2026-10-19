@@ -15,7 +15,8 @@ export class OrdersTool implements Tool {
     const map = client.world?.map;
     if (!map) return null;
     const i = map.tileIndex(hit.tileX, hit.tileY);
-    return map.layers.type[i] === TileType.Station ? map.layers.data[i]! : null;
+    const type = map.layers.type[i];
+    return type === TileType.Station || type === TileType.RoadStop ? map.layers.data[i]! : null;
   }
 
   /** The order a click on this tile adds: a station, a waypoint, or a depot service. */
@@ -25,7 +26,7 @@ export class OrdersTool implements Tool {
     const station = this.stationAt(hit);
     if (station !== null) return { kind: 'station', station };
     const i = map.tileIndex(hit.tileX, hit.tileY);
-    if (map.layers.type[i] === TileType.Depot) return { kind: 'depot' };
+    if (map.layers.type[i] === TileType.Depot || map.layers.type[i] === TileType.RoadDepot) return { kind: 'depot' };
     if (map.layers.type[i] === TileType.Rail && map.layers.data[i]! & WAYPOINT_FLAG) {
       const wp = [...(client.world?.state.waypoints.values() ?? [])].find((w) => w.tile === i);
       if (wp) return { kind: 'waypoint', waypoint: wp.id };

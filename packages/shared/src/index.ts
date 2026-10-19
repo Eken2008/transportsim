@@ -24,6 +24,8 @@ export * from './vehicles/orders.ts';
 export * from './vehicles/maintenance.ts';
 export * from './incidents/rail.ts';
 export * from './vehicles/railSystem.ts';
+export * from './vehicles/roadSystem.ts';
+export * from './road/roadNetwork.ts';
 export * from './town/road.ts';
 export * from './town/houses.ts';
 export * from './town/towns.ts';

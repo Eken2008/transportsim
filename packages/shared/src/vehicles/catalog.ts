@@ -16,12 +16,20 @@ export type UnitModel =
   | 'boxvan'
   | 'tanker'
   | 'flatwagon'
-  | 'stockcar';
+  | 'stockcar'
+  | 'bus'
+  | 'coachbus'
+  | 'truck'
+  | 'tankertruck'
+  | 'flatbed'
+  | 'tipper';
 
 export interface RailVehicleType {
   id: string;
   name: string;
   kind: 'loco' | 'wagon';
+  /** Road vehicles (buses and trucks); rail if absent. */
+  mode?: 'road';
   model: UnitModel;
   traction?: Traction;
   /** Cargoes a wagon can be refitted to carry; the first is the default. */
@@ -106,8 +114,36 @@ export const RAIL_VEHICLES: readonly RailVehicleType[] = [
   wagon({ id: 'freight_hs', name: 'Express freight van', model: 'boxvan', cargoes: ['goods', 'mail', 'food'], capacity: 32, length: 12, maxSpeed: 220, mass: 26, cost: 26_000, runningCost: 800, intro: 2005, retire: 2100, lifespan: 35 }),
 ];
 
-const BY_ID = new Map(RAIL_VEHICLES.map((v) => [v.id, v]));
+const road = (v: Omit<RailVehicleType, 'kind' | 'mode'>): RailVehicleType => ({ kind: 'loco', mode: 'road', ...v });
+const ROAD_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood'];
+const ROAD_PIECE: CargoId[] = ['goods', 'food', 'mail', 'grain'];
+
+/** Buses (passengers, at bus stops) and trucks (everything else, at truck stops). */
+export const ROAD_VEHICLES: readonly RailVehicleType[] = [
+  road({ id: 'steam_bus', name: 'Steam omnibus', model: 'bus', cargoes: ['passengers'], capacity: 24, length: 9, maxSpeed: 32, power: 30, tractiveEffort: 12, mass: 5, cost: 4_500, runningCost: 700, intro: 1850, retire: 1920, lifespan: 15, reliability: 0.72 }),
+  road({ id: 'motor_bus', name: 'Motor bus', model: 'bus', cargoes: ['passengers'], capacity: 35, length: 9, maxSpeed: 56, power: 60, tractiveEffort: 18, mass: 6, cost: 7_000, runningCost: 900, intro: 1912, retire: 1965, lifespan: 15, reliability: 0.8 }),
+  road({ id: 'city_bus', name: 'City bus', model: 'bus', cargoes: ['passengers'], capacity: 50, length: 10, maxSpeed: 80, power: 140, tractiveEffort: 30, mass: 10, cost: 14_000, runningCost: 1_300, intro: 1950, retire: 2025, lifespan: 15, reliability: 0.88 }),
+  road({ id: 'express_coach', name: 'Express coach', model: 'coachbus', cargoes: ['passengers'], capacity: 46, length: 11, maxSpeed: 110, power: 260, tractiveEffort: 40, mass: 13, cost: 26_000, runningCost: 1_900, intro: 1968, retire: 2100, lifespan: 15, reliability: 0.92 }),
+  road({ id: 'electric_bus', name: 'Electric bus', model: 'bus', cargoes: ['passengers'], capacity: 64, length: 11, maxSpeed: 90, power: 250, tractiveEffort: 45, mass: 14, cost: 34_000, runningCost: 1_100, intro: 2015, retire: 2100, lifespan: 15, reliability: 0.96 }),
+  road({ id: 'steam_wagon', name: 'Steam wagon', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail'], capacity: 8, length: 8, maxSpeed: 30, power: 35, tractiveEffort: 14, mass: 5, cost: 4_000, runningCost: 650, intro: 1850, retire: 1925, lifespan: 15, reliability: 0.72 }),
+  road({ id: 'lorry', name: 'Motor lorry', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail', 'steel'], capacity: 12, length: 8, maxSpeed: 50, power: 60, tractiveEffort: 20, mass: 5, cost: 6_500, runningCost: 850, intro: 1915, retire: 1965, lifespan: 15, reliability: 0.8 }),
+  road({ id: 'tanker_truck', name: 'Tanker truck', model: 'tankertruck', cargoes: ['oil'], capacity: 18, length: 9, maxSpeed: 70, power: 110, tractiveEffort: 30, mass: 8, cost: 11_000, runningCost: 1_100, intro: 1930, retire: 2100, lifespan: 15, reliability: 0.86 }),
+  road({ id: 'tipper', name: 'Tipper truck', model: 'tipper', cargoes: ROAD_BULK, capacity: 24, length: 9, maxSpeed: 80, power: 180, tractiveEffort: 45, mass: 10, cost: 14_000, runningCost: 1_300, intro: 1955, retire: 2100, lifespan: 15, reliability: 0.9 }),
+  road({ id: 'box_truck', name: 'Box truck', model: 'truck', cargoes: ROAD_PIECE, capacity: 22, length: 9, maxSpeed: 90, power: 180, tractiveEffort: 40, mass: 9, cost: 13_000, runningCost: 1_250, intro: 1955, retire: 2100, lifespan: 15, reliability: 0.9 }),
+  road({ id: 'flatbed', name: 'Flatbed truck', model: 'flatbed', cargoes: ['steel', 'wood'], capacity: 22, length: 10, maxSpeed: 80, power: 180, tractiveEffort: 45, mass: 10, cost: 13_500, runningCost: 1_250, intro: 1940, retire: 2100, lifespan: 15, reliability: 0.88 }),
+  road({ id: 'livestock_truck', name: 'Livestock truck', model: 'truck', cargoes: ['livestock'], capacity: 15, length: 9, maxSpeed: 80, power: 160, tractiveEffort: 40, mass: 9, cost: 12_500, runningCost: 1_200, intro: 1935, retire: 2100, lifespan: 15, reliability: 0.88 }),
+];
+
+/** Every vehicle type, rail and road. */
+export const ALL_VEHICLES: readonly RailVehicleType[] = [...RAIL_VEHICLES, ...ROAD_VEHICLES];
+
+const BY_ID = new Map(ALL_VEHICLES.map((v) => [v.id, v]));
+/** Any vehicle type by id (rail or road). */
 export const railVehicle = (id: string): RailVehicleType | undefined => BY_ID.get(id);
+export const vehicleType = railVehicle;
+
+/** Buses carry passengers and use bus stops; every other road vehicle is a truck. */
+export const isBus = (u: { type: string; cargo?: CargoId }) => railVehicle(u.type)?.mode === 'road' && unitCargo(u) === 'passengers';
 
 /** Whether a vehicle can be bought in the given year under the timeline setting. */
 export function isAvailable(v: RailVehicleType, year: number, timeline: 'era' | 'sandbox'): boolean {
