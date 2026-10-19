@@ -127,6 +127,7 @@ export class GameState {
     this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
     this.rail = new RailSystem(this);
     this.road = new RoadSystem(this);
+    this.road.crossingClosed = (tile) => this.rail.closedCrossings.has(tile);
     this.cargo = new CargoSystem(this);
     this.maintenance = new MaintenanceSystem(this);
     this.rail.onService = (t) => this.maintenance.service(t);

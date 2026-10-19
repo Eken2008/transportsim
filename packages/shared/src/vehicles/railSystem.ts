@@ -31,6 +31,7 @@ import { TICKS_PER_DAY, TICKS_PER_SECOND } from '../sim/date.ts';
 import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
 import { signalKindOf, type SignalKind } from '../commands/signals.ts';
+import { CROSSING_FLAG } from '../commands/track.ts';
 import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
 import { cargoMass, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
 import { advanceOrder, needsService, peekNextOrder } from './orders.ts';
@@ -53,6 +54,8 @@ const REPLAN_DELAY = 45;
 const CREEP_KMH = 4;
 
 const DT = 1 / TICKS_PER_SECOND;
+/** Crossings close this far (tiles) ahead of a train, plus its braking distance. */
+const CROSSING_WARNING = 3;
 /** Pseudo train id for wreckage occupying track. */
 const WRECK = -2;
 /** Deceleration of a train coasting without brakes, km/h per second. */
@@ -712,9 +715,32 @@ export class RailSystem {
 
   step(): void {
     this.ensureBlocks();
+    this.updateCrossings();
     for (const t of this.state.trains.values()) {
       if (t.status === 'depot' || t.mode === 'road') continue;
       this.stepTrain(t);
+    }
+  }
+
+  /** Level crossings closed to road traffic: a train is on them or about to arrive. */
+  readonly closedCrossings = new Set<number>();
+
+  private isCrossing(tile: number): boolean {
+    const map = this.state.map;
+    return map.layers.type[tile] === TileType.Rail && (map.layers.data[tile]! & CROSSING_FLAG) !== 0;
+  }
+
+  private updateCrossings(): void {
+    this.closedCrossings.clear();
+    for (const t of this.state.trains.values()) {
+      if (t.mode === 'road' || t.path.length === 0) continue;
+      for (const s of t.path) if (this.isCrossing(segTile(s))) this.closedCrossings.add(segTile(s));
+      let d = segLength(t.path[0]!) - t.pos;
+      for (const s of t.route) {
+        if (d > CROSSING_WARNING + brakingDistance(t.speed)) break;
+        if (this.isCrossing(segTile(s))) this.closedCrossings.add(segTile(s));
+        d += segLength(s);
+      }
     }
   }
 
@@ -894,6 +920,11 @@ export class RailSystem {
       this.occupy(t, next);
       t.pos = 0;
       dist -= room;
+      // A road vehicle still on a level crossing is hit (with accidents on).
+      if (this.isCrossing(segTile(next)) && this.state.incidents.rules) {
+        const hit = this.state.road.vehiclesOn(segTile(next));
+        if (hit.length) this.state.incidents.crossingCollision(t, hit, segTile(next));
+      }
     }
     this.trimTail(t);
   }

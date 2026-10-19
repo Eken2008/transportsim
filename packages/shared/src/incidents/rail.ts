@@ -68,12 +68,20 @@ export class IncidentSystem {
     this.wreck([t, ...others], segTile(s), what);
   }
 
+  /** A train runs into road vehicles on a level crossing: they are destroyed, the train carries on. */
+  crossingCollision(train: Train, roadVehicles: number[], tile: number): void {
+    const victims = roadVehicles.map((id) => this.state.trains.get(id)).filter((t): t is Train => !!t);
+    if (!victims.length) return;
+    const names = victims.map((v) => v.name).join(' and ');
+    this.wreck(victims, tile, `${train.name} hits ${names} at a level crossing${this.placeName(tile)}`, false);
+  }
+
   derail(t: Train): void {
     if (t.path.length === 0) return;
     this.wreck([t], segTile(t.path[0]!), `${t.name} derails on a curve${this.placeName(segTile(t.path[0]!))}`);
   }
 
-  private wreck(trains: Train[], tile: number, what: string): void {
+  private wreck(trains: Train[], tile: number, what: string, blockTrack = true): void {
     const rules = this.rules ?? ACCIDENT_RULES.low;
     const state = this.state;
     const until = state.tick + rules.cleanupDays * TICKS_PER_DAY;
@@ -87,7 +95,7 @@ export class IncidentSystem {
       if (t.mode !== 'road') for (const s of t.path) pieces.push(pieceKey(s));
       state.removeVehicle(t);
     }
-    for (const k of pieces) state.rail.addWreck(k, until);
+    if (blockTrack) for (const k of pieces) state.rail.addWreck(k, until);
     for (const [owner, n] of byOwner) {
       state.addMoney(owner, -state.cost(rules.base + rules.perPassenger * n), 'incidents');
       for (const st of state.stations.values()) {

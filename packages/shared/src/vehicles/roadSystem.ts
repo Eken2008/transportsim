@@ -92,6 +92,13 @@ export class RoadSystem {
     }
   }
 
+  /** Road vehicles on a tile. */
+  vehiclesOn(tile: number): number[] {
+    const out = new Set<number>();
+    for (let k = 0; k < 8; k++) for (const id of this.occ.get(tile * 8 + k) ?? []) out.add(id);
+    return [...out];
+  }
+
   /** Is a road vehicle on this tile? */
   busy(tile: number): boolean {
     for (let k = 0; k < 8; k++) if (this.occ.get(tile * 8 + k)?.size) return true;
