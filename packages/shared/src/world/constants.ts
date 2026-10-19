@@ -18,6 +18,10 @@ export const TileType = {
   House: 5,
   Industry: 6,
   Depot: 7,
+  /** Drive-through bus or truck stop (part of a station): data = station id, track = road bits | ROADSTOP_TRUCK. */
+  RoadStop: 8,
+  /** Road vehicle depot: data bits 0-1 = exit edge. */
+  RoadDepot: 9,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 

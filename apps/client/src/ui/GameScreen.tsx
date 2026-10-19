@@ -84,6 +84,7 @@ export function GameScreen() {
       <SignalOptions />
       <BridgeOptions />
       <RailTypeOptions />
+      <RoadStopOptions />
       <Toolbar />
       <Chat />
       <StatusBar fps={stats.fps} chunks={stats.chunks} />
@@ -211,7 +212,7 @@ function HostBanner() {
   );
 }
 
-type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | 'rail' };
+type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | 'rail' | 'road' };
 
 const TOOLS: ToolDef[] = [
   { id: 'raise', icon: '⛰', label: 'Raise land (drag for area)', key: '1', menu: 'main' },
@@ -226,6 +227,11 @@ const TOOLS: ToolDef[] = [
   { id: 'tunnel', icon: '⛰️', label: 'Tunnel (click a slope into a hill)', key: 'N', menu: 'rail' },
   { id: 'waypoint', icon: '📍', label: 'Waypoint (click straight track; click again to remove)', key: 'P', menu: 'rail' },
   { id: 'convert', icon: '⚡', label: 'Convert track type (drag an area)', key: 'V', menu: 'rail' },
+  { id: 'road', icon: '🛣', label: 'Build road (drag a straight line; Ctrl removes)', key: 'G', menu: 'road' },
+  { id: 'removeRoad', icon: '✂', label: 'Remove road (drag along it)', key: 'Z', menu: 'road' },
+  { id: 'roadStop', icon: '🚏', label: 'Bus or truck stop (on straight road)', key: 'H', menu: 'road' },
+  { id: 'roadDepot', icon: '🅿', label: 'Road vehicle depot', key: 'J', menu: 'road' },
+  { id: 'oneWay', icon: '⬆', label: 'One-way road (click to cycle)', key: 'K', menu: 'road' },
   { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', menu: 'main' },
 ];
 
@@ -245,16 +251,22 @@ function ToolButton({ t }: { t: ToolDef }) {
   );
 }
 
+type Menu = 'rail' | 'road';
+const MENUS: { id: Menu; icon: string; label: string }[] = [
+  { id: 'rail', icon: '🚆', label: 'Railways' },
+  { id: 'road', icon: '🛣', label: 'Roads' },
+];
+
 function Toolbar() {
   const tool = useApp((s) => s.tool);
-  const [railOpen, setRailOpen] = useState(false);
-  const railTool = TOOLS.some((t) => t.menu === 'rail' && t.id === tool);
-  const open = railOpen || railTool;
+  const [chosen, setChosen] = useState<Menu | null>(null);
+  const toolMenu = TOOLS.find((t) => t.id === tool)?.menu;
+  const open: Menu | null = toolMenu === 'rail' || toolMenu === 'road' ? toolMenu : chosen;
   return (
     <>
       {open && (
-        <div className="panel toolbar submenu" role="toolbar" aria-label="Rail tools">
-          {TOOLS.filter((t) => t.menu === 'rail').map((t) => (
+        <div className="panel toolbar submenu" role="toolbar" aria-label={`${open === 'rail' ? 'Rail' : 'Road'} tools`}>
+          {TOOLS.filter((t) => t.menu === open).map((t) => (
             <ToolButton key={t.id} t={t} />
           ))}
         </div>
@@ -264,24 +276,27 @@ function Toolbar() {
           <ToolButton key={t.id} t={t} />
         ))}
         <div className="sep" />
-        <button
-          className={`tool-btn menu-btn ${open ? 'active' : ''}`}
-          data-tip="Railways"
-          aria-label="Railway tools"
-          aria-expanded={open}
-          onClick={() => {
-            if (open) {
-              setRailOpen(false);
-              if (railTool) useApp.setState({ tool: null });
-            } else setRailOpen(true);
-          }}
-        >
-          <span style={{ fontSize: 20 }}>🚆</span>
-          <span className="key">▴</span>
-        </button>
-        <button className="tool-btn" disabled data-tip="Roads — planned" aria-label="Roads (planned)">
-          <span style={{ fontSize: 20 }}>🛣</span>
-        </button>
+        {MENUS.map((m) => (
+          <button
+            key={m.id}
+            className={`tool-btn menu-btn ${open === m.id ? 'active' : ''}`}
+            data-tip={m.label}
+            aria-label={`${m.label} tools`}
+            aria-expanded={open === m.id}
+            onClick={() => {
+              if (open === m.id) {
+                setChosen(null);
+                if (toolMenu === m.id) useApp.setState({ tool: null });
+              } else {
+                setChosen(m.id);
+                if (toolMenu && toolMenu !== 'main') useApp.setState({ tool: null });
+              }
+            }}
+          >
+            <span style={{ fontSize: 20 }}>{m.icon}</span>
+            <span className="key">▴</span>
+          </button>
+        ))}
         <button className="tool-btn" disabled data-tip="Airports — planned" aria-label="Airports (planned)">
           <span style={{ fontSize: 20 }}>✈</span>
         </button>
@@ -292,6 +307,25 @@ function Toolbar() {
         <ToolButton t={TOOLS.find((t) => t.id === 'bulldoze')!} />
       </div>
     </>
+  );
+}
+
+function RoadStopOptions() {
+  const tool = useApp((s) => s.tool);
+  const kind = useApp((s) => s.roadStopKind);
+  if (tool !== 'roadStop') return null;
+  return (
+    <div className="panel tool-options" role="radiogroup" aria-label="Stop kind">
+      <span className="muted">Stop</span>
+      <div className="seg">
+        <button className={kind === 'bus' ? 'primary' : ''} aria-pressed={kind === 'bus'} title="For passengers and mail" onClick={() => useApp.setState({ roadStopKind: 'bus' })}>
+          🚌 Bus stop
+        </button>
+        <button className={kind === 'truck' ? 'primary' : ''} aria-pressed={kind === 'truck'} title="For freight" onClick={() => useApp.setState({ roadStopKind: 'truck' })}>
+          🚚 Truck stop
+        </button>
+      </div>
+    </div>
   );
 }
 

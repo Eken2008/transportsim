@@ -213,6 +213,17 @@ Each part ends with green tests and a commit.
 4. **Town growth.** Towns grow faster when well served: new houses, taller buildings over time, and new streets. The client gets a town window, and monthly town figures cover passengers and mail carried, goods and food delivered, and growth.
 5. **Industry dynamics and inflation.** Production changes with service. Unserved industries may close and new ones open, with news. Optional inflation is set at game creation.
 
+### M5 in detail
+Each part ends with green tests and a commit.
+1. **Road infrastructure.**
+   - **Roads:** companies build straight roads by dragging, which crosses rail as level crossings, and remove their own roads. Town roads stay. Straight company roads can be made one-way.
+   - **Stops and depots:** two new tile types. Road depots hold road vehicles. Drive-through bus and truck stops on straight roads join stations, so one station can have platforms and stops. The client draws and builds all of it from a Road menu.
+2. **Buses and trucks.**
+   - **Data model:** a road vehicle is a `Train` with `mode: 'road'`, so orders, timetables, cargo, finances, upkeep and windows carry over. Buses and trucks per cargo cover 1850–2050.
+   - **Movement:** a RoadSystem moves road vehicles. Pathfinding runs over road tiles in their direction of travel and respects one-way roads. Vehicles drive on the left, keep their distance in a lane, and only one at a time crosses a junction tile. They stop at matching stops (buses for passengers and mail, trucks for freight) and turn at dead ends.
+   - **Client:** draws road vehicles, and depot windows sell them.
+3. **Level crossings and traffic.** A crossing closes while a train is on it or about to arrive, and road vehicles wait in front of it. With accidents on, a train hitting a road vehicle on the crossing destroys the road vehicle, with compensation and news.
+
 ## Key dependencies
 `three`, `react`, `react-dom`, `zustand`, `vite`, `@vitejs/plugin-react`, `msgpackr`, `simplex-noise`, `idb` (a small IndexedDB wrapper) and `concurrently` (to run client and server together in dev). The server uses Bun's built-in `Bun.serve` WebSockets, so it needs no `ws` package, and tests use `bun test`.
 

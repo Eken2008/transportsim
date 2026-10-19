@@ -51,6 +51,18 @@ import { convertRailHandler, type ConvertRailCommand } from './convert.ts';
 import { buildWaypointHandler, removeWaypointHandler, type BuildWaypointCommand, type RemoveWaypointCommand } from './waypoint.ts';
 import { trainSettingsHandler, vehicleSettingsHandler, type TrainSettingsCommand, type VehicleSettingsCommand } from './maintenance.ts';
 import {
+  buildRoadDepotHandler,
+  buildRoadHandler,
+  buildRoadStopHandler,
+  removeRoadHandler,
+  setOneWayHandler,
+  type BuildRoadCommand,
+  type BuildRoadDepotCommand,
+  type BuildRoadStopCommand,
+  type RemoveRoadCommand,
+  type SetOneWayCommand,
+} from './road.ts';
+import {
   answerSharingHandler,
   endSharingHandler,
   proposeSharingHandler,
@@ -74,6 +86,7 @@ export * from './sharing.ts';
 export * from './convert.ts';
 export * from './waypoint.ts';
 export * from './maintenance.ts';
+export * from './road.ts';
 
 export type Command =
   | TerraformCommand
@@ -106,7 +119,12 @@ export type Command =
   | BuildWaypointCommand
   | RemoveWaypointCommand
   | TrainSettingsCommand
-  | VehicleSettingsCommand;
+  | VehicleSettingsCommand
+  | BuildRoadCommand
+  | RemoveRoadCommand
+  | SetOneWayCommand
+  | BuildRoadDepotCommand
+  | BuildRoadStopCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -141,6 +159,11 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   removeWaypoint: removeWaypointHandler,
   trainSettings: trainSettingsHandler,
   vehicleSettings: vehicleSettingsHandler,
+  buildRoad: buildRoadHandler,
+  removeRoad: removeRoadHandler,
+  setOneWay: setOneWayHandler,
+  buildRoadDepot: buildRoadDepotHandler,
+  buildRoadStop: buildRoadStopHandler,
 };
 
 const PERMISSION_ERRORS = {

@@ -13,6 +13,7 @@ import { EDGE_DX, EDGE_DY, Piece, hasPiece } from '../rail/track.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { CROSSING_FLAG } from './track.ts';
 import type { GameState } from '../sim/state.ts';
+import { removeRoadStop, roadTileClearCost } from './road.ts';
 import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
@@ -228,9 +229,19 @@ export function demolishTile(state: GameState, i: number, dirtyChunks: Set<numbe
     } else {
       map.setClear(i, Ground.Rough, 0);
     }
+  } else if (type === TileType.RoadStop) {
+    station = removeRoadStop(map, i);
+    state.onRoadsChanged();
+  } else if (type === TileType.Road) {
+    map.setClear(i, Ground.Rough, 0);
+    state.onRoadsChanged();
   } else {
     if (type === TileType.Station) station = map.layers.data[i]!;
     if (type === TileType.Depot) state.depots.delete(i);
+    if (type === TileType.RoadDepot) {
+      state.roadDepots.delete(i);
+      state.onRoadsChanged();
+    }
     map.setClear(i, Ground.Rough, 0);
   }
   touch(i);
@@ -309,6 +320,16 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
           }
           jobs.push({ i, kind: 'station' });
           cost += COSTS.stationRemove;
+        } else if ((type === TileType.RoadStop || type === TileType.RoadDepot || type === TileType.Road) && own) {
+          const c = roadTileClearCost(state, i, company);
+          if (typeof c === 'string') {
+            blocked = `${c} (${x},${y})`;
+            continue;
+          }
+          if (c !== null) {
+            jobs.push({ i, kind: type === TileType.RoadDepot ? 'depot' : 'station' });
+            cost += c;
+          }
         } else if (type === TileType.Depot && own) {
           if (state.depotHasVehicles(i)) {
             blocked = `The depot at ${x},${y} still has vehicles`;

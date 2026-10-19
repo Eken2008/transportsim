@@ -220,6 +220,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   }
   for (let i = 0; i < map.layers.type.length; i++) {
     if (map.layers.type[i] === TileType.Depot) state.depots.add(i);
+    if (map.layers.type[i] === TileType.RoadDepot) state.roadDepots.add(i);
     if (map.layers.signals[i]) state.signalTiles.add(i);
   }
   for (const t of Array.isArray(snap.trains) ? snap.trains : []) {

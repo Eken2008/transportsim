@@ -84,6 +84,10 @@ export class GameState {
   readonly removedTrains = new Set<number>();
   /** Tile indices of all depots. */
   readonly depots = new Set<number>();
+  /** Tile indices of all road depots. */
+  readonly roadDepots = new Set<number>();
+  /** Bumped whenever roads change (invalidates road vehicle routes). */
+  roadVersion = 0;
   /** Tile indices that carry at least one signal. */
   readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
@@ -536,6 +540,26 @@ export class GameState {
       sig[tile] = 0;
       this.signalTiles.delete(tile);
     }
+  }
+
+  onRoadsChanged(): void {
+    this.roadVersion++;
+  }
+
+  /** Is a road vehicle on this tile? */
+  roadBusy(tile: number): boolean {
+    for (const t of this.trains.values()) if (t.mode === 'road' && t.path.some((s) => segTile(s) === tile)) return true;
+    return false;
+  }
+
+  /** Is any road vehicle parked in (or on) the road depot on this tile? */
+  roadDepotHasVehicles(tile: number): boolean {
+    for (const t of this.trains.values()) {
+      if (t.mode !== 'road') continue;
+      if ((t.status === 'depot' || t.path.length === 0) && t.depot === tile) return true;
+      if (t.path.some((s) => segTile(s) === tile)) return true;
+    }
+    return false;
   }
 
   /** Whether any vehicle is parked in (or heading into) the depot on this tile. */

@@ -88,7 +88,7 @@ export function recomputeStationExtent(map: GameMap, st: Station): void {
   for (let y = sy0; y <= sy1; y++) {
     for (let x = sx0; x <= sx1; x++) {
       const i = map.tileIndex(x, y);
-      if (map.layers.type[i] !== TileType.Station || map.layers.data[i] !== st.id) continue;
+      if ((map.layers.type[i] !== TileType.Station && map.layers.type[i] !== TileType.RoadStop) || map.layers.data[i] !== st.id) continue;
       n++;
       if (x < x0) x0 = x;
       if (y < y0) y0 = y;
@@ -137,6 +137,20 @@ export function longestPlatform(map: GameMap, st: Station): number {
     }
   }
   return best;
+}
+
+/** Does the station have platforms (rail), bus stops or truck stops? */
+export function stationHas(map: GameMap, st: Station, what: 'rail' | 'bus' | 'truck'): boolean {
+  for (let y = st.y0; y <= st.y1; y++) {
+    for (let x = st.x0; x <= st.x1; x++) {
+      const i = map.tileIndex(x, y);
+      if (map.layers.data[i] !== st.id) continue;
+      const t = map.layers.type[i];
+      if (what === 'rail' && t === TileType.Station) return true;
+      if (t === TileType.RoadStop && ((map.layers.track[i]! & 0x10) !== 0) === (what === 'truck')) return true;
+    }
+  }
+  return false;
 }
 
 /** Depot tiles: `data` bits 0-1 hold the exit edge. */

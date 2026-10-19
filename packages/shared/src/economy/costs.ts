@@ -12,4 +12,8 @@ export const COSTS = {
   signal: 350,
   tunnelPerTile: 1_600,
   structureRemove: 400,
+  road: 180,
+  roadRemove: 40,
+  roadStop: 900,
+  roadDepot: 1_500,
 } as const;

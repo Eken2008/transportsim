@@ -312,6 +312,27 @@ try {
     await a.waitForTimeout(2000);
     await a.screenshot({ path: `${outDir}/04b-crossing.png` });
   }
+  // Roads: drag a road south of the line, a bus stop on it, a depot beside it, and a one-way piece.
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y + 6, yaw: 0.35, pitch: 1.05, distance: 26 }), { x: sx, y: sy });
+  await a.waitForTimeout(1500);
+  await a.keyboard.press('KeyG');
+  await dragTiles(sx - 6, sy + 8, sx + 6, sy + 8);
+  check((await tileAt(sx, sy + 8)).type === 3, 'built a road with the road tool');
+  if ((await tileAt(sx, sy + 8)).type !== 3) console.log('  toasts:', await a.locator('.toast').allInnerTexts(), JSON.stringify(await tileAt(sx, sy + 8)));
+  await a.keyboard.press('KeyH');
+  await clickTile(sx - 2, sy + 8);
+  check((await tileAt(sx - 2, sy + 8)).type === 8, 'built a bus stop');
+  await a.keyboard.press('KeyJ');
+  await clickTile(sx + 2, sy + 9);
+  check((await tileAt(sx + 2, sy + 9)).type === 9, 'built a road depot');
+  await a.keyboard.press('KeyK');
+  await clickTile(sx + 4, sy + 8);
+  check(((await tileAt(sx + 4, sy + 8)).data & 0x10) !== 0, 'made a road one-way');
+  await a.keyboard.press('Escape');
+  await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y + 6.5, yaw: 0.6, pitch: 0.7, distance: 9 }), { x: sx, y: sy });
+  await a.waitForTimeout(2000);
+  await a.screenshot({ path: `${outDir}/04b2-roads.png` });
+
   // Catchment from the station window
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x, y: s.y - 4, yaw: 0.35, pitch: 1.0, distance: 30 }), { x: sx, y: sy });
   await a.waitForTimeout(1500);

@@ -4,6 +4,9 @@ import {
   EDGE_MID_Y,
   HEIGHT_SCALE,
   ROAD_EDGE_BITS,
+  ROAD_ONE_WAY,
+  ROAD_ONE_WAY_REVERSED,
+  ROADSTOP_TRUCK,
   TileType,
   edgeHeight,
   houseType,
@@ -159,15 +162,26 @@ const PAVEMENT = lin('#9a958c');
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 
-/** Road surfaces for a chunk (town roads; level crossings are drawn with the track). */
+const MARKING = lin('#f2f2f2');
+const STOP_ROOF = lin('#4a6a8a');
+const STOP_YELLOW = lin('#e8c547');
+const GARAGE = lin('#8d8a84');
+const GARAGE_DOOR = lin('#2a2d31');
+
+/** Road surfaces for a chunk (roads, road stops and depots; level crossings are drawn with the track). */
 export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): void {
   const x0 = cx * CHUNK_SIZE;
   const y0 = cy * CHUNK_SIZE;
   for (let y = y0; y < y0 + CHUNK_SIZE; y++) {
     for (let x = x0; x < x0 + CHUNK_SIZE; x++) {
       const i = map.tileIndex(x, y);
-      if (map.layers.type[i] !== TileType.Road) continue;
-      const bits = map.layers.data[i]! & 0xf;
+      const type = map.layers.type[i];
+      if (type === TileType.RoadDepot) {
+        addRoadDepot(g, map, x, y, map.layers.data[i]! & 3);
+        continue;
+      }
+      if (type !== TileType.Road && type !== TileType.RoadStop) continue;
+      const bits = type === TileType.RoadStop ? map.layers.track[i]! & 0xf : map.layers.data[i]! & 0xf;
       const corners = map.tileCorners(x, y);
       const centre = ((corners[0] + corners[1] + corners[2] + corners[3]) / 4) * HEIGHT_SCALE + 0.01;
       _a.set(x + 0.5, centre, y + 0.5);
@@ -180,6 +194,57 @@ export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): v
         g.color(ASPHALT).box(_a, _b, 0.56, 0.03, false);
       }
       if (flat) g.color(ASPHALT).box(_b.set(x + 0.5, centre, y + 0.22), _a.clone().setZ(y + 0.78), 0.56, 0.03, false);
+      const data = map.layers.data[i]!;
+      if (type === TileType.Road && data & ROAD_ONE_WAY) addOneWayArrow(g, x, y, centre + 0.022, bits, (data & ROAD_ONE_WAY_REVERSED) !== 0);
+      if (type === TileType.RoadStop) addStopFurniture(g, x, y, centre, (bits & ROAD_EDGE_BITS[1]!) !== 0, (map.layers.track[i]! & ROADSTOP_TRUCK) !== 0);
     }
   }
+}
+
+/** A white arrow on the road surface pointing the way traffic flows. */
+function addOneWayArrow(g: GeoBuilder, x: number, y: number, h: number, bits: number, reversed: boolean): void {
+  const alongX = (bits & ROAD_EDGE_BITS[1]!) !== 0;
+  const sign = reversed ? -1 : 1;
+  const p = (along: number, across: number) =>
+    alongX ? new THREE.Vector3(x + 0.5 + along * sign, h, y + 0.5 + across) : new THREE.Vector3(x + 0.5 + across, h, y + 0.5 + along * sign);
+  g.color(MARKING);
+  const tip = p(0.28, 0);
+  const l = p(0.08, -0.1);
+  const r = p(0.08, 0.1);
+  g.tri(l, tip, r);
+  g.tri(r, tip, l);
+  g.box(p(-0.22, 0), p(0.1, 0), 0.05, 0.003, false);
+}
+
+/** Bus stop shelters (or truck loading bays) on both sides of a drive-through stop. */
+function addStopFurniture(g: GeoBuilder, x: number, y: number, h: number, alongX: boolean, truck: boolean): void {
+  for (const side of [-1, 1]) {
+    const off = 0.4 * side;
+    const [x0, z0, x1, z1] = alongX ? [x + 0.2, y + 0.5 + off - 0.07, x + 0.8, y + 0.5 + off + 0.07] : [x + 0.5 + off - 0.07, y + 0.2, x + 0.5 + off + 0.07, y + 0.8];
+    if (truck) {
+      g.color(STOP_YELLOW).aabb(x0, h, z0, x1, h + 0.08, z1); // loading bay edge
+    } else {
+      g.color(GARAGE_DOOR).aabb(x0, h, z0, x0 + 0.02, h + 0.26, z0 + 0.02);
+      g.color(GARAGE_DOOR).aabb(x1 - 0.02, h, z1 - 0.02, x1, h + 0.26, z1);
+      g.color(STOP_ROOF).aabb(x0 - 0.02, h + 0.26, z0 - 0.02, x1 + 0.02, h + 0.29, z1 + 0.02); // shelter roof
+    }
+  }
+}
+
+/** A garage with its door to the road at `exit`. */
+function addRoadDepot(g: GeoBuilder, map: GameMap, x: number, y: number, exit: number): void {
+  const h = map.cornerHeight(x, y) * HEIGHT_SCALE;
+  const m = 0.1;
+  g.color(GARAGE).aabb(x + m, h, y + m, x + 1 - m, h + 0.42, y + 1 - m);
+  g.color(STOP_ROOF).gable(x + m, y + m, x + 1 - m, y + 1 - m, h + 0.42, 0.14, 0.04, exit === 1 || exit === 3);
+  const d = 0.004;
+  g.color(GARAGE_DOOR);
+  if (exit === 0) g.aabb(x + 0.25, h, y + m - d, x + 0.75, h + 0.32, y + m);
+  else if (exit === 2) g.aabb(x + 0.25, h, y + 1 - m, x + 0.75, h + 0.32, y + 1 - m + d);
+  else if (exit === 1) g.aabb(x + 1 - m, h, y + 0.25, x + 1 - m + d, h + 0.32, y + 0.75);
+  else g.aabb(x + m - d, h, y + 0.25, x + m, h + 0.32, y + 0.75);
+  // Apron to the road
+  const ex = x + EDGE_MID_X[exit]!;
+  const ez = y + EDGE_MID_Y[exit]!;
+  g.color(ASPHALT).box(_a.set(x + 0.5 + (ex - x - 0.5) * 0.75, h + 0.01, y + 0.5 + (ez - y - 0.5) * 0.75), _b.set(ex, h + 0.01, ez), 0.5, 0.03, false);
 }

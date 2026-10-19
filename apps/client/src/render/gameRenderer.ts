@@ -3,6 +3,7 @@ import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
 import { useApp, type ToolId } from '../store.ts';
 import { BulldozeTool, ConvertTool, DepotTool, StationTool, WaypointTool } from '../tools/placeTools.ts';
+import { RoadPlaceTool, RoadTool } from '../tools/roadTools.ts';
 import { RailTool } from '../tools/railTool.ts';
 import { TerraformTool } from '../tools/terraformTool.ts';
 import type { Modifiers, Tool } from '../tools/tool.ts';
@@ -162,7 +163,8 @@ export class GameRenderer {
           s.bridgeType !== prev.bridgeType ||
           s.signalOneWay !== prev.signalOneWay ||
           s.signalKind !== prev.signalKind ||
-          s.railType !== prev.railType
+          s.railType !== prev.railType ||
+          s.roadStopKind !== prev.roadStopKind
         ) {
           this.tool?.invalidate?.();
           this.hoverDirty = true;
@@ -242,6 +244,15 @@ export class GameRenderer {
       case 'waypoint':
         this.tool = new WaypointTool(this.area);
         break;
+      case 'road':
+      case 'removeRoad':
+        this.tool = new RoadTool(this.area, id === 'removeRoad');
+        break;
+      case 'roadStop':
+      case 'roadDepot':
+      case 'oneWay':
+        this.tool = new RoadPlaceTool(this.area, id);
+        break;
       case 'orders':
         this.tool = new OrdersTool(this.area);
         break;
@@ -300,6 +311,8 @@ export class GameRenderer {
     const i = map.tileIndex(hit.tileX, hit.tileY);
     const type = map.layers.type[i];
     if (type === TileType.Depot) openWindow({ kind: 'depot', id: i });
+    else if (type === TileType.RoadDepot) openWindow({ kind: 'roadDepot', id: i });
+    else if (type === TileType.RoadStop) openWindow({ kind: 'station', id: map.layers.data[i]! });
     else if (type === TileType.Station) openWindow({ kind: 'station', id: map.layers.data[i]! });
     else if (type === TileType.Industry) openWindow({ kind: 'industry', id: map.layers.data[i]! });
     else if ((type === TileType.House || type === TileType.Road) && map.layers.town[i]) openWindow({ kind: 'town', id: map.layers.town[i]! - 1 });

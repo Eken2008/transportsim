@@ -57,6 +57,8 @@ export interface TrainUnit {
 
 export interface Train {
   id: number;
+  /** Rail (default) or road: a bus or truck, moved by the road system. */
+  mode?: 'rail' | 'road';
   owner: number;
   name: string;
   units: TrainUnit[];
