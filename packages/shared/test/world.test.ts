@@ -222,3 +222,22 @@ describe('towns', () => {
     expect([...restored.towns.values()]).toEqual([...state.towns.values()]);
   });
 });
+
+describe('terraforming', () => {
+  test('levelling a rectangle on a steep hillside levels all of it', () => {
+    const map = new GameMap(128, 128);
+    const cw = map.width + 1;
+    // A ramp rising towards the south-east, high above the level asked for.
+    for (let y = 0; y <= map.height; y++) for (let x = 0; x <= map.width; x++) map.heights[y * cw + x] = Math.min(30, (x + y) >> 2);
+    enforceSlopeLimit(map.heights, cw, map.height + 1);
+    for (let i = 0; i < map.width * map.height; i++) map.setClear(i, 0, 0);
+    const state = new GameState(settings(), map);
+    const p = state.addPlayer('A', true);
+    const c = state.foundCompany(p)!;
+    c.money = 1e9;
+    const r = executeCommand(state, { playerId: p.id, companyId: c.id }, { type: 'terraform', x0: 30, y0: 30, x1: 58, y1: 48, mode: 'level', level: 4 });
+    expect(r.ok).toBe(true);
+    for (let y = 30; y <= 48; y++) for (let x = 30; x <= 58; x++) expect(map.heights[y * cw + x]).toBe(4);
+    assertSlopeRule(map);
+  });
+});

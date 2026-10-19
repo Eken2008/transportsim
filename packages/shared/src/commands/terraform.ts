@@ -44,10 +44,13 @@ export const terraformHandler: CommandHandler<TerraformCommand> = {
     const changes = new Map<number, number>();
     const get = (i: number) => changes.get(i) ?? map.heights[i]!;
     const queue: number[] = [];
+    /** Corners inside the rectangle keep the height asked for; only the land around them gives. */
+    const fixed = new Set<number>();
 
     for (let y = ay; y <= by; y++) {
       for (let x = ax; x <= bx; x++) {
         const i = y * cw + x;
+        fixed.add(i);
         const h = map.heights[i]!;
         const nh = mode === 'raise' ? Math.min(MAX_HEIGHT, h + 1) : mode === 'lower' ? Math.max(0, h - 1) : level;
         if (nh !== h) {
@@ -60,17 +63,24 @@ export const terraformHandler: CommandHandler<TerraformCommand> = {
       return fail(mode === 'raise' ? 'Already at maximum height' : mode === 'lower' ? 'Already at sea level' : 'Already level');
     }
 
-    // Propagate the slope rule outward (adjacent corners differ by at most 1).
-    while (queue.length) {
-      const i = queue.pop()!;
+    // Propagate the slope rule outward (adjacent corners differ by at most 1), breadth first so
+    // each corner settles from its nearest changed corner.
+    for (let q = 0; q < queue.length; q++) {
+      const i = queue[q]!;
       const h = get(i);
       const x = i % cw;
       const y = (i - x) / cw;
       const visit = (n: number) => {
         const hn = get(n);
-        if (hn > h + 1) changes.set(n, h + 1);
-        else if (hn < h - 1) changes.set(n, h - 1);
-        else return;
+        if (Math.abs(hn - h) <= 1) return;
+        if (fixed.has(n)) {
+          // A corner of the rectangle: this corner gives way instead.
+          if (fixed.has(i)) return;
+          changes.set(i, hn > h ? hn - 1 : hn + 1);
+          queue.push(i);
+          return;
+        }
+        changes.set(n, hn > h ? h + 1 : h - 1);
         queue.push(n);
       };
       if (x > 0) visit(i - 1);
