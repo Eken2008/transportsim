@@ -13,7 +13,7 @@ import { JUMP_CONDITIONS, type AirPhase, type AirState, type ShipState } from '.
 import { isCargo } from '../economy/cargo.ts';
 import { industryType, newIndustry, type CargoAmounts, type Industry } from '../economy/industries.ts';
 import type { StationPacket } from '../economy/cargoSystem.ts';
-import { emptyInfrastructure, sanitizeFinances } from '../economy/finance.ts';
+import { emptyInfrastructure, sanitizeDelivered, sanitizeFinances, sanitizeHistory, sanitizeLedger } from '../economy/finance.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
 import { GameState } from '../sim/state.ts';
 import { TICKS_PER_DAY, daysFromYmd } from '../sim/date.ts';
@@ -130,6 +130,8 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       invites: sanitizeMembers(c.invites, false).slice(0, 16),
       foundedDays: num(c.foundedDays, state.date),
       finances: sanitizeFinances(c.finances, state.date),
+      history: sanitizeHistory(c.history),
+      month: { ledger: sanitizeLedger(c.month?.ledger), delivered: sanitizeDelivered(c.month?.delivered) },
       badQuarters: Math.max(0, Math.floor(num(c.badQuarters, 0))),
       infrastructure: emptyInfrastructure(),
       value: num(c.value, 0),

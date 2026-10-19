@@ -13,6 +13,8 @@ import {
   type ClientMessage,
   type GameSpeed,
   type GameState,
+  type Industry,
+  type Station,
   type GlobalState,
   type Player,
   type RoomSummary,
@@ -42,9 +44,16 @@ export interface Session {
   cmdCount: number;
   /** Last signal aspects sent (to send only changes). */
   lastSignals?: string;
+  /** Stations and industries shown in the client's windows. */
+  watchStations?: Set<number>;
+  watchIndustries?: Set<number>;
 }
 
 const MAX_CHUNKS_PER_FLUSH = 12;
+
+/** What every player must hear about when it changes (the rest only goes to those looking). */
+const stationSig = (s: Station) => `${s.name}|${s.owner}|${s.x0},${s.y0},${s.x1},${s.y1}|${s.airport?.kind ?? ''}|${s.townId}`;
+const industrySig = (i: Industry) => `${i.level}|${i.name}`;
 const MAX_COMMANDS_PER_SECOND = 40;
 const MAX_CATCHUP_STEPS = 60;
 const POS_INTERVAL_MS = 100;
@@ -94,6 +103,9 @@ export class Room {
 
   start(): void {
     this.state.cargo.runner = this.linkGraph.runner;
+    // Joining players get every station and industry in full, so start from what they have.
+    for (const s of this.state.stations.values()) this.stationSigs.set(s.id, stationSig(s));
+    for (const i of this.state.industries.values()) this.industrySigs.set(i.id, industrySig(i));
     this.lastStepAt = performance.now();
     this.timer = setInterval(() => this.update(), 1000 / TICKS_PER_SECOND);
   }
@@ -169,6 +181,7 @@ export class Room {
     this.send(session, { t: 'stations', stations: [...this.state.stations.values()], removed: [], full: true });
     this.send(session, { t: 'trains', trains: [...this.state.trains.values()].map(trainInfo), removed: [], full: true });
     this.send(session, { t: 'news', items: this.state.news.slice(-NEWS_ON_JOIN), full: true });
+    this.send(session, { t: 'history', companies: [...this.state.companies.values()].map((c) => ({ id: c.id, finances: c.finances, months: c.history })), full: true });
 
     if (isHost && this.hostCloseTimer) {
       clearTimeout(this.hostCloseTimer);
@@ -250,6 +263,12 @@ export class Room {
         }
         for (const c of session.sentVersions.keys()) if (!next.has(c)) session.sentVersions.delete(c);
         session.subscribed = next;
+        return;
+      }
+      case 'watch': {
+        const ids = (a: unknown) => new Set((Array.isArray(a) ? a : []).filter((n): n is number => Number.isInteger(n)).slice(0, 64));
+        session.watchStations = ids(msg.stations);
+        session.watchIndustries = ids(msg.industries);
         return;
       }
       case 'command': {
@@ -390,8 +409,25 @@ export class Room {
     const st = this.state;
     const map = st.map;
     if (st.dirtyStations.size > 0 || st.removedStations.size > 0) {
-      const stations = [...st.dirtyStations].map((id) => st.stations.get(id)).filter((s) => s !== undefined);
-      this.broadcast({ t: 'stations', stations, removed: [...st.removedStations], full: false });
+      // Everyone hears about new, moved or renamed stations; day-to-day changes (waiting cargo,
+      // ratings) only go to players looking at them.
+      const all: Station[] = [];
+      const local: Station[] = [];
+      for (const id of st.dirtyStations) {
+        const s = st.stations.get(id);
+        if (!s) continue;
+        const sig = stationSig(s);
+        if (this.stationSigs.get(id) !== sig) {
+          this.stationSigs.set(id, sig);
+          all.push(s);
+        } else local.push(s);
+      }
+      for (const id of st.removedStations) this.stationSigs.delete(id);
+      const removed = [...st.removedStations];
+      for (const session of this.sessions) {
+        const near = local.filter((s) => session.watchStations?.has(s.id) || this.sees(session, s.x, s.y));
+        if (all.length || near.length || removed.length) this.send(session, { t: 'stations', stations: [...all, ...near], removed, full: false });
+      }
       st.dirtyStations.clear();
       st.removedStations.clear();
     }
@@ -401,10 +437,35 @@ export class Room {
       st.dirtyTowns.clear();
     }
     if (st.dirtyIndustries.size > 0 || st.removedIndustries.size > 0) {
-      const industries = [...st.dirtyIndustries].map((id) => st.industries.get(id)).filter((i) => i !== undefined);
-      this.broadcast({ t: 'industries', industries, removed: [...st.removedIndustries], full: false });
+      // New industries and level changes go to everyone; production figures only to players
+      // looking at the industry.
+      const all: Industry[] = [];
+      const local: Industry[] = [];
+      for (const id of st.dirtyIndustries) {
+        const ind = st.industries.get(id);
+        if (!ind) continue;
+        const sig = industrySig(ind);
+        if (this.industrySigs.get(id) !== sig) {
+          this.industrySigs.set(id, sig);
+          all.push(ind);
+        } else local.push(ind);
+      }
+      for (const id of st.removedIndustries) this.industrySigs.delete(id);
+      const removed = [...st.removedIndustries];
+      for (const session of this.sessions) {
+        const near = local.filter((i) => session.watchIndustries?.has(i.id) || this.sees(session, i.x + i.w / 2, i.y + i.h / 2));
+        if (all.length || near.length || removed.length) this.send(session, { t: 'industries', industries: [...all, ...near], removed, full: false });
+      }
       st.dirtyIndustries.clear();
       st.removedIndustries.clear();
+    }
+    if (st.historyChanged.size > 0) {
+      const companies = [...st.historyChanged]
+        .map((id) => st.companies.get(id))
+        .filter((c) => c !== undefined)
+        .map((c) => ({ id: c.id, finances: c.finances, months: c.history.slice(-1) }));
+      if (companies.length) this.broadcast({ t: 'history', companies, full: false });
+      st.historyChanged.clear();
     }
     if (st.dirtyTrains.size > 0 || st.removedTrains.size > 0) {
       const trains = [...st.dirtyTrains].map((id) => st.trains.get(id)).filter((t) => t !== undefined).map(trainInfo);
@@ -518,7 +579,8 @@ export class Room {
       date: this.state.date,
       dayTick: this.state.dayTick,
       speed: this.speed,
-      companies: [...this.state.companies.values()],
+      // Past quarters and monthly statistics travel in `history` messages.
+      companies: [...this.state.companies.values()].map((c) => ({ ...c, finances: c.finances.slice(-1), history: [] })),
       players: [...this.state.players.values()],
       agreements: [...this.state.agreements.values()],
       waypoints: [...this.state.waypoints.values()],
@@ -539,6 +601,18 @@ export class Room {
   }
 
   // ---- helpers ---------------------------------------------------------------
+
+  /** Last shape of each station/industry sent to everyone (see flush). */
+  private stationSigs = new Map<number, string>();
+  private industrySigs = new Map<number, string>();
+
+  /** Is the tile at (x, y) in a chunk this session is looking at? */
+  private sees(session: Session, x: number, y: number): boolean {
+    const map = this.state.map;
+    const cx = Math.max(0, Math.min(map.chunksX - 1, Math.floor(x / CHUNK_SIZE)));
+    const cy = Math.max(0, Math.min(map.chunksY - 1, Math.floor(y / CHUNK_SIZE)));
+    return session.subscribed.has(cy * map.chunksX + cx);
+  }
 
   send(session: Session, msg: ServerMessage): void {
     const bytes = encodeFrame(msg);

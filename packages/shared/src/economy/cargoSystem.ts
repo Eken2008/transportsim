@@ -512,6 +512,8 @@ export class CargoSystem {
       const dist = from ? Math.abs(from.x - st.x) + Math.abs(from.y - st.y) : 0;
       income += Math.round(cargoPayment(p.cargo, p.n, dist, this.state.date - p.day) * this.state.inflation.payments);
       if (deliver) {
+        const c = this.state.companies.get(t.owner);
+        if (c) c.month.delivered[p.cargo] = (c.month.delivered[p.cargo] ?? 0) + p.n;
         this.deliverToIndustry(st, p.cargo, p.n);
         if (p.cargo === 'goods' || p.cargo === 'food') this.countForTown(st, p.cargo, p.n);
       }

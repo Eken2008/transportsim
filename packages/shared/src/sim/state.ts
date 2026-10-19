@@ -11,6 +11,7 @@ import { IncidentSystem } from '../incidents/rail.ts';
 import { COSTS } from '../economy/costs.ts';
 import {
   BANKRUPT_QUARTERS,
+  HISTORY_MONTHS,
   LEDGER_QUARTERS,
   LOAN_STEP,
   emptyInfrastructure,
@@ -95,6 +96,8 @@ export class GameState {
   readonly roadDepots = new Set<number>();
   /** Bumped whenever roads change (invalidates road vehicle routes). */
   roadVersion = 0;
+  /** Companies whose statistics got a new month (or a closed quarter) since the last sync. */
+  readonly historyChanged = new Set<number>();
   /** Tile indices of all ship depots. */
   readonly shipDepots = new Set<number>();
   /** Bumped whenever waterways change (ships check their routes). */
@@ -245,10 +248,16 @@ export class GameState {
     }
     const econ = ECONOMY[this.settings.economy];
     this.countInfrastructure();
+    const vehicles = new Map<number, number>();
+    for (const t of this.trains.values()) vehicles.set(t.owner, (vehicles.get(t.owner) ?? 0) + 1);
     for (const c of this.companies.values()) {
       if (c.loan > 0) this.addMoney(c.id, -Math.round((c.loan * econ.interestRate) / 12), 'interest');
       this.addMoney(c.id, -Math.round(this.cost(yearlyMaintenance(c.infrastructure)) / 12), 'property');
       c.value = this.companyValue(c);
+      c.history.push({ date: this.date, money: c.money, loan: c.loan, value: c.value, vehicles: vehicles.get(c.id) ?? 0, ...c.month });
+      if (c.history.length > HISTORY_MONTHS) c.history.splice(0, c.history.length - HISTORY_MONTHS);
+      c.month = { ledger: emptyLedger(), delivered: {} };
+      this.historyChanged.add(c.id);
     }
     industryMonthly(this, this.industryRng, ymdFromDays(this.date).year);
     if (ymdFromDays(this.date).month % 3 === 0) this.onNewQuarter();
@@ -316,6 +325,7 @@ export class GameState {
     c.money += delta;
     const q = c.finances[c.finances.length - 1];
     if (category && q) q.ledger[category] += delta;
+    if (category) c.month.ledger[category] += delta;
   }
 
   /** Count every company's track, stations, depots and signals (for maintenance and value). */
@@ -703,6 +713,8 @@ export class GameState {
       value: econ.startMoney,
       autorenew: true,
       replace: {},
+      history: [],
+      month: { ledger: emptyLedger(), delivered: {} },
     };
     this.companies.set(id, company);
     this.addMember(company, founder.name, 'owner');

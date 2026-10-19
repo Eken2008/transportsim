@@ -1,4 +1,4 @@
-import type { Infrastructure, QuarterRecord } from '../economy/finance.ts';
+import type { Infrastructure, MonthRecord, MonthSoFar, QuarterRecord } from '../economy/finance.ts';
 
 /**
  * Member roles, most powerful first:
@@ -63,6 +63,10 @@ export interface Company {
   autorenew: boolean;
   /** Replacement rules: vehicle type → the type to replace it with on a depot visit. */
   replace: Record<string, string>;
+  /** Month-end records, oldest first (statistics). */
+  history: MonthRecord[];
+  /** The current month's books and deliveries. */
+  month: MonthSoFar;
 }
 
 export function memberOf(c: Company, name: string): CompanyMember | undefined {

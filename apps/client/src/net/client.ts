@@ -10,7 +10,10 @@ import {
   type GameSettings,
   type GameSpeed,
   type GlobalState,
+  type MonthRecord,
+  type QuarterRecord,
   type ServerMessage,
+  HISTORY_MONTHS,
 } from '@transportsim/shared';
 import { ClientWorld } from '../game/clientWorld.ts';
 import { downloadSave, gzip, listSaves, putSave, requestPersistentStorage } from '../saves/saveStore.ts';
@@ -29,6 +32,9 @@ class AppClient {
   private seq = 0;
   private pending = new Map<number, Pending>();
   private worldListeners = new Set<(w: ClientWorld | null) => void>();
+  /** Company books and statistics (merged into each `global`). */
+  private histories = new Map<number, { finances: QuarterRecord[]; months: MonthRecord[] }>();
+  private watchKey = '';
 
   constructor() {
     this.conn = new Connection(serverUrl(), () => ({
@@ -46,6 +52,15 @@ class AppClient {
     };
     this.conn.onMessage = (m) => this.handle(m);
     void this.refreshSaves();
+    // Tell the server which stations and industries have windows open.
+    useApp.subscribe((s) => {
+      const stations = s.windows.filter((w) => w.kind === 'station').map((w) => w.id);
+      const industries = s.windows.filter((w) => w.kind === 'industry').map((w) => w.id);
+      const key = `${stations}|${industries}`;
+      if (key === this.watchKey || !this.world) return;
+      this.watchKey = key;
+      this.conn.send({ t: 'watch', stations, industries });
+    });
   }
 
   start(): void {
@@ -63,6 +78,20 @@ class AppClient {
   }
 
   private rejoinRoomId: string | null = null;
+
+  /** The global state with each company's past quarters and monthly statistics filled in. */
+  private withHistory(g: GlobalState): GlobalState {
+    return {
+      ...g,
+      companies: g.companies.map((c) => {
+        const h = this.histories.get(c.id);
+        if (!h) return c;
+        const now = c.finances.at(-1);
+        const past = h.finances.filter((q) => !now || q.year !== now.year || q.quarter !== now.quarter);
+        return { ...c, finances: now ? [...past, now] : h.finances, history: h.months };
+      }),
+    };
+  }
 
   private handle(m: ServerMessage): void {
     switch (m.t) {
@@ -82,6 +111,8 @@ class AppClient {
       case 'roomJoined': {
         const sameRoom = this.world && useApp.getState().room?.id === m.roomId;
         if (!sameRoom) this.setWorld(new ClientWorld(m.settings));
+        this.watchKey = '';
+        m.global = this.withHistory(m.global);
         this.world!.applyGlobal(m.global);
         this.rejoinRoomId = m.roomId;
         useApp.setState({
@@ -128,11 +159,28 @@ class AppClient {
       case 'income':
         this.world?.onIncome?.(m.tile, m.amount);
         return;
-      case 'global':
-        this.notifyMembership(useApp.getState().global, m.global);
-        this.world?.applyGlobal(m.global);
-        useApp.setState({ global: m.global });
+      case 'global': {
+        const g = this.withHistory(m.global);
+        this.notifyMembership(useApp.getState().global, g);
+        this.world?.applyGlobal(g);
+        useApp.setState({ global: g });
         return;
+      }
+      case 'history': {
+        if (m.full) this.histories.clear();
+        for (const c of m.companies) {
+          const had = this.histories.get(c.id);
+          const months = m.full || !had ? c.months : [...had.months, ...c.months].slice(-HISTORY_MONTHS);
+          this.histories.set(c.id, { finances: c.finances, months });
+        }
+        const g = useApp.getState().global;
+        if (g) {
+          const merged = this.withHistory(g);
+          this.world?.applyGlobal(merged);
+          useApp.setState({ global: merged });
+        }
+        return;
+      }
       case 'commandResult': {
         const p = this.pending.get(m.seq);
         this.pending.delete(m.seq);

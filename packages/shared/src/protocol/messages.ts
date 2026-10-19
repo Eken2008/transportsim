@@ -1,5 +1,6 @@
 import type { Command } from '../commands/index.ts';
 import type { Company } from '../company/company.ts';
+import type { MonthRecord, QuarterRecord } from '../economy/finance.ts';
 import type { Agreement } from '../company/sharing.ts';
 import type { Waypoint } from '../rail/waypoint.ts';
 import type { GameSettings, ServerLimits } from '../sim/settings.ts';
@@ -47,6 +48,12 @@ export interface GlobalState {
 
 export type ChatChannel = 'all' | 'company';
 
+export interface CompanyHistory {
+  id: number;
+  finances: QuarterRecord[];
+  months: MonthRecord[];
+}
+
 /** Settings the host can change while the game runs. */
 export type LiveSetting = 'name' | 'maxPlayers' | 'isPublic';
 
@@ -61,6 +68,8 @@ export type ClientMessage =
   | { t: 'leaveRoom' }
   /** Full set of chunk ids the client wants to receive (replaces previous set). */
   | { t: 'subscribe'; chunks: number[] }
+  /** Stations and industries the client shows in open windows (it gets their updates wherever they are). */
+  | { t: 'watch'; stations: number[]; industries: number[] }
   | { t: 'command'; seq: number; cmd: Command }
   | { t: 'setSpeed'; speed: GameSpeed }
   | { t: 'autosave'; enabled: boolean }
@@ -111,6 +120,12 @@ export type ServerMessage =
   /** A train was paid at a station (floating "+£" label). */
   | { t: 'income'; tile: number; amount: number }
   | { t: 'global'; global: GlobalState }
+  /**
+   * Company books and monthly statistics. `full` replaces what the client has; otherwise
+   * `months` are appended and `finances` replace the quarters. (The daily `global` message only
+   * carries each company's current quarter.)
+   */
+  | { t: 'history'; companies: CompanyHistory[]; full: boolean }
   /** Settings changed by the host during the game. */
   | { t: 'settings'; settings: GameSettings }
   | { t: 'commandResult'; seq: number; ok: boolean; error?: string; cost?: number }
