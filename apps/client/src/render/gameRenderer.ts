@@ -351,7 +351,7 @@ export class GameRenderer {
     this.lastTime = now;
 
     this.controller.update(dt);
-    this.trains.update(now, useApp.getState().global?.speed ?? 1);
+    this.trains.update(now, useApp.getState().global?.speed ?? 1, this.controller.target, this.controller.distance);
     this.signalLights.update();
     this.updateReservations();
     this.updateWrecks();
