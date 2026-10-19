@@ -7,6 +7,13 @@ import { cargoCount, type Train } from '../vehicles/train.ts';
 import { CARGO_IDS, cargoPayment, type CargoId } from './cargo.ts';
 import { RATING_STEP, ratingParts } from './rating.ts';
 import { industryType } from './industries.ts';
+import { solveLinkGraph, type LinkGraphInput, type LinkGraphResult } from './linkGraph.ts';
+
+/** Solve link graphs and hand back the results (possibly later, e.g. from a worker). */
+export type LinkGraphRunner = (inputs: LinkGraphInput[], done: (results: LinkGraphResult[]) => void) => void;
+
+/** Days between link graph recalculations (sooner when services change). */
+export const LINK_GRAPH_DAYS = 8;
 
 /** Passengers generated per day per resident in a station's catchment, at full rating. */
 const GENERATION_PER_RESIDENT = 1 / 45;
@@ -58,6 +65,15 @@ export class CargoSystem {
   private catch = new Map<number, Catchment>();
   /** cargo → station → stations reachable by a direct train service carrying that cargo. */
   private links = new Map<CargoId, Map<number, number[]>>();
+  /** cargo → link "from>to" → capacity: consecutive stops of trains carrying the cargo. */
+  private linkCaps = new Map<CargoId, Map<string, number>>();
+  /** Cargodist results per cargo: demand and next hops. */
+  private flows = new Map<CargoId, { demand: Map<number, [number, number][]>; nextHop: Map<number, Map<number, number>> }>();
+  private graphPending = false;
+  private graphDay = -Infinity;
+  private graphKey = '';
+  /** Solves link graphs; synchronous by default, a worker on the server. */
+  runner: LinkGraphRunner = (inputs, done) => done(inputs.map(solveLinkGraph));
   /** Packets waiting at each station. */
   readonly packets = new Map<number, StationPacket[]>();
   private rng: Random;
@@ -77,9 +93,85 @@ export class CargoSystem {
     return this.catch.get(stationId)?.share ?? 0;
   }
 
-  /** Direct destinations of a station for a cargo. */
+  /** Destinations a station sends a cargo to: from cargodist, or (before it has run) direct links. */
   destinations(cargo: CargoId, station: number): readonly number[] {
-    return this.links.get(cargo)?.get(station) ?? [];
+    return this.destinationWeights(cargo, station).map(([d]) => d);
+  }
+
+  /** Destinations with demand weights. */
+  destinationWeights(cargo: CargoId, station: number): readonly [number, number][] {
+    const flow = this.flows.get(cargo);
+    if (flow) return flow.demand.get(station) ?? [];
+    const symmetric = cargo === 'passengers' || cargo === 'mail';
+    return (this.links.get(cargo)?.get(station) ?? []).map((d) => [d, symmetric ? Math.max(1, this.population(d)) : 1]);
+  }
+
+  /** The next station cargo for `dest` goes to from `station`, or undefined if it can't get there. */
+  hopFor(cargo: CargoId, station: number, dest: number): number | undefined {
+    const flow = this.flows.get(cargo);
+    if (flow) return flow.nextHop.get(station)?.get(dest);
+    return this.links.get(cargo)?.get(station)?.includes(dest) ? dest : undefined;
+  }
+
+  // ---- cargodist -----------------------------------------------------------------
+
+  /** Link graph inputs for every cargo some train carries. */
+  graphInputs(): LinkGraphInput[] {
+    const inputs: LinkGraphInput[] = [];
+    for (const [cargo, caps] of this.linkCaps) {
+      const symmetric = cargo === 'passengers' || cargo === 'mail';
+      const stations = [...this.state.stations.values()].map((st) => ({
+        id: st.id,
+        x: st.x,
+        y: st.y,
+        supply: this.supplyOf(st, cargo),
+        accepts: st.accepts?.includes(cargo) ?? false,
+      }));
+      const links = [...caps].map(([k, capacity]) => {
+        const [from, to] = k.split('>').map(Number);
+        return { from: from!, to: to!, capacity };
+      });
+      inputs.push({ cargo, symmetric, stations, links });
+    }
+    return inputs;
+  }
+
+  /** Monthly amount of a cargo a station could send (residents, or nearby industries' output). */
+  private supplyOf(st: Station, cargo: CargoId): number {
+    if (cargo === 'passengers') return this.share(st.id) * GENERATION_PER_RESIDENT * 30;
+    if (cargo === 'mail') return this.share(st.id) * MAIL_PER_RESIDENT * 30;
+    let n = 0;
+    for (const id of st.industries ?? []) {
+      const ind = this.state.industries.get(id);
+      const type = ind && industryType(ind.type);
+      if (!ind || !type?.produces.includes(cargo)) continue;
+      n += type.production > 0 ? type.production * ind.level : (ind.lastProduced[cargo] ?? 0);
+    }
+    return n;
+  }
+
+  /** Recompute link graphs every few days, or as soon as the services change. */
+  private scheduleGraph(): void {
+    if (this.graphPending) return;
+    const key = [...this.linkCaps].map(([c, m]) => `${c}:${[...m.keys()].sort().join(',')}`).join(';');
+    if (key === this.graphKey && this.state.date - this.graphDay < LINK_GRAPH_DAYS) return;
+    this.graphKey = key;
+    this.graphDay = this.state.date;
+    const inputs = this.graphInputs();
+    this.graphPending = true;
+    this.runner(inputs, (results) => this.applyGraph(results));
+  }
+
+  /** Install solved link graphs. */
+  applyGraph(results: LinkGraphResult[]): void {
+    this.graphPending = false;
+    this.flows.clear();
+    for (const r of results) {
+      this.flows.set(r.cargo, {
+        demand: new Map(r.demand),
+        nextHop: new Map(r.nextHop.map(([s, hops]) => [s, new Map(hops)])),
+      });
+    }
   }
 
   // ---- packets -----------------------------------------------------------------
@@ -203,11 +295,20 @@ export class CargoSystem {
 
     // Direct links per cargo: stations that a train carrying the cargo calls at in turn.
     this.links.clear();
+    this.linkCaps.clear();
     for (const t of this.state.trains.values()) {
       const caps = this.state.rail.statsOf(t).capacities;
-      const stops = [...new Set(t.orders.flatMap((o) => (o.kind === 'station' ? [o.station] : [])))];
+      const order = t.orders.flatMap((o) => (o.kind === 'station' ? [o.station] : []));
+      const stops = [...new Set(order)];
       for (const cargo of CARGO_IDS) {
         if (!caps[cargo]) continue;
+        let linkCaps = this.linkCaps.get(cargo);
+        if (!linkCaps) this.linkCaps.set(cargo, (linkCaps = new Map()));
+        for (let k = 0; k < order.length && order.length > 1; k++) {
+          const a = order[k]!;
+          const b = order[(k + 1) % order.length]!;
+          if (a !== b) linkCaps.set(`${a}>${b}`, (linkCaps.get(`${a}>${b}`) ?? 0) + caps[cargo]!);
+        }
         let byStation = this.links.get(cargo);
         if (!byStation) this.links.set(cargo, (byStation = new Map()));
         for (const a of stops) {
@@ -253,13 +354,14 @@ export class CargoSystem {
   /** Daily: update ratings, generate cargo, let unserved or excess cargo give up. */
   daily(): void {
     this.refresh();
+    this.scheduleGraph();
     this.produce();
     for (const st of this.state.stations.values()) {
       this.updateRating(st);
-      // Cargo for destinations no longer served drifts away.
+      // Cargo that can no longer get to its destination drifts away.
       const list = this.packets.get(st.id);
-      if (list?.some((p) => !this.destinations(p.cargo, st.id).includes(p.dest))) {
-        this.scaleWaiting(st, (p) => (this.destinations(p.cargo, st.id).includes(p.dest) ? 1 : 0.8));
+      if (list?.some((p) => this.hopFor(p.cargo, st.id, p.dest) === undefined)) {
+        this.scaleWaiting(st, (p) => (this.hopFor(p.cargo, st.id, p.dest) === undefined ? 0.8 : 1));
       }
       const pop = this.share(st.id);
       if (pop <= 0) continue;
@@ -319,14 +421,16 @@ export class CargoSystem {
 
   /** Put `n` units of cargo produced near a station on its platforms, spread over destinations. */
   private send(st: Station, cargo: CargoId, n: number): void {
-    const dests = this.destinations(cargo, st.id);
-    if (n <= 0 || dests.length === 0) return;
-    const per = Math.max(1, Math.ceil(n / dests.length));
-    for (const dest of dests) {
-      const k = Math.min(per, n);
-      if (k <= 0) break;
-      this.addWaiting(st, { cargo, dest, src: st.id, n: k, day: this.state.date });
-      n -= k;
+    const dests = this.destinationWeights(cargo, st.id);
+    if (dests.length === 0) return;
+    const total = dests.reduce((a, [, w]) => a + w, 0);
+    while (n > 0) {
+      let r = this.rng.next() * total;
+      let k = 0;
+      while (k < dests.length - 1 && r >= dests[k]![1]) r -= dests[k++]![1];
+      const batch = Math.max(1, Math.ceil(n / 4));
+      this.addWaiting(st, { cargo, dest: dests[k]![0], src: st.id, n: batch, day: this.state.date });
+      n -= batch;
     }
   }
 
@@ -348,20 +452,9 @@ export class CargoSystem {
 
   /** Generate `perDay` (at full rating) units of `cargo` at a station, spread over its destinations. */
   private generate(st: Station, cargo: CargoId, perDay: number): void {
-    const dests = this.destinations(cargo, st.id);
-    if (dests.length === 0) return;
+    if (this.destinationWeights(cargo, st.id).length === 0) return;
     const expected = perDay * (st.rating / 255);
-    let n = Math.floor(expected) + (this.rng.next() < expected % 1 ? 1 : 0);
-    const weights = dests.map((d) => Math.max(1, this.population(d)));
-    const total = weights.reduce((a, b) => a + b, 0);
-    while (n > 0) {
-      let r = this.rng.next() * total;
-      let k = 0;
-      while (k < dests.length - 1 && r >= weights[k]!) r -= weights[k++]!;
-      const batch = Math.max(1, Math.ceil(n / 4));
-      this.addWaiting(st, { cargo, dest: dests[k]!, src: st.id, n: batch, day: this.state.date });
-      n -= batch;
-    }
+    this.send(st, cargo, Math.floor(expected) + (this.rng.next() < expected % 1 ? 1 : 0));
   }
 
   private updateRating(st: Station): void {
@@ -392,15 +485,21 @@ export class CargoSystem {
     }
     let income = 0;
     const keep = [];
+    const ahead = new Set(this.stopsAfter(t, stationId));
     for (const p of t.cargo) {
-      if (p.dest !== stationId) {
+      const deliver = p.dest === stationId;
+      // Transfer here if this is the planned hop, or if the train no longer goes to it.
+      const transfer = !deliver && (p.hop === stationId || p.hop === undefined || !ahead.has(p.hop));
+      if (!deliver && !transfer) {
         keep.push(p);
         continue;
       }
-      const src = this.state.stations.get(p.src);
-      const dist = src ? Math.abs(src.x - st.x) + Math.abs(src.y - st.y) : 0;
+      // Each leg is paid to the company that carried it.
+      const from = this.state.stations.get(p.at ?? p.src);
+      const dist = from ? Math.abs(from.x - st.x) + Math.abs(from.y - st.y) : 0;
       income += cargoPayment(p.cargo, p.n, dist, this.state.date - p.day);
-      this.deliverToIndustry(st, p.cargo, p.n);
+      if (deliver) this.deliverToIndustry(st, p.cargo, p.n);
+      else this.addWaiting(st, { cargo: p.cargo, dest: p.dest, src: p.src, n: p.n, day: p.day });
     }
     t.cargo = keep;
     if (income > 0) {
@@ -409,6 +508,17 @@ export class CargoSystem {
       this.events.push({ tile: st.y * this.state.map.width + st.x, amount: income, owner: t.owner });
     }
     this.load(t, st);
+  }
+
+  /** Stations a train calls at after `here`, in order (one round of its orders). */
+  private stopsAfter(t: Train, here: number): number[] {
+    const stops: number[] = [];
+    const n = t.orders.length;
+    for (let k = 1; k <= n; k++) {
+      const o = t.orders[(t.orderIndex + k) % n]!;
+      if (o.kind === 'station' && o.station !== here && !stops.includes(o.station)) stops.push(o.station);
+    }
+    return stops;
   }
 
   /** While standing at a platform: keep topping up; returns true to keep waiting (full load). */
@@ -430,23 +540,19 @@ export class CargoSystem {
     }
     const list = this.packets.get(st.id);
     if (room.size === 0 || !list?.length) return;
-    // Next stops first, so cargo for the nearest destination boards first.
-    const stops: number[] = [];
-    for (let k = 1; k <= t.orders.length; k++) {
-      const o = t.orders[(t.orderIndex + k) % t.orders.length]!;
-      if (o.kind === 'station' && o.station !== st.id && !stops.includes(o.station)) stops.push(o.station);
-    }
+    // Cargo boards if the train calls at its next hop; nearest stops first.
+    const stops = this.stopsAfter(t, st.id);
     let boarded = 0;
-    for (const dest of stops) {
+    for (const hop of stops) {
       for (const p of list) {
         const space = room.get(p.cargo) ?? 0;
-        if (p.dest !== dest || p.n <= 0 || space <= 0) continue;
+        if (p.n <= 0 || space <= 0 || this.hopFor(p.cargo, st.id, p.dest) !== hop) continue;
         const n = Math.min(p.n, space);
         p.n -= n;
         room.set(p.cargo, space - n);
-        const same = t.cargo.find((q) => q.cargo === p.cargo && q.dest === dest && q.src === p.src && q.day === p.day);
+        const same = t.cargo.find((q) => q.cargo === p.cargo && q.dest === p.dest && q.src === p.src && q.day === p.day && q.hop === hop && q.at === st.id);
         if (same) same.n += n;
-        else t.cargo.push({ cargo: p.cargo, dest, src: p.src, n, day: p.day, hop: dest });
+        else t.cargo.push({ cargo: p.cargo, dest: p.dest, src: p.src, n, day: p.day, hop, at: st.id });
         boarded += n;
       }
     }

@@ -19,6 +19,7 @@ import {
   type ServerMessage,
 } from '@transportsim/shared';
 import type { ServerConfig } from './config.ts';
+import { LinkGraphWorker } from './linkGraphWorker.ts';
 
 /** Transport-agnostic connection so rooms can be tested without sockets. */
 export interface Connection {
@@ -72,6 +73,8 @@ export class Room {
   private lastAutosaveAt = 0;
   private hostClosesAt: number | null = null;
   private lastPosAt = 0;
+  /** Cargodist link graphs are solved in a worker. */
+  private readonly linkGraph = new LinkGraphWorker();
 
   constructor(
     id: string,
@@ -88,6 +91,7 @@ export class Room {
   }
 
   start(): void {
+    this.state.cargo.runner = this.linkGraph.runner;
     this.lastStepAt = performance.now();
     this.timer = setInterval(() => this.update(), 1000 / TICKS_PER_SECOND);
   }
@@ -217,6 +221,7 @@ export class Room {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
     if (this.hostCloseTimer) clearTimeout(this.hostCloseTimer);
+    this.linkGraph.terminate();
     this.timer = null;
     this.hostCloseTimer = null;
     for (const s of this.sessions) {

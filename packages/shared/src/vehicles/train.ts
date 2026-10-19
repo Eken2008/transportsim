@@ -45,6 +45,8 @@ export interface CargoPacket {
   n: number;
   day: number;
   hop?: number;
+  /** Station this leg started at (for paying each leg); the origin if missing. */
+  at?: number;
 }
 
 export interface TrainUnit {
