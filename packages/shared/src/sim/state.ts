@@ -23,7 +23,7 @@ import {
 } from '../economy/finance.ts';
 import { demolishTile, refreshStations } from '../commands/station.ts';
 import { removeAirport } from '../commands/airport.ts';
-import { OWNER_NONE, TileType } from '../world/constants.ts';
+import { OWNER_NONE, TileType, WATER_BUOY, WATER_CANAL } from '../world/constants.ts';
 import type { Agreement } from '../company/sharing.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
 import { ELECTRIC_TYPES } from '../rail/railTypes.ts';
@@ -33,6 +33,8 @@ import { NEWS_HISTORY, type NewsItem, type NewsKind } from '../news/news.ts';
 import { RailSystem } from '../vehicles/railSystem.ts';
 import { RoadSystem } from '../vehicles/roadSystem.ts';
 import { AirSystem } from '../vehicles/airSystem.ts';
+import { ShipSystem } from '../vehicles/shipSystem.ts';
+import { removeWaterTile } from '../commands/water.ts';
 import { hangarTile } from '../air/airports.ts';
 import { isRailVehicle } from '../vehicles/train.ts';
 import type { Train } from '../vehicles/train.ts';
@@ -93,11 +95,16 @@ export class GameState {
   readonly roadDepots = new Set<number>();
   /** Bumped whenever roads change (invalidates road vehicle routes). */
   roadVersion = 0;
+  /** Tile indices of all ship depots. */
+  readonly shipDepots = new Set<number>();
+  /** Bumped whenever waterways change (ships check their routes). */
+  waterVersion = 0;
   /** Tile indices that carry at least one signal. */
   readonly signalTiles = new Set<number>();
   readonly rail: RailSystem;
   readonly road: RoadSystem;
   readonly air: AirSystem;
+  readonly ships: ShipSystem;
   readonly cargo: CargoSystem;
   readonly maintenance: MaintenanceSystem;
   readonly incidents: IncidentSystem;
@@ -137,6 +144,10 @@ export class GameState {
     this.air.onService = (t) => this.maintenance.service(t);
     this.air.onArrive = (t, s) => this.cargo.arrive(t, s);
     this.air.onLoading = (t, s) => this.cargo.loading(t, s);
+    this.ships = new ShipSystem(this);
+    this.ships.onService = (t) => this.maintenance.service(t);
+    this.ships.onArrive = (t, s) => this.cargo.arrive(t, s);
+    this.ships.onLoading = (t, s) => this.cargo.loading(t, s);
     this.cargo = new CargoSystem(this);
     this.maintenance = new MaintenanceSystem(this);
     this.rail.onService = (t) => this.maintenance.service(t);
@@ -171,6 +182,7 @@ export class GameState {
     this.rail.step();
     this.road.step();
     this.air.step();
+    this.ships.step();
     if (this.agreements.size > 0) this.countSharing();
     const ev: TickEvents = { newDay: false, newMonth: false, newYear: false };
     if (++this.dayTick >= TICKS_PER_DAY) {
@@ -325,8 +337,9 @@ export class GameState {
         infra.track += Math.max(1, n);
         const sig = signals[i]!;
         for (let p = 0; p < 6; p++) if ((sig >> (p * 2)) & 3) infra.signals++;
-      } else if (t === TileType.Station || t === TileType.RoadStop || t === TileType.Airport) infra.stations++;
-      else if (t === TileType.Depot || t === TileType.RoadDepot) infra.depots++;
+      } else if (t === TileType.Lock || (t === TileType.Water && this.map.layers.data[i]! & WATER_CANAL)) infra.track++;
+      else if (t === TileType.Station || t === TileType.RoadStop || t === TileType.Airport || t === TileType.Dock) infra.stations++;
+      else if (t === TileType.Depot || t === TileType.RoadDepot || t === TileType.ShipDepot) infra.depots++;
     }
     for (const [id, infra] of counts) this.companies.get(id)!.infrastructure = infra;
   }
@@ -353,6 +366,7 @@ export class GameState {
       if (this.isOnTrackOf(t, id)) this.towHome(t);
     }
     for (const t of [...this.trains.values()]) if (t.owner === id) this.removeVehicle(t);
+    for (const wp of [...this.waypoints.values()]) if (wp.buoy && wp.owner === id) this.deleteWaypoint(wp.id);
     const { type, owner } = this.map.layers;
     const dirty = new Set<number>();
     const stations = new Set<number>();
@@ -362,6 +376,11 @@ export class GameState {
       if (t === TileType.Airport) {
         stations.add(this.map.layers.data[i]!);
         removeAirport(this, this.map.layers.data[i]!);
+        continue;
+      }
+      if (t === TileType.Water || t === TileType.Lock || t === TileType.ShipDepot || t === TileType.Dock) {
+        const st = removeWaterTile(this, i, id, dirty);
+        if (st !== null) stations.add(st);
         continue;
       }
       if (t !== TileType.Rail && t !== TileType.Station && t !== TileType.Depot && t !== TileType.RoadStop && t !== TileType.RoadDepot) continue;
@@ -469,12 +488,14 @@ export class GameState {
   /** Put a vehicle straight into its company's nearest depot, or sell it if there is none. */
   towHome(t: Train): void {
     const w = this.map.width;
-    const head = t.path.length ? segTile(t.path[0]!) : Math.max(0, t.depot);
+    const free = t.air ?? t.ship;
+    const head = free ? Math.floor(free.y) * this.map.width + Math.floor(free.x) : t.path.length ? segTile(t.path[0]!) : Math.max(0, t.depot);
     const hx = head % w;
     const hy = (head - hx) / w;
     let best = -1;
     let bestD = Infinity;
-    for (const d of t.mode === 'road' ? this.roadDepots : t.mode === 'air' ? this.hangars(t.owner) : this.depots) {
+    const depots = t.mode === 'road' ? this.roadDepots : t.mode === 'air' ? this.hangars(t.owner) : t.mode === 'water' ? this.shipDepots : this.depots;
+    for (const d of depots) {
       if (this.map.layers.owner[d] !== t.owner) continue;
       const dx = (d % w) - hx;
       const dy = Math.floor(d / w) - hy;
@@ -523,6 +544,8 @@ export class GameState {
     this.waypoints.delete(id);
     const { type, data } = this.map.layers;
     if (type[wp.tile] === TileType.Rail) data[wp.tile] = data[wp.tile]! & ~WAYPOINT_FLAG;
+    if (type[wp.tile] === TileType.Water) data[wp.tile] = data[wp.tile]! & ~WATER_BUOY;
+    this.map.touchTile(wp.tile % this.map.width, Math.floor(wp.tile / this.map.width));
     for (const t of this.trains.values()) {
       const keep = t.orders.filter((o) => o.kind !== 'waypoint' || o.waypoint !== id);
       if (keep.length === t.orders.length) continue;
@@ -538,6 +561,7 @@ export class GameState {
     // Waypoints whose track went away go with it.
     const { type, data } = this.map.layers;
     for (const wp of [...this.waypoints.values()]) {
+      if (wp.buoy) continue;
       if (type[wp.tile] !== TileType.Rail || !(data[wp.tile]! & WAYPOINT_FLAG)) this.deleteWaypoint(wp.id);
     }
   }
@@ -563,14 +587,18 @@ export class GameState {
     this.roadVersion++;
   }
 
+  onWaterChanged(): void {
+    this.waterVersion++;
+  }
+
   /** Is a road vehicle on this tile? */
   roadBusy(tile: number): boolean {
     return this.road.busy(tile);
   }
 
   /** The system that moves a vehicle: rail for trains, road for buses and trucks. */
-  systemOf(t: Train): RailSystem | RoadSystem | AirSystem {
-    return t.mode === 'road' ? this.road : t.mode === 'air' ? this.air : this.rail;
+  systemOf(t: Train): RailSystem | RoadSystem | AirSystem | ShipSystem {
+    return t.mode === 'road' ? this.road : t.mode === 'air' ? this.air : t.mode === 'water' ? this.ships : this.rail;
   }
 
   /** Hangar tiles of a company's airports. */

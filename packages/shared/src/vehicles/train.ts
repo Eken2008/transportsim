@@ -70,6 +70,23 @@ export interface AirState {
   goal?: 'gate' | 'hold' | 'hangar' | 'waitGate';
 }
 
+/** A ship's position (tile coordinates) and route. */
+export interface ShipState {
+  x: number;
+  y: number;
+  heading: number;
+  /** Tiles still to sail through, next first; the last is where it is going. */
+  path: number[];
+  /** Ticks left waiting in a lock (or for one to free up). */
+  lockWait?: number;
+  /** What the end of the path is: a dock's water tile, a buoy, or a depot. */
+  goal?: 'dock' | 'buoy' | 'depot';
+  /** Ticks to wait before trying to find a route again. */
+  retry?: number;
+  /** Waterways version the route was checked against. */
+  ver?: number;
+}
+
 /** Is this a train (not a road vehicle or aircraft)? */
 export const isRailVehicle = (t: { mode?: string }) => !t.mode || t.mode === 'rail';
 
@@ -81,10 +98,12 @@ export interface TrainUnit {
 
 export interface Train {
   id: number;
-  /** Rail (default), road (a bus or truck) or air (an aircraft). */
-  mode?: 'rail' | 'road' | 'air';
+  /** Rail (default), road (a bus or truck), air (an aircraft) or water (a ship). */
+  mode?: 'rail' | 'road' | 'air' | 'water';
   /** Aircraft only: where it is and what it is doing. */
   air?: AirState;
+  /** Ships only: where it is and where it is sailing. */
+  ship?: ShipState;
   owner: number;
   name: string;
   units: TrainUnit[];
@@ -219,4 +238,6 @@ export interface TrainMotion {
   ahead: number[];
   /** Aircraft: x, y, z (tiles), heading (radians), speed (tiles per second). */
   air?: [number, number, number, number, number];
+  /** Ships: [x, y, water level (height units), heading, speed tiles/s]. */
+  ship?: [number, number, number, number, number];
 }

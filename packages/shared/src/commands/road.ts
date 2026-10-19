@@ -1,5 +1,5 @@
 import { COSTS } from '../economy/costs.ts';
-import { STATION_JOIN_DISTANCE, recomputeStationExtent, stationName, type Station } from '../rail/station.ts';
+import { findJoinStation, recomputeStationExtent, stationName } from '../rail/station.ts';
 import { structuresAt } from '../rail/structures.ts';
 import { EDGE_DX, EDGE_DY, Edge, OPPOSITE_EDGE, Piece, edgeHeight } from '../rail/track.ts';
 import { WAYPOINT_FLAG } from '../rail/waypoint.ts';
@@ -284,16 +284,7 @@ export const buildRoadStopHandler: CommandHandler<BuildRoadStopCommand> = {
     if (!isStraightRoad(data) || data & ROAD_ONE_WAY || !map.isFlat(x, y)) return fail('Road stops need a flat, straight two-way road');
     if (state.roadBusy(i)) return fail('A road vehicle is in the way');
     const company = ctx.companyId!;
-    let join: Station | undefined;
-    const d = STATION_JOIN_DISTANCE;
-    for (let ty = y - d; ty <= y + d && !join; ty++) {
-      for (let tx = x - d; tx <= x + d && !join; tx++) {
-        if (!map.inBounds(tx, ty)) continue;
-        const t = map.tileIndex(tx, ty);
-        const tt = map.layers.type[t];
-        if ((tt === TileType.Station || tt === TileType.RoadStop) && map.layers.owner[t] === company) join = state.stations.get(map.layers.data[t]!);
-      }
-    }
+    const join = findJoinStation(map, state.stations, company, x, y, x, y);
     return {
       ok: true,
       cost: state.cost(COSTS.roadStop),

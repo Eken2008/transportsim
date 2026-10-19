@@ -479,7 +479,7 @@ export class CargoSystem {
     if (st.firstArrival === undefined) {
       st.firstArrival = this.state.date;
       const owner = this.state.companies.get(t.owner)?.name ?? 'A company';
-      const first = t.mode === 'air' ? 'first aircraft lands' : t.mode === 'road' ? `first ${isBus(t.units[0]!) ? 'bus' : 'truck'} arrives` : 'first train arrives';
+      const first = t.mode === 'air' ? 'first aircraft lands' : t.mode === 'water' ? 'first ship docks' : t.mode === 'road' ? `first ${isBus(t.units[0]!) ? 'bus' : 'truck'} arrives` : 'first train arrives';
       this.state.addNews('station', `Citizens celebrate! The ${first} at ${st.name} (${owner})`, {
         company: t.owner,
         tile: st.y * this.state.map.width + st.x,

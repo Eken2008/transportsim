@@ -50,6 +50,18 @@ import { loanHandler, type LoanCommand } from './finance.ts';
 import { convertRailHandler, type ConvertRailCommand } from './convert.ts';
 import { buildWaypointHandler, removeWaypointHandler, type BuildWaypointCommand, type RemoveWaypointCommand } from './waypoint.ts';
 import { buildAirportHandler, type BuildAirportCommand } from './airport.ts';
+import {
+  buildBuoyHandler,
+  buildCanalHandler,
+  buildDockHandler,
+  buildLockHandler,
+  buildShipDepotHandler,
+  type BuildBuoyCommand,
+  type BuildCanalCommand,
+  type BuildDockCommand,
+  type BuildLockCommand,
+  type BuildShipDepotCommand,
+} from './water.ts';
 import { trainSettingsHandler, vehicleSettingsHandler, type TrainSettingsCommand, type VehicleSettingsCommand } from './maintenance.ts';
 import {
   buildRoadDepotHandler,
@@ -89,6 +101,7 @@ export * from './waypoint.ts';
 export * from './maintenance.ts';
 export * from './road.ts';
 export * from './airport.ts';
+export * from './water.ts';
 
 export type Command =
   | TerraformCommand
@@ -127,7 +140,12 @@ export type Command =
   | SetOneWayCommand
   | BuildRoadDepotCommand
   | BuildRoadStopCommand
-  | BuildAirportCommand;
+  | BuildAirportCommand
+  | BuildCanalCommand
+  | BuildLockCommand
+  | BuildDockCommand
+  | BuildShipDepotCommand
+  | BuildBuoyCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -168,6 +186,11 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   buildRoadDepot: buildRoadDepotHandler,
   buildRoadStop: buildRoadStopHandler,
   buildAirport: buildAirportHandler,
+  buildCanal: buildCanalHandler,
+  buildLock: buildLockHandler,
+  buildDock: buildDockHandler,
+  buildShipDepot: buildShipDepotHandler,
+  buildBuoy: buildBuoyHandler,
 };
 
 const PERMISSION_ERRORS = {

@@ -25,14 +25,19 @@ export type UnitModel =
   | 'tipper'
   | 'prop'
   | 'jet'
-  | 'jumbo';
+  | 'jumbo'
+  | 'ferry'
+  | 'paddle'
+  | 'cargoship'
+  | 'tankership'
+  | 'hovercraft';
 
 export interface RailVehicleType {
   id: string;
   name: string;
   kind: 'loco' | 'wagon';
-  /** Road vehicles (buses and trucks) or aircraft; rail if absent. */
-  mode?: 'road' | 'air';
+  /** Road vehicles (buses and trucks), aircraft or ships; rail if absent. */
+  mode?: 'road' | 'air' | 'water';
   model: UnitModel;
   traction?: Traction;
   /** Cargoes a wagon can be refitted to carry; the first is the default. */
@@ -152,8 +157,27 @@ export const AIRCRAFT: readonly RailVehicleType[] = [
   air({ id: 'cargo_jet', name: 'Cargo jet', model: 'jet', cargoes: ['goods', 'mail', 'food'], capacity: 70, length: 20, maxSpeed: 850, power: 20_000, mass: 60, cost: 400_000, runningCost: 28_000, intro: 1975, retire: 2100, lifespan: 25, reliability: 0.92, heavy: true }),
 ];
 
-/** Every vehicle type, rail, road and air. */
-export const ALL_VEHICLES: readonly RailVehicleType[] = [...RAIL_VEHICLES, ...ROAD_VEHICLES, ...AIRCRAFT];
+const ship = (v: Omit<RailVehicleType, 'kind' | 'mode' | 'tractiveEffort'>): RailVehicleType => ({ kind: 'loco', mode: 'water', tractiveEffort: 0, ...v });
+const SHIP_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'steel'];
+const SHIP_PIECE: CargoId[] = ['goods', 'food', 'mail', 'livestock', 'grain'];
+
+/** Ships, bought at ship depots: slow, but they carry a lot. */
+export const SHIPS: readonly RailVehicleType[] = [
+  ship({ id: 'steam_ferry', name: 'Steam ferry', model: 'ferry', cargoes: ['passengers', 'mail'], capacity: 90, length: 18, maxSpeed: 20, power: 150, mass: 120, cost: 22_000, runningCost: 2_200, intro: 1850, retire: 1930, lifespan: 30, reliability: 0.75 }),
+  ship({ id: 'paddle_steamer', name: 'Paddle steamer', model: 'paddle', cargoes: ['passengers', 'mail'], capacity: 140, length: 20, maxSpeed: 24, power: 250, mass: 180, cost: 30_000, runningCost: 2_800, intro: 1860, retire: 1950, lifespan: 30, reliability: 0.78 }),
+  ship({ id: 'steam_coaster', name: 'Steam coaster', model: 'cargoship', cargoes: SHIP_BULK, capacity: 160, length: 20, maxSpeed: 18, power: 200, mass: 300, cost: 26_000, runningCost: 2_400, intro: 1850, retire: 1950, lifespan: 30, reliability: 0.76 }),
+  ship({ id: 'cargo_steamer', name: 'Cargo steamer', model: 'cargoship', cargoes: SHIP_PIECE, capacity: 120, length: 20, maxSpeed: 20, power: 220, mass: 260, cost: 28_000, runningCost: 2_500, intro: 1870, retire: 1955, lifespan: 30, reliability: 0.77 }),
+  ship({ id: 'oil_barge', name: 'Oil barge', model: 'tankership', cargoes: ['oil'], capacity: 140, length: 20, maxSpeed: 16, power: 180, mass: 280, cost: 27_000, runningCost: 2_300, intro: 1880, retire: 1960, lifespan: 30, reliability: 0.78 }),
+  ship({ id: 'motor_ferry', name: 'Motor ferry', model: 'ferry', cargoes: ['passengers', 'mail'], capacity: 200, length: 22, maxSpeed: 32, power: 800, mass: 250, cost: 60_000, runningCost: 4_500, intro: 1925, retire: 2000, lifespan: 30, reliability: 0.85 }),
+  ship({ id: 'bulk_carrier', name: 'Bulk carrier', model: 'cargoship', cargoes: SHIP_BULK, capacity: 300, length: 24, maxSpeed: 26, power: 1_200, mass: 500, cost: 75_000, runningCost: 5_200, intro: 1935, retire: 2100, lifespan: 30, reliability: 0.87 }),
+  ship({ id: 'freighter', name: 'Freighter', model: 'cargoship', cargoes: SHIP_PIECE, capacity: 220, length: 24, maxSpeed: 28, power: 1_200, mass: 450, cost: 72_000, runningCost: 5_000, intro: 1935, retire: 2100, lifespan: 30, reliability: 0.87 }),
+  ship({ id: 'oil_tanker', name: 'Oil tanker', model: 'tankership', cargoes: ['oil'], capacity: 320, length: 26, maxSpeed: 26, power: 1_500, mass: 600, cost: 85_000, runningCost: 5_600, intro: 1940, retire: 2100, lifespan: 30, reliability: 0.87 }),
+  ship({ id: 'hovercraft', name: 'Hovercraft', model: 'hovercraft', cargoes: ['passengers', 'mail'], capacity: 120, length: 16, maxSpeed: 110, power: 3_000, mass: 60, cost: 180_000, runningCost: 14_000, intro: 1968, retire: 2100, lifespan: 20, reliability: 0.88 }),
+  ship({ id: 'fast_ferry', name: 'Fast catamaran ferry', model: 'ferry', cargoes: ['passengers', 'mail'], capacity: 300, length: 22, maxSpeed: 65, power: 6_000, mass: 200, cost: 160_000, runningCost: 11_000, intro: 1990, retire: 2100, lifespan: 25, reliability: 0.93 }),
+];
+
+/** Every vehicle type: rail, road, air and water. */
+export const ALL_VEHICLES: readonly RailVehicleType[] = [...RAIL_VEHICLES, ...ROAD_VEHICLES, ...AIRCRAFT, ...SHIPS];
 
 const BY_ID = new Map(ALL_VEHICLES.map((v) => [v.id, v]));
 /** Any vehicle type by id (rail or road). */

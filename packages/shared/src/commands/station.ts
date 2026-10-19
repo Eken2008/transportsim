@@ -2,10 +2,9 @@ import { COSTS } from '../economy/costs.ts';
 import {
   MAX_PLATFORMS,
   MAX_PLATFORM_LENGTH,
-  STATION_JOIN_DISTANCE,
+  findJoinStation,
   recomputeStationExtent,
   stationName,
-  type Station,
 } from '../rail/station.ts';
 import { headInfo, otherHead, structuresAt } from '../rail/structures.ts';
 import { linkPlaced, unlinkPieces } from '../rail/links.ts';
@@ -15,6 +14,7 @@ import { CROSSING_FLAG } from './track.ts';
 import type { GameState } from '../sim/state.ts';
 import { removeRoadStop, roadTileClearCost } from './road.ts';
 import { airportClearCost, removeAirport } from './airport.ts';
+import { removeWaterTile, waterClearCost } from './water.ts';
 import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
@@ -97,17 +97,7 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
     if (tiles.length === 0) return fail('Already built');
 
     // Join an adjacent station of ours, if any.
-    let join: Station | undefined;
-    const d = STATION_JOIN_DISTANCE;
-    for (let ty = y - d; ty < y + h + d && !join; ty++) {
-      for (let tx = x - d; tx < x + w + d && !join; tx++) {
-        if (!map.inBounds(tx, ty)) continue;
-        const i = map.tileIndex(tx, ty);
-        if (map.layers.type[i] === TileType.Station && map.layers.owner[i] === company) {
-          join = state.stations.get(map.layers.data[i]!);
-        }
-      }
-    }
+    const join = findJoinStation(map, state.stations, company, x, y, x + w - 1, y + h - 1);
 
     return {
       ok: true,
@@ -271,7 +261,7 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
     if (!map.inBounds(ax, ay) || !map.inBounds(bx, by)) return fail('Out of bounds');
     if (bx - ax >= MAX_CLEAR || by - ay >= MAX_CLEAR) return fail('Area too large');
     const company = ctx.companyId!;
-    const jobs: { i: number; kind: 'trees' | 'rail' | 'station' | 'depot' | 'structure' | 'airport' }[] = [];
+    const jobs: { i: number; kind: 'trees' | 'rail' | 'station' | 'depot' | 'structure' | 'airport' | 'water' }[] = [];
     const queued = new Set<number>();
     let cost = 0;
     let blocked: string | null = null;
@@ -342,6 +332,16 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
             jobs.push({ i, kind: 'airport' });
             cost += c;
           }
+        } else if (type === TileType.Water || ((type === TileType.Lock || type === TileType.ShipDepot || type === TileType.Dock) && own)) {
+          const c = waterClearCost(state, i, company);
+          if (typeof c === 'string') {
+            blocked = `${c} (${x},${y})`;
+            continue;
+          }
+          if (c !== null) {
+            jobs.push({ i, kind: 'water' });
+            cost += c;
+          }
         } else if (type === TileType.Depot && own) {
           if (state.depotHasVehicles(i)) {
             blocked = `The depot at ${x},${y} still has vehicles`;
@@ -365,6 +365,11 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
             const st = map.layers.data[i]!;
             removeAirport(state, st);
             stations.add(st);
+            continue;
+          }
+          if (kind === 'water') {
+            const st = removeWaterTile(state, i, company, dirtyChunks);
+            if (st !== null) stations.add(st);
             continue;
           }
           if (kind === 'trees') {

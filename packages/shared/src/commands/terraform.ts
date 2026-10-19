@@ -1,5 +1,5 @@
 import { COSTS } from '../economy/costs.ts';
-import { MAX_HEIGHT, TileType } from '../world/constants.ts';
+import { MAX_HEIGHT, TileType, WATER_BUOY, WATER_CANAL } from '../world/constants.ts';
 import { reclassifyTile } from '../world/terrain.ts';
 import { structuresAt } from '../rail/structures.ts';
 import { fail, isInt, type CommandHandler } from './types.ts';
@@ -100,6 +100,7 @@ export const terraformHandler: CommandHandler<TerraformCommand> = {
           if (!map.inBounds(tx, ty)) continue;
           const t = map.type(tx, ty);
           if (t !== TileType.Clear && t !== TileType.Water) return fail(`Object in the way at ${tx},${ty}`);
+          if (t === TileType.Water && map.layers.data[ty * map.width + tx]! & (WATER_CANAL | WATER_BUOY)) return fail(`A canal or buoy is in the way at ${tx},${ty}`);
           tiles.add(ty * map.width + tx);
         }
       }

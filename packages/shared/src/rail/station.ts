@@ -51,6 +51,33 @@ export const MAX_PLATFORM_LENGTH = 16;
 /** Max distance (tiles) between a new platform and an existing station to join it. */
 export const STATION_JOIN_DISTANCE = 1;
 
+/** Tile types that are part of a station. */
+export const isStationTile = (type: number) => type === TileType.Station || type === TileType.RoadStop || type === TileType.Airport || type === TileType.Dock;
+
+/** A company's station with a part within the join distance of the area x0..x1, y0..y1 (inclusive). */
+export function findJoinStation(
+  map: GameMap,
+  stations: ReadonlyMap<number, Station>,
+  company: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): Station | undefined {
+  const d = STATION_JOIN_DISTANCE;
+  for (let ty = y0 - d; ty <= y1 + d; ty++) {
+    for (let tx = x0 - d; tx <= x1 + d; tx++) {
+      if (!map.inBounds(tx, ty)) continue;
+      const i = map.tileIndex(tx, ty);
+      if (isStationTile(map.layers.type[i]!) && map.layers.owner[i] === company) {
+        const st = stations.get(map.layers.data[i]!);
+        if (st) return st;
+      }
+    }
+  }
+  return undefined;
+}
+
 const SUFFIXES = ['Central', 'North', 'South', 'East', 'West', 'Junction', 'Halt', 'Parkway', 'Road', 'Exchange', 'Bridge', 'Cross'];
 
 /** Pick a unique name for a new station from the nearest town. */

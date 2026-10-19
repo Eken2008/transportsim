@@ -1,6 +1,6 @@
 import { createNoise2D } from 'simplex-noise';
 import { Random } from '../util/random.ts';
-import { Ground, MAX_HEIGHT, MAX_TREES, SNOW_LINE, TileType } from './constants.ts';
+import { Ground, MAX_HEIGHT, MAX_TREES, SNOW_LINE, TileType, WATER_CANAL } from './constants.ts';
 import { GameMap } from './map.ts';
 
 export type TerrainRoughness = 'flat' | 'hilly' | 'mountainous';
@@ -153,7 +153,7 @@ export function reclassifyTile(map: GameMap, x: number, y: number): void {
   const i = map.tileIndex(x, y);
   const type = map.layers.type[i];
   const maxH = map.tileMaxHeight(x, y);
-  if (type === TileType.Water && maxH > 0) {
+  if (type === TileType.Water && maxH > 0 && !(map.layers.data[i]! & WATER_CANAL)) {
     map.setClear(i, Ground.Grass, 0);
   } else if (type === TileType.Clear && maxH === 0 && touchesWater(map, x, y)) {
     map.setWater(i);

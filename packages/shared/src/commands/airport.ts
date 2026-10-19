@@ -1,6 +1,6 @@
 import { AIRPORT_TYPES, airportKindError, airportRole, hangarTile, type AirportKind } from '../air/airports.ts';
 import { COSTS } from '../economy/costs.ts';
-import { STATION_JOIN_DISTANCE, recomputeStationExtent, stationName, type Station } from '../rail/station.ts';
+import { findJoinStation, recomputeStationExtent, stationName } from '../rail/station.ts';
 import { structuresAt } from '../rail/structures.ts';
 import type { GameState } from '../sim/state.ts';
 import { Ground, TileType } from '../world/constants.ts';
@@ -36,18 +36,7 @@ export const buildAirportHandler: CommandHandler<BuildAirportCommand> = {
       }
     }
     const company = ctx.companyId!;
-    let join: Station | undefined;
-    const d = STATION_JOIN_DISTANCE;
-    for (let ty = y - d; ty < y + t.h + d && !join; ty++) {
-      for (let tx = x - d; tx < x + t.w + d && !join; tx++) {
-        if (!map.inBounds(tx, ty)) continue;
-        const i = map.tileIndex(tx, ty);
-        const tt = map.layers.type[i];
-        if ((tt === TileType.Station || tt === TileType.RoadStop || tt === TileType.Airport) && map.layers.owner[i] === company) {
-          join = state.stations.get(map.layers.data[i]!);
-        }
-      }
-    }
+    const join = findJoinStation(map, state.stations, company, x, y, x + t.w - 1, y + t.h - 1);
     if (join?.airport) return fail(`${join.name} already has an airport`);
     return {
       ok: true,

@@ -24,6 +24,12 @@ export const TileType = {
   RoadDepot: 9,
   /** Airport tile (part of a station): data = station id, track = AirportRole. */
   Airport: 10,
+  /** Canal lock on a straight slope: data bit 0 = axis (0 along X, 1 along Y). */
+  Lock: 11,
+  /** Dock on the shore (part of a station): data = station id, track = edge facing the water. */
+  Dock: 12,
+  /** Ship depot on water: data bit 0 = axis, bit 1 = built on a canal. */
+  ShipDepot: 13,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 
@@ -45,3 +51,8 @@ export const Ground = {
 export type Ground = (typeof Ground)[keyof typeof Ground];
 
 export const MAX_TREES = 4;
+
+/** Layout of `data` for Water tiles. */
+export const WATER_CANAL = 0x1;
+/** A buoy floats on this water tile (it is a waypoint). */
+export const WATER_BUOY = 0x2;

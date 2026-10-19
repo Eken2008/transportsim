@@ -242,6 +242,38 @@ Each part ends with green tests and a commit.
 
    The owner pays compensation and the news reports it.
 
+### M7 in detail
+Each part ends with green tests and a commit.
+1. **Waterways.**
+   - **Canals:** company-built water on flat land at any height (Water tiles with a canal flag). They join the sea where the levels match.
+   - **Locks:** one tile on a straight slope, linking water at two levels; one ship at a time, with a wait while the level changes.
+   - **Docks:** a station part on the shore, facing a water tile where ships load. Docks join a nearby station or make one ("`<town>` Docks").
+   - **Ship depots:** on water, lengthways along X or Y; ships pass through only along their axis.
+   - **Buoys:** waypoints on water for steering ships.
+   - **Removal:** bulldozing removes all of them. Canals and locks can't be removed with ships on them.
+   - **Client:** draws canal water at its height, lock walls and gates, docks, depots and buoys, from a Water menu.
+2. **Ships.**
+   - **Data model:** ships are Trains with `mode: 'water'`: ferries, cargo ships, tankers and hovercraft from 1850 to 2050.
+   - **Movement:** pathfinding over the water grid (A*, diagonals only in open water), then sailing tile to tile with continuous positions. Ships pass through each other, as in OpenTTD.
+   - **Orders and servicing:** stations with docks, buoys, and depot services.
+   - **Client:** ships drawn on the water surface, and a ship depot window.
+3. **Ship incidents.** With accidents on:
+   - a ship that breaks down may founder; the owner pays, the news reports it, and the wreck blocks its tile for cleanup days.
+
+   Plus smoke coverage and the README.
+
+### M8 in detail
+1. **Scale.**
+   - A benchmark (`bun run bench`) that builds a large map with thousands of vehicles across every mode and reports tick time.
+   - Profiling and fixing the hot spots it shows.
+   - A load test (`bun run loadtest`): bot clients join one game over WebSockets, issue commands, and the tool reports tick time and bytes per client per second.
+   - Bandwidth: smaller position updates.
+2. **Rendering.** Vehicles beyond a draw distance are skipped, labels are culled, and chunk LOD is checked on large maps.
+3. **Statistics.** Monthly company history (money, income, profit, cargo delivered, vehicles, company value) with graphs in a statistics window, and a cargo payment chart.
+4. **Tutorial.** An optional step-by-step guide for new players: build track, a station, a depot and a train, give it orders and start it. Each step is ticked off from the game state.
+5. **Audio.** Sounds synthesised with Web Audio (no asset files) for building, demolishing, money, news and crashes, plus ambient vehicle sounds near the camera. Volume and mute controls.
+6. **Self-hosting docs.** `docs/SELF_HOSTING.md` covers every server setting (port, `MAX_PLAYERS`, map size limit, game count, grace period), building, running behind a proxy, and hardware guidance.
+
 ## Key dependencies
 `three`, `react`, `react-dom`, `zustand`, `vite`, `@vitejs/plugin-react`, `msgpackr`, `simplex-noise`, `idb` (a small IndexedDB wrapper) and `concurrently` (to run client and server together in dev). The server uses Bun's built-in `Bun.serve` WebSockets, so it needs no `ws` package, and tests use `bun test`.
 

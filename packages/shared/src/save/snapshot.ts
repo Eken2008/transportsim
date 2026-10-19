@@ -3,13 +3,13 @@ import type { Station } from '../rail/station.ts';
 import { railVehicle } from '../vehicles/catalog.ts';
 import { linkAllByGeometry } from '../rail/links.ts';
 import type { Train } from '../vehicles/train.ts';
-import { TileType } from '../world/constants.ts';
+import { TileType, WATER_BUOY } from '../world/constants.ts';
 import { recountTowns, type Town, type TownStats } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
-import { JUMP_CONDITIONS, type AirPhase, type AirState } from '../vehicles/train.ts';
+import { JUMP_CONDITIONS, type AirPhase, type AirState, type ShipState } from '../vehicles/train.ts';
 import { isCargo } from '../economy/cargo.ts';
 import { industryType, newIndustry, type CargoAmounts, type Industry } from '../economy/industries.ts';
 import type { StationPacket } from '../economy/cargoSystem.ts';
@@ -223,6 +223,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   for (let i = 0; i < map.layers.type.length; i++) {
     if (map.layers.type[i] === TileType.Depot) state.depots.add(i);
     if (map.layers.type[i] === TileType.RoadDepot) state.roadDepots.add(i);
+    if (map.layers.type[i] === TileType.ShipDepot) state.shipDepots.add(i);
     if (map.layers.signals[i]) state.signalTiles.add(i);
   }
   for (const t of Array.isArray(snap.trains) ? snap.trains : []) {
@@ -233,14 +234,16 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   state.rail.rebuildOccupancy();
   state.road.rebuildOccupancy();
   state.air.rebuild();
+  state.ships.rebuild();
   state.countInfrastructure();
   for (const c of state.companies.values()) if (!c.value) c.value = state.companyValue(c);
   state.setAgreements(sanitizeAgreements(snap.agreements, new Set(state.companies.keys())));
   state.nextAgreementId = Math.max(num(snap.nextAgreementId, 1), ...[...state.agreements.keys()].map((k) => k + 1));
   for (const w of Array.isArray(snap.waypoints) ? snap.waypoints : []) {
     if (!w || typeof w.id !== 'number' || typeof w.tile !== 'number') continue;
-    if (map.layers.type[w.tile] !== TileType.Rail || !(map.layers.data[w.tile]! & WAYPOINT_FLAG)) continue;
-    state.waypoints.set(w.id, { id: w.id, name: String(w.name ?? 'Waypoint').slice(0, 48), owner: num(w.owner, 0), tile: w.tile });
+    const buoy = w.buoy === true;
+    if (buoy ? map.layers.type[w.tile] !== TileType.Water || !(map.layers.data[w.tile]! & WATER_BUOY) : map.layers.type[w.tile] !== TileType.Rail || !(map.layers.data[w.tile]! & WAYPOINT_FLAG)) continue;
+    state.waypoints.set(w.id, { id: w.id, name: String(w.name ?? 'Waypoint').slice(0, 48), owner: num(w.owner, 0), tile: w.tile, buoy: buoy || undefined });
   }
   state.nextWaypointId = Math.max(num(snap.nextWaypointId, 0), ...[...state.waypoints.keys()].map((k) => k + 1));
   state.news.push(...sanitizeNews(snap.news));
@@ -298,6 +301,22 @@ function sanitizeAir(a: AirState | undefined): AirState | undefined {
   };
 }
 
+function sanitizeShip(s: ShipState | undefined, state: GameState): ShipState | undefined {
+  if (!s) return undefined;
+  const map = state.map;
+  const x = num(s.x, -1);
+  const y = num(s.y, -1);
+  if (x < 0 || y < 0 || x >= map.width || y >= map.height) return undefined;
+  return {
+    x,
+    y,
+    heading: num(s.heading, 0),
+    // The route is planned again after loading.
+    path: [],
+    lockWait: typeof s.lockWait === 'number' && s.lockWait > 0 ? Math.min(s.lockWait, 10_000) : undefined,
+  };
+}
+
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
 const STATUSES = ['depot', 'running', 'stopped', 'loading'] as const;
@@ -310,18 +329,21 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
   if (units.length === 0) return null;
   const ints = (a: unknown) => (Array.isArray(a) ? a.filter((n): n is number => Number.isInteger(n) && n >= 0) : []);
   const status = STATUSES.includes(t.status as never) ? t.status! : 'stopped';
-  const path = status === 'depot' || t.mode === 'air' ? [] : ints(t.path);
+  const free = t.mode === 'air' || t.mode === 'water';
+  const path = status === 'depot' || free ? [] : ints(t.path);
   const air = t.mode === 'air' && status !== 'depot' ? sanitizeAir(t.air) : undefined;
-  // An aircraft out of its hangar is wherever its air state says; without one it is lost.
-  if (t.mode === 'air' && status !== 'depot' && !air) return null;
+  const ship = t.mode === 'water' && status !== 'depot' ? sanitizeShip(t.ship, state) : undefined;
+  // An aircraft or ship out of its depot is wherever its state says; without one it is lost.
+  if (free && status !== 'depot' && !air && !ship) return null;
   return {
     id: t.id,
-    mode: t.mode === 'road' || t.mode === 'air' ? t.mode : undefined,
+    mode: t.mode === 'road' || t.mode === 'air' || t.mode === 'water' ? t.mode : undefined,
     air,
+    ship,
     owner: num(t.owner, 0),
     name: String(t.name ?? 'Train').slice(0, 40),
     units,
-    status: path.length === 0 && status !== 'depot' && !air ? 'stopped' : status,
+    status: path.length === 0 && status !== 'depot' && !air && !ship ? 'stopped' : status,
     depot: num(t.depot, -1),
     path,
     pos: num(t.pos, 0),

@@ -439,13 +439,14 @@ export class Room {
   private sendPositions(): void {
     this.sendSignals();
     const map = this.state.map;
-    const running = [...this.state.trains.values()].filter((t) => t.path.length > 0 || (t.air && t.status !== 'depot'));
+    const running = [...this.state.trains.values()].filter((t) => t.path.length > 0 || ((t.air || t.ship) && t.status !== 'depot'));
     if (running.length === 0 || this.sessions.size === 0) return;
     const chunksOf = running.map((t) => {
       const set = new Set<number>();
-      if (t.air) {
-        const cx = Math.max(0, Math.min(map.chunksX - 1, Math.floor(t.air.x / CHUNK_SIZE)));
-        const cy = Math.max(0, Math.min(map.chunksY - 1, Math.floor(t.air.y / CHUNK_SIZE)));
+      const free = t.air ?? t.ship;
+      if (free) {
+        const cx = Math.max(0, Math.min(map.chunksX - 1, Math.floor(free.x / CHUNK_SIZE)));
+        const cy = Math.max(0, Math.min(map.chunksY - 1, Math.floor(free.y / CHUNK_SIZE)));
         set.add(cy * map.chunksX + cx);
         return set;
       }

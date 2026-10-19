@@ -9,10 +9,12 @@ export interface Waypoint {
   name: string;
   owner: number;
   tile: number;
+  /** A buoy on water (for ships) rather than a rail waypoint. */
+  buoy?: boolean;
 }
 
 /** A unique name from the nearest town. */
-export function waypointName(x: number, y: number, towns: Iterable<Town>, existing: Iterable<Waypoint>): string {
+export function waypointName(x: number, y: number, towns: Iterable<Town>, existing: Iterable<Waypoint>, kind = 'Waypoint'): string {
   let best: Town | null = null;
   let bestD = Infinity;
   for (const t of towns) {
@@ -23,7 +25,7 @@ export function waypointName(x: number, y: number, towns: Iterable<Town>, existi
     }
   }
   const used = new Set([...existing].map((w) => w.name));
-  const base = `${best?.name ?? 'Line'} Waypoint`;
+  const base = `${best?.name ?? 'Line'} ${kind}`;
   if (!used.has(base)) return base;
   for (let n = 2; ; n++) if (!used.has(`${base} ${n}`)) return `${base} ${n}`;
 }

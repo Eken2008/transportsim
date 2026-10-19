@@ -93,6 +93,23 @@ function aircraft(body: GeoBuilder, d: GeoBuilder, r: number, swept: boolean, en
   for (const x of [0.3, -0.08]) d.aabb(x - 0.015, 0, -0.03, x + 0.015, 0.03, 0.03); // wheels
 }
 
+/** A ship hull along X (bow at +X), `beam` wide, with its deck at `deck`. */
+function hull(body: GeoBuilder, d: GeoBuilder, beam: number, deck: number): void {
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const b = beam;
+  // Sides, bow and stern as a pointed prism; the hull is the company colour.
+  body.quad(v(-0.5, 0, b), v(0.3, 0, b), v(0.3, deck, b), v(-0.5, deck, b));
+  body.quad(v(0.3, 0, -b), v(-0.5, 0, -b), v(-0.5, deck, -b), v(0.3, deck, -b));
+  body.quad(v(0.3, 0, b), v(0.5, 0, 0), v(0.5, deck + 0.02, 0), v(0.3, deck, b));
+  body.quad(v(0.5, 0, 0), v(0.3, 0, -b), v(0.3, deck, -b), v(0.5, deck + 0.02, 0));
+  body.quad(v(-0.5, 0, -b), v(-0.5, 0, b), v(-0.5, deck, b), v(-0.5, deck, -b));
+  // Deck
+  d.color(lin('#8a6a48'));
+  d.quad(v(-0.5, deck, -b), v(-0.5, deck, b), v(0.3, deck, b), v(0.3, deck, -b));
+  d.tri(v(0.3, deck, -b), v(0.3, deck, b), v(0.5, deck + 0.02, 0));
+  d.color(WHITE).aabb(-0.5, deck - 0.02, -b - 0.003, 0.3, deck - 0.005, b + 0.003); // boot top
+}
+
 function windowsBand2(g: GeoBuilder, x0: number, x1: number, y0: number, y1: number, r: number, count: number): void {
   g.color(GLASS);
   const step = (x1 - x0) / count;
@@ -268,6 +285,49 @@ function build(model: UnitModel): UnitGeo {
     case 'jumbo':
       aircraft(body, d, 0.09, true, [-0.14, 0.14, -0.3, 0.3], true);
       break;
+    case 'ferry':
+    case 'paddle': {
+      hull(body, d, 0.13, 0.08);
+      d.color(lin('#f1f1ee')).aabb(-0.42, 0.08, -0.11, 0.2, 0.18, 0.11); // superstructure
+      d.color(lin('#f1f1ee')).aabb(-0.3, 0.18, -0.09, 0.1, 0.26, 0.09);
+      windowsBand2(d, -0.4, 0.18, 0.11, 0.15, 0.11, 7);
+      d.color(GLASS).aabb(0.08, 0.2, -0.091, 0.1, 0.24, 0.091); // bridge
+      d.color(RED).cylinderY(-0.12, 0, 0.26, 0.36, 0.035, 8); // funnel
+      d.color(DARK).cylinderY(-0.12, 0, 0.36, 0.38, 0.036, 8);
+      if (model === 'paddle') {
+        d.color(DARK);
+        for (const z of [-0.15, 0.15]) d.cylinderX(-0.08, 0.06, 0.06, z, 0.07, 10); // paddle boxes
+      }
+      break;
+    }
+    case 'cargoship':
+    case 'tankership': {
+      hull(body, d, 0.13, 0.08);
+      d.color(lin('#f1f1ee')).aabb(-0.5, 0.08, -0.11, -0.3, 0.26, 0.11); // bridge aft
+      d.color(GLASS).aabb(-0.3, 0.2, -0.1, -0.295, 0.24, 0.1);
+      d.color(DARK).cylinderY(-0.42, 0, 0.26, 0.34, 0.03, 8);
+      if (model === 'cargoship') {
+        d.color(lin('#4f5d6b'));
+        for (const x of [-0.2, 0.0, 0.18]) d.aabb(x - 0.08, 0.08, -0.1, x + 0.08, 0.12, 0.1); // hatches
+        d.color(lin('#c0703a')).aabb(-0.1, 0.12, -0.08, 0.08, 0.18, 0.08); // a stack of containers
+        d.color(DARK).aabb(0.1, 0.08, -0.005, 0.11, 0.3, 0.005); // crane
+        d.aabb(0.02, 0.28, -0.005, 0.11, 0.29, 0.005);
+      } else {
+        d.color(STEEL).cylinderX(-0.28, 0.28, 0.1, 0, 0.012, 6); // deck pipe
+        d.color(lin('#6a4b3a')).aabb(-0.28, 0.08, -0.1, 0.28, 0.095, 0.1);
+      }
+      break;
+    }
+    case 'hovercraft': {
+      d.color(DARK).aabb(-0.5, 0, -0.18, 0.5, 0.06, 0.18); // skirt
+      body.aabb(-0.45, 0.06, -0.15, 0.45, 0.16, 0.15);
+      d.color(lin('#f1f1ee')).aabb(-0.3, 0.16, -0.12, 0.32, 0.22, 0.12);
+      windowsBand2(d, -0.28, 0.3, 0.17, 0.2, 0.12, 8);
+      d.color(STEEL);
+      for (const z of [-0.08, 0.08]) d.cylinderX(-0.5, -0.4, 0.26, z, 0.07, 10); // propeller ducts
+      d.color(DARK).aabb(-0.5, 0.2, -0.004, -0.38, 0.38, 0.004); // fin
+      break;
+    }
     case 'stockcar': {
       bogies(d, [-0.28, 0.28]);
       body.aabb(-0.5, FLOOR, -W, 0.5, 0.09, W);
@@ -308,4 +368,9 @@ export const UNIT_MODELS: Record<UnitModel, UnitGeo> = {
   prop: build('prop'),
   jet: build('jet'),
   jumbo: build('jumbo'),
+  ferry: build('ferry'),
+  paddle: build('paddle'),
+  cargoship: build('cargoship'),
+  tankership: build('tankership'),
+  hovercraft: build('hovercraft'),
 };
