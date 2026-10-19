@@ -3,6 +3,8 @@ import {
   RAIL_VEHICLES,
   AIRCRAFT,
   AIRPORT_TYPES,
+  SHIPS,
+  stationDocks,
   ROAD_VEHICLES,
   CARGOS,
   CARGO_IDS,
@@ -153,6 +155,7 @@ export function WindowLayer() {
             return <TownWindow key={key} w={w} />;
           case 'roadDepot':
           case 'hangar':
+          case 'shipDepot':
             return <RoadDepotWindow key={key} w={w} />;
         }
       })}
@@ -251,11 +254,12 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
               Sell
             </button>
           )}
-          {motion && (motion.path.length > 0 || motion.air) && (
+          {motion && (motion.path.length > 0 || motion.air || motion.ship) && (
             <button
               className="ghost"
               onClick={() => {
                 if (motion.air) return focusOn(Math.floor(motion.air[0]), Math.floor(motion.air[1]));
+                if (motion.ship) return focusOn(Math.floor(motion.ship[0]), Math.floor(motion.ship[1]));
                 const tile = segTile(motion.path[0]!);
                 const width = client.world!.map.width;
                 focusOn(tile % width, Math.floor(tile / width));
@@ -442,8 +446,8 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
 }
 
 /** Buy buses and trucks, and see the ones parked inside. */
-/** A road depot or an airport hangar: vehicles inside, and buying one. */
-function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar' } }) {
+/** A road depot, airport hangar or ship depot: vehicles inside, and buying one. */
+function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar' | 'shipDepot' } }) {
   useApp((s) => s.trainsRev);
   const global = useApp((s) => s.global);
   const settings = useApp((s) => s.room?.settings);
@@ -452,7 +456,8 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
   const year = global ? ymdFromDays(global.date).year : 1900;
   const air = w.kind === 'hangar';
   const airport = air && map ? client.world?.state.stations.get(map.layers.data[w.id]!) : undefined;
-  const types = (air ? AIRCRAFT : ROAD_VEHICLES).filter((v) => isAvailable(v, year, settings?.timeline ?? 'era'));
+  const sea = w.kind === 'shipDepot';
+  const types = (air ? AIRCRAFT : sea ? SHIPS : ROAD_VEHICLES).filter((v) => isAvailable(v, year, settings?.timeline ?? 'era'));
   /** Heavy jets can't be bought at a small airport. */
   const tooBig = (t: { heavy?: boolean }) => air && !!t.heavy && airport?.airport?.kind !== 'large';
   const [type, setType] = useState(types.filter((t) => t.cargoes?.[0] === 'passengers' && !tooBig(t)).at(-1)?.id ?? types[0]?.id ?? '');
@@ -466,9 +471,9 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
   const x = map ? w.id % map.width : 0;
   const y = map ? Math.floor(w.id / map.width) : 0;
   return (
-    <Win w={w} title={air ? `${airport?.name ?? 'Airport'} hangar` : `Road depot (${x}, ${y})`} width={360}>
+    <Win w={w} title={air ? `${airport?.name ?? 'Airport'} hangar` : sea ? `Ship depot (${x}, ${y})` : `Road depot (${x}, ${y})`} width={360}>
       <h4 style={{ marginTop: 0 }}>Inside</h4>
-      {inDepot.length === 0 && <p className="muted">No {air ? 'aircraft in this hangar' : 'vehicles in this depot'}.</p>}
+      {inDepot.length === 0 && <p className="muted">No {air ? 'aircraft in this hangar' : sea ? 'ships in this depot' : 'vehicles in this depot'}.</p>}
       {inDepot.map((t) => (
         <div className="list-row" key={t.id}>
           <b style={{ flex: 1 }}>{t.name}</b>
@@ -483,7 +488,7 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
       ))}
       {canBuy && v && (
         <>
-          <h4>Buy {air ? 'an aircraft' : 'a road vehicle'}</h4>
+          <h4>Buy {air ? 'an aircraft' : sea ? 'a ship' : 'a road vehicle'}</h4>
           <div className="row" style={{ gap: 10 }}>
             <label className="field" style={{ flex: 1, minWidth: 0 }}>
               <span>Vehicle</span>
@@ -516,7 +521,9 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
                   ? 'A heavy jet: lands only at large airports (and may crash at small ones).'
                   : 'A heavy jet: needs a large airport to be bought here.'
                 : 'Flies between airports.'
-              : cargo === 'passengers'
+              : sea
+                ? 'Sails between docks; steer it with buoys.'
+                : cargo === 'passengers'
                 ? 'A bus: uses bus stops.'
                 : 'A truck: uses truck stops.'}{' '}
             Running cost {formatMoney(v.runningCost)}/yr.
@@ -555,6 +562,12 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
         <b className="mono">
           {st.tiles} tiles{client.world ? `, longest ${longestPlatform(client.world.map, st)}` : ''}
         </b>
+        {client.world && stationDocks(client.world.map, st).length > 0 && (
+          <>
+            <span>Docks</span>
+            <b className="mono">{stationDocks(client.world.map, st).length}</b>
+          </>
+        )}
         {st.airport && (
           <>
             <span>Airport</span>
@@ -694,7 +707,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
 
   const editable = mine && t.status === 'depot';
   /** Road vehicles and aircraft are a single vehicle that can only be refitted. */
-  const road = t.mode === 'road' || t.mode === 'air';
+  const road = t.mode === 'road' || t.mode === 'air' || t.mode === 'water';
   const changed = JSON.stringify(draft) !== currentKey;
   const preview = changed ? client.preview({ type: 'editConsist', id: t.id, units: draft }) : null;
   const stats = trainStats(draft);
@@ -734,7 +747,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
             >
               {editable && <span className="grip" aria-hidden>⋮⋮</span>}
               <span className={`unit-kind ${v?.kind ?? ''}`} style={cargo ? { borderColor: CARGOS[cargo].color } : undefined}>
-                {v?.mode === 'air' ? 'Aircraft' : v?.mode === 'road' ? (cargo === 'passengers' ? 'Bus' : 'Truck') : v?.kind === 'loco' ? 'Engine' : cargo ? CARGOS[cargo].name : 'Wagon'}
+                {v?.mode === 'air' ? 'Aircraft' : v?.mode === 'water' ? 'Ship' : v?.mode === 'road' ? (cargo === 'passengers' ? 'Bus' : 'Truck') : v?.kind === 'loco' ? 'Engine' : cargo ? CARGOS[cargo].name : 'Wagon'}
               </span>
               <span className="order-name">{v?.name ?? u.type}</span>
               {editable && v?.cargoes && v.cargoes.length > 1 && (

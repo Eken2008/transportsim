@@ -214,7 +214,7 @@ function HostBanner() {
   );
 }
 
-type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | 'rail' | 'road' | 'air' };
+type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | 'rail' | 'road' | 'air' | 'water' };
 
 const TOOLS: ToolDef[] = [
   { id: 'raise', icon: '⛰', label: 'Raise land (drag for area)', key: '1', menu: 'main' },
@@ -235,6 +235,11 @@ const TOOLS: ToolDef[] = [
   { id: 'roadDepot', icon: '🅿', label: 'Road vehicle depot', key: 'J', menu: 'road' },
   { id: 'oneWay', icon: '⬆', label: 'One-way road (click to cycle)', key: 'K', menu: 'road' },
   { id: 'airport', icon: '🛫', label: 'Airport (needs flat land; click its north-west corner)', key: 'Y', menu: 'air' },
+  { id: 'canal', icon: '〰', label: 'Canal (drag over flat land)', key: 'U', menu: 'water' },
+  { id: 'lock', icon: '🪜', label: 'Lock (on a straight slope between two water levels)', key: 'I', menu: 'water' },
+  { id: 'dock', icon: '⚓', label: 'Dock (on the shore; faces the water nearest the cursor)', key: 'O', menu: 'water' },
+  { id: 'shipDepot', icon: '🛳', label: 'Ship depot (on water, off the main channel)', key: 'M', menu: 'water' },
+  { id: 'buoy', icon: '🔴', label: 'Buoy (a waypoint for ships)', key: 'X', menu: 'water' },
   { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', menu: 'main' },
 ];
 
@@ -254,13 +259,14 @@ function ToolButton({ t }: { t: ToolDef }) {
   );
 }
 
-type Menu = 'rail' | 'road' | 'air';
+type Menu = 'rail' | 'road' | 'air' | 'water';
 const MENUS: { id: Menu; icon: string; label: string }[] = [
   { id: 'rail', icon: '🚆', label: 'Railways' },
   { id: 'road', icon: '🛣', label: 'Roads' },
   { id: 'air', icon: '✈', label: 'Airports' },
+  { id: 'water', icon: '⚓', label: 'Waterways' },
 ];
-const MENU_NAMES: Record<Menu, string> = { rail: 'Rail', road: 'Road', air: 'Air' };
+const MENU_NAMES: Record<Menu, string> = { rail: 'Rail', road: 'Road', air: 'Air', water: 'Water' };
 
 function Toolbar() {
   const tool = useApp((s) => s.tool);
@@ -302,9 +308,6 @@ function Toolbar() {
             <span className="key">▴</span>
           </button>
         ))}
-        <button className="tool-btn" disabled data-tip="Docks — planned" aria-label="Docks (planned)">
-          <span style={{ fontSize: 20 }}>⚓</span>
-        </button>
         <div className="sep" />
         <ToolButton t={TOOLS.find((t) => t.id === 'bulldoze')!} />
       </div>

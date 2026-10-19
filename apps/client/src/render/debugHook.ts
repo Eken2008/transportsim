@@ -94,7 +94,7 @@ export function installDebugHook(r: GameRenderer): () => void {
     },
     /** Vehicles as the client knows them. */
     trains() {
-      return [...(client.world?.trains.values() ?? [])].map((t) => ({ id: t.id, mode: t.mode, status: t.status, name: t.name, air: client.world?.motions.get(t.id)?.m.air }));
+      return [...(client.world?.trains.values() ?? [])].map((t) => ({ id: t.id, mode: t.mode, status: t.status, name: t.name, air: client.world?.motions.get(t.id)?.m.air, ship: client.world?.motions.get(t.id)?.m.ship }));
     },
     /** A straight town road tile near (x, y) where a level crossing could go. */
     findCrossingSpot(x: number, y: number) {

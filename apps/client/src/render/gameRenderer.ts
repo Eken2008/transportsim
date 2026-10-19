@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
 import { useApp, type ToolId } from '../store.ts';
-import { BulldozeTool, ConvertTool, DepotTool, StationTool, WaypointTool } from '../tools/placeTools.ts';
+import { BulldozeTool, CanalTool, ConvertTool, DepotTool, StationTool, WaypointTool } from '../tools/placeTools.ts';
 import { RoadPlaceTool, RoadTool } from '../tools/roadTools.ts';
 import { RailTool } from '../tools/railTool.ts';
 import { TerraformTool } from '../tools/terraformTool.ts';
@@ -242,6 +242,9 @@ export class GameRenderer {
       case 'convert':
         this.tool = new ConvertTool(this.area);
         break;
+      case 'canal':
+        this.tool = new CanalTool(this.area);
+        break;
       case 'waypoint':
         this.tool = new WaypointTool(this.area);
         break;
@@ -253,6 +256,10 @@ export class GameRenderer {
       case 'roadDepot':
       case 'oneWay':
       case 'airport':
+      case 'lock':
+      case 'dock':
+      case 'shipDepot':
+      case 'buoy':
         this.tool = new RoadPlaceTool(this.area, id);
         break;
       case 'orders':
@@ -317,6 +324,8 @@ export class GameRenderer {
     else if (type === TileType.RoadStop) openWindow({ kind: 'station', id: map.layers.data[i]! });
     else if (type === TileType.Airport && map.layers.track[i] === AirportRole.Hangar) openWindow({ kind: 'hangar', id: i });
     else if (type === TileType.Airport) openWindow({ kind: 'station', id: map.layers.data[i]! });
+    else if (type === TileType.Dock) openWindow({ kind: 'station', id: map.layers.data[i]! });
+    else if (type === TileType.ShipDepot) openWindow({ kind: 'shipDepot', id: i });
     else if (type === TileType.Station) openWindow({ kind: 'station', id: map.layers.data[i]! });
     else if (type === TileType.Industry) openWindow({ kind: 'industry', id: map.layers.data[i]! });
     else if ((type === TileType.House || type === TileType.Road) && map.layers.town[i]) openWindow({ kind: 'town', id: map.layers.town[i]! - 1 });

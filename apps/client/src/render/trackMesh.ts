@@ -181,7 +181,7 @@ export function addTrack(
       const i = map.tileIndex(x, y);
       const bits = map.layers.track[i]!;
       // Road stops keep road bits there, airports their tile roles.
-      if (bits === 0 || map.layers.type[i] === TileType.RoadStop || map.layers.type[i] === TileType.Airport) continue;
+      if (bits === 0 || map.layers.type[i] === TileType.RoadStop || map.layers.type[i] === TileType.Airport || map.layers.type[i] === TileType.Dock) continue;
       if (map.layers.type[i] === TileType.Rail && map.layers.data[i]! & CROSSING_FLAG) {
         // Road surface under the crossing, perpendicular to the track.
         const roadPiece = hasPiece(bits, 0) ? 1 : 0;

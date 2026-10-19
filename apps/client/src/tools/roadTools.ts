@@ -97,7 +97,7 @@ export class RoadPlaceTool implements Tool {
 
   constructor(
     private readonly ghost: AreaGhost,
-    private readonly kind: 'roadStop' | 'roadDepot' | 'oneWay' | 'airport',
+    private readonly kind: 'roadStop' | 'roadDepot' | 'oneWay' | 'airport' | 'lock' | 'dock' | 'shipDepot' | 'buoy',
   ) {}
 
   /** Tiles the thing being placed covers (an airport's north-west corner is under the cursor). */
@@ -112,6 +112,20 @@ export class RoadPlaceTool implements Tool {
   private command(hit: TerrainHit): { cmd: Command; arrow?: { x: number; y: number; edge: number } } {
     const { tileX: x, tileY: y } = hit;
     if (this.kind === 'airport') return { cmd: { type: 'buildAirport', x, y, kind: useApp.getState().airportKind } };
+    if (this.kind === 'lock') return { cmd: { type: 'buildLock', x, y } };
+    if (this.kind === 'buoy') return { cmd: { type: 'buildBuoy', x, y } };
+    if (this.kind === 'shipDepot') return { cmd: { type: 'buildShipDepot', x, y } };
+    if (this.kind === 'dock') {
+      // Face the side of the tile the cursor is nearest, if there is water there.
+      const fx = hit.point.x - x - 0.5;
+      const fy = hit.point.z - y - 0.5;
+      const edge = Math.abs(fx) > Math.abs(fy) ? (fx > 0 ? 1 : 3) : fy > 0 ? 2 : 0;
+      const map = client.world?.map;
+      const nx = x + EDGE_DX[edge as 0]!;
+      const ny = y + EDGE_DY[edge as 0]!;
+      const wet = map && map.inBounds(nx, ny) && map.layers.type[map.tileIndex(nx, ny)] === TileType.Water;
+      return { cmd: { type: 'buildDock', x, y, edge: wet ? edge : undefined }, arrow: wet ? { x, y, edge } : undefined };
+    }
     if (this.kind === 'roadStop') return { cmd: { type: 'buildRoadStop', x, y, kind: useApp.getState().roadStopKind } };
     if (this.kind === 'oneWay') return { cmd: { type: 'setOneWay', x, y } };
     // Depot: face a neighbouring road if there is one, else the side of the tile clicked.

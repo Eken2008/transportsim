@@ -1,5 +1,6 @@
 import {
   CHUNK_SIZE,
+  waterAxis,
   Ground,
   HEIGHT_SCALE,
   SNOW_LINE,
@@ -175,15 +176,42 @@ export function buildWaterGeometry(map: GameMap, cx: number, cy: number, lod: Lo
       if (wet) quads.push(tx, ty);
     }
   }
-  if (quads.length === 0) return null;
-  const n = quads.length / 2;
+  // Canals, locks and ship depots above sea level, tile by tile at their own level.
+  const raised: number[] = [];
+  for (let ty = y0; ty < y0 + CHUNK_SIZE; ty++) {
+    for (let tx = x0; tx < x0 + CHUNK_SIZE; tx++) {
+      const t = map.layers.type[map.tileIndex(tx, ty)];
+      if (t !== TileType.Water && t !== TileType.Lock && t !== TileType.ShipDepot) continue;
+      if (map.tileMinHeight(tx, ty) === 0 && t !== TileType.Lock) continue; // under the sea plane
+      if (t === TileType.Lock) {
+        // Two halves, each at its own level, meeting at the middle gate.
+        const [nw, ne, , sw] = map.tileCorners(tx, ty);
+        if (waterAxis(map, map.tileIndex(tx, ty)) === 0) {
+          raised.push(tx, ty, 0.5, 1, nw, tx + 0.5, ty, 0.5, 1, ne);
+        } else {
+          raised.push(tx, ty, 1, 0.5, nw, tx, ty + 0.5, 1, 0.5, sw);
+        }
+      } else raised.push(tx, ty, 1, 1, map.tileMinHeight(tx, ty));
+    }
+  }
+  if (quads.length === 0 && raised.length === 0) return null;
+  const n = quads.length / 2 + raised.length / 5;
   const pos = new Float32Array(n * 18);
-  for (let q = 0; q < n; q++) {
-    const x = quads[q * 2]!;
-    const z = quads[q * 2 + 1]!;
+  let q = 0;
+  for (let k = 0; k < quads.length; k += 2, q++) {
+    const x = quads[k]!;
+    const z = quads[k + 1]!;
     const e = x + step;
     const s = z + step;
     pos.set([x, WATER_Y, z, x, WATER_Y, s, e, WATER_Y, z, e, WATER_Y, z, x, WATER_Y, s, e, WATER_Y, s], q * 18);
+  }
+  for (let k = 0; k < raised.length; k += 5, q++) {
+    const x = raised[k]!;
+    const z = raised[k + 1]!;
+    const e = x + raised[k + 2]!;
+    const s = z + raised[k + 3]!;
+    const y = raised[k + 4]! * HEIGHT_SCALE + WATER_Y;
+    pos.set([x, y, z, x, y, s, e, y, z, e, y, z, x, y, s, e, y, s], q * 18);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));

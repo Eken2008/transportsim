@@ -213,6 +213,14 @@ export class BulldozeTool extends PreviewTool {
 }
 
 /** Drag a rectangle to convert your track, stations and depots to the chosen track type. */
+/** Drag an area of flat land to dig canals. */
+export class CanalTool extends BulldozeTool {
+  protected override describe(hit: TerrainHit) {
+    const { x0, y0, x1, y1, tiles } = this.area(hit);
+    return { tiles, cmd: { type: 'buildCanal', x0, y0, x1, y1 } as Command, color: '#58a6ff' };
+  }
+}
+
 export class ConvertTool extends BulldozeTool {
   protected override describe(hit: TerrainHit) {
     const { x0, y0, x1, y1, tiles } = this.area(hit);

@@ -23,6 +23,7 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { UNIT_MODELS } from './trainModels.ts';
 import { TRACK_LIFT, curveParamAt, curvePoint, type TrackCurves } from './trackCurves.ts';
+import { WATER_Y } from './terrainMesh.ts';
 
 /** Height of the rail head above the terrain surface. */
 const RAIL_TOP = 0.088;
@@ -149,6 +150,10 @@ export class TrainRenderer {
       const dt = Math.min(MAX_EXTRAPOLATION, (now - at) / 1000);
       if (info && m.air) {
         this.placeAircraft(id, info.owner, info.units[0]!.type, m.air, dt, speedMultiplier);
+        continue;
+      }
+      if (info && m.ship) {
+        this.placeShip(id, info.owner, info.units[0]!.type, m.ship, dt, speedMultiplier);
         continue;
       }
       if (!info || m.path.length === 0) continue;
@@ -279,6 +284,35 @@ export class TrainRenderer {
     mm.body.setColorAt(k, color);
     mm.count++;
     this.picks.push({ trainId: id, pos: new THREE.Vector3(x, ground + z * AIR_HEIGHT + 0.1, y) });
+  }
+
+  /** A ship: on the water surface at its level, heading where it sails. */
+  private placeShip(id: number, owner: number, type: string, ship: NonNullable<TrainMotion['ship']>, dt: number, speedMultiplier: number): void {
+    const map = this.world.map;
+    const v = railVehicle(type);
+    if (!v) return;
+    const [x0, y0, level, heading, speed] = ship;
+    const step = Math.min(0.5, speed * speedMultiplier * dt);
+    const x = Math.max(0, Math.min(map.width - 0.01, x0 + Math.cos(heading) * step));
+    const y = Math.max(0, Math.min(map.height - 0.01, y0 + Math.sin(heading) * step));
+    const len = (v.length / 16) * 0.9;
+    const company = this.world.state.companies.get(owner);
+    const color = this.colors[(company?.color ?? 0) % this.colors.length]!;
+    const mm = this.meshesFor(v.model, 1);
+    const k = mm.count;
+    if (k >= mm.body.instanceMatrix.count) return;
+    _x.set(Math.cos(heading), 0, Math.sin(heading));
+    _z.crossVectors(_x, UP).normalize();
+    _y.crossVectors(_z, _x);
+    _m.makeBasis(_x, _y, _z);
+    _m.multiply(_s.makeScale(len, len, len));
+    const surface = level * HEIGHT_SCALE + WATER_Y - 0.03;
+    _m.setPosition(x, surface, y);
+    mm.body.setMatrixAt(k, _m);
+    mm.detail.setMatrixAt(k, _m);
+    mm.body.setColorAt(k, color);
+    mm.count++;
+    this.picks.push({ trainId: id, pos: new THREE.Vector3(x, surface + 0.15, y) });
   }
 
   dispose(): void {

@@ -1,5 +1,11 @@
 import {
   AirportRole,
+  EDGE_DX,
+  EDGE_DY,
+  WATER_BUOY,
+  WATER_CANAL,
+  waterAxis,
+  waterLevelAt,
   CHUNK_SIZE,
   EDGE_MID_X,
   EDGE_MID_Y,
@@ -16,7 +22,7 @@ import {
 } from '@transportsim/shared';
 import * as THREE from 'three';
 import { GeoBuilder, lin } from './geoBuilder.ts';
-import { tileHash } from './terrainMesh.ts';
+import { WATER_Y, tileHash } from './terrainMesh.ts';
 
 type Model = HouseType['model'];
 
@@ -186,6 +192,10 @@ export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): v
         addAirportTile(g, map, x, y, map.layers.track[i]!);
         continue;
       }
+      if (type === TileType.Water || type === TileType.Lock || type === TileType.ShipDepot || type === TileType.Dock) {
+        addWaterworks(g, map, x, y, i);
+        continue;
+      }
       if (type !== TileType.Road && type !== TileType.RoadStop) continue;
       const bits = type === TileType.RoadStop ? map.layers.track[i]! & 0xf : map.layers.data[i]! & 0xf;
       const corners = map.tileCorners(x, y);
@@ -287,6 +297,111 @@ function addAirportTile(g: GeoBuilder, map: GameMap, x: number, y: number, role:
       break;
     }
   }
+}
+
+const STONE = lin('#8f8a80');
+const TIMBER_DECK = lin('#7b5a3c');
+const GATE = lin('#3b2f26');
+const BUOY_RED = lin('#c8352b');
+const SHED = lin('#6f7f8c');
+
+/** Canal banks, locks, ship depots, docks and buoys. */
+function addWaterworks(g: GeoBuilder, map: GameMap, x: number, y: number, i: number): void {
+  const type = map.layers.type[i];
+  const data = map.layers.data[i]!;
+  const level = waterLevelAt(map, x, y);
+  const surface = level * HEIGHT_SCALE + WATER_Y;
+  const isWet = (tx: number, ty: number) => {
+    if (!map.inBounds(tx, ty)) return true;
+    const t = map.layers.type[map.tileIndex(tx, ty)];
+    return t === TileType.Water || t === TileType.Lock || t === TileType.ShipDepot;
+  };
+  if (type === TileType.Water) {
+    // Stone banks where a canal meets land.
+    if (data & WATER_CANAL) {
+      const base = map.tileMinHeight(x, y) * HEIGHT_SCALE - 0.02;
+      const top = surface + 0.05;
+      g.color(STONE);
+      if (!isWet(x, y - 1)) g.aabb(x, base, y, x + 1, top, y + 0.06);
+      if (!isWet(x, y + 1)) g.aabb(x, base, y + 0.94, x + 1, top, y + 1);
+      if (!isWet(x - 1, y)) g.aabb(x, base, y, x + 0.06, top, y + 1);
+      if (!isWet(x + 1, y)) g.aabb(x + 0.94, base, y, x + 1, top, y + 1);
+    }
+    if (data & WATER_BUOY) {
+      g.color(BUOY_RED).cylinderY(x + 0.5, y + 0.5, surface - 0.03, surface + 0.12, 0.07, 8);
+      g.color(MARKING).cylinderY(x + 0.5, y + 0.5, surface + 0.12, surface + 0.16, 0.05, 8);
+      g.color(BUOY_RED).cylinderY(x + 0.5, y + 0.5, surface + 0.16, surface + 0.24, 0.025, 6);
+    }
+    return;
+  }
+  if (type === TileType.Lock) {
+    const alongX = waterAxis(map, i) === 0;
+    const top = map.tileMaxHeight(x, y) * HEIGHT_SCALE + WATER_Y + 0.08;
+    const base = map.tileMinHeight(x, y) * HEIGHT_SCALE - 0.02;
+    g.color(STONE);
+    if (alongX) {
+      g.aabb(x, base, y, x + 1, top, y + 0.12);
+      g.aabb(x, base, y + 0.88, x + 1, top, y + 1);
+    } else {
+      g.aabb(x, base, y, x + 0.12, top, y + 1);
+      g.aabb(x + 0.88, base, y, x + 1, top, y + 1);
+    }
+    // Gates at both ends and in the middle.
+    g.color(GATE);
+    for (const f of [0.03, 0.5, 0.97]) {
+      const [nw, ne, , sw] = map.tileCorners(x, y);
+      const far = alongX ? ne : sw;
+      const h = (nw + (far - nw) * f) * HEIGHT_SCALE;
+      if (alongX) g.aabb(x + f - 0.03, h - 0.05, y + 0.12, x + f + 0.03, Math.max(h, nw * HEIGHT_SCALE, far * HEIGHT_SCALE) + WATER_Y + 0.06, y + 0.88);
+      else g.aabb(x + 0.12, h - 0.05, y + f - 0.03, x + 0.88, Math.max(h, nw * HEIGHT_SCALE, far * HEIGHT_SCALE) + WATER_Y + 0.06, y + f + 0.03);
+    }
+    return;
+  }
+  if (type === TileType.ShipDepot) {
+    // An open-ended boat shed over the water, lengthways along its axis.
+    const alongX = waterAxis(map, i) === 0;
+    const roof = surface + 0.45;
+    g.color(SHED);
+    if (alongX) {
+      g.aabb(x + 0.04, surface - 0.05, y + 0.08, x + 0.96, roof, y + 0.14);
+      g.aabb(x + 0.04, surface - 0.05, y + 0.86, x + 0.96, roof, y + 0.92);
+    } else {
+      g.aabb(x + 0.08, surface - 0.05, y + 0.04, x + 0.14, roof, y + 0.96);
+      g.aabb(x + 0.86, surface - 0.05, y + 0.04, x + 0.92, roof, y + 0.96);
+    }
+    g.color(STOP_ROOF).gable(x + 0.04, y + 0.04, x + 0.96, y + 0.96, roof, 0.16, 0.05, !alongX);
+    return;
+  }
+  // Dock: a timber deck over the shore, reaching out over its berth, with a crane.
+  const edge = map.layers.track[i]! & 3;
+  const deck = map.tileMaxHeight(x, y) * HEIGHT_SCALE + 0.05;
+  const berthLevel = map.tileMinHeight(x, y) * HEIGHT_SCALE + WATER_Y;
+  const ex = EDGE_DX[edge as 0]!;
+  const ey = EDGE_DY[edge as 0]!;
+  const reach = 0.3;
+  const x0 = Math.min(x, x + ex * reach);
+  const x1 = Math.max(x + 1, x + 1 + ex * reach);
+  const z0 = Math.min(y, y + ey * reach);
+  const z1 = Math.max(y + 1, y + 1 + ey * reach);
+  g.color(TIMBER_DECK).aabb(x0, deck - 0.04, z0, x1, deck, z1);
+  g.color(GATE);
+  for (const [px, pz] of [
+    [x0 + 0.05, z0 + 0.05],
+    [x1 - 0.05, z0 + 0.05],
+    [x0 + 0.05, z1 - 0.05],
+    [x1 - 0.05, z1 - 0.05],
+  ] as const) {
+    g.aabb(px - 0.025, berthLevel - 0.2, pz - 0.025, px + 0.025, deck - 0.04, pz + 0.025);
+  }
+  // Warehouse at the back, crane at the front.
+  const bx = x + 0.5 - ex * 0.25;
+  const bz = y + 0.5 - ey * 0.25;
+  g.color(GARAGE).aabb(bx - 0.22, deck, bz - 0.22, bx + 0.22, deck + 0.24, bz + 0.22);
+  g.color(STOP_ROOF).gable(bx - 0.24, bz - 0.24, bx + 0.24, bz + 0.24, deck + 0.24, 0.09, 0.02, ex !== 0);
+  const cx = x + 0.5 + ex * 0.3;
+  const cz = y + 0.5 + ey * 0.3;
+  g.color(STOP_YELLOW).aabb(cx - 0.03, deck, cz - 0.03, cx + 0.03, deck + 0.42, cz + 0.03);
+  g.color(STOP_YELLOW).aabb(Math.min(cx, cx + ex * 0.35) - 0.02, deck + 0.4, Math.min(cz, cz + ey * 0.35) - 0.02, Math.max(cx, cx + ex * 0.35) + 0.02, deck + 0.44, Math.max(cz, cz + ey * 0.35) + 0.02);
 }
 
 /** A garage with its door to the road at `exit`. */

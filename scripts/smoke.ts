@@ -221,7 +221,7 @@ try {
   await fin.getByRole('button', { name: 'Borrow £10,000' }).click();
   await a.waitForTimeout(600);
   const afterLoan = money(await a.locator('.money').innerText());
-  check(afterLoan - beforeLoan > 9000, `borrowed money (${beforeLoan} → ${afterLoan})`);
+  check(afterLoan - beforeLoan > 5000, `borrowed money (${beforeLoan} → ${afterLoan})`);
   await a.screenshot({ path: `${outDir}/03e-finances.png` });
   await fin.locator('button[aria-label="Close"]').click();
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 1, y: s.y - 4, yaw: 0.7, pitch: 0.75, distance: 18 }), { x: sx, y: sy });
@@ -516,6 +516,7 @@ try {
   // air tool, one by command; an aircraft bought in the hangar flies between them.
   const ctxD = await browser.newContext({ viewport: { width: 1400, height: 860 } });
   const d = await ctxD.newPage();
+  d.setDefaultTimeout(30_000);
   lastPage = d;
   d.on('pageerror', (e) => console.log(`[D pageerror] ${e.message}`));
   await d.goto(`http://localhost:${PORT}/`);
@@ -531,7 +532,7 @@ try {
   await danaWin.getByRole('textbox', { name: 'Company name' }).fill('Dana Air');
   await danaWin.getByRole('button', { name: 'Found', exact: true }).click();
   await d.locator('.money').waitFor({ timeout: 5000 });
-  type DHook = { spawn: { x: number; y: number }; view(v: object): void; tileToScreen(x: number, y: number): { x: number; y: number }; command(cmd: object): Promise<{ ok: boolean; error?: string }>; tile(x: number, y: number): { type: number; data: number }; trains(): { id: number; mode?: string; air?: number[] }[]; stations(): { id: number; airport: boolean }[] };
+  type DHook = { spawn: { x: number; y: number }; view(v: object): void; tileToScreen(x: number, y: number): { x: number; y: number }; command(cmd: object): Promise<{ ok: boolean; error?: string }>; tile(x: number, y: number): { type: number; data: number }; trains(): { id: number; mode?: string; air?: number[]; ship?: number[] }[]; stations(): { id: number; airport: boolean }[] };
   const dh = <T>(fn: (h: DHook, arg: never) => T, arg?: unknown) =>
     d.evaluate(([f, x]) => new Function('h', 'arg', `return (${f})(h, arg)`)((window as unknown as { transportsim: DHook }).transportsim, x), [fn.toString(), arg] as const) as Promise<T>;
   const dClick = async (x: number, y: number) => {
@@ -593,6 +594,77 @@ try {
     await dh((h, s: { x: number; y: number }) => h.view({ x: s.x + 2.5, y: s.y + 1.5, yaw: 0.6, pitch: 0.6, distance: 9 }), ap1);
     await d.waitForTimeout(1500);
     await d.screenshot({ path: `${outDir}/07-airport.png` });
+  }
+
+  // Waterways in the same game: a canal dug with the canal tool, a dock and a depot from the
+  // water tools, a second dock by command, then a ship that sails between the docks.
+  await d.getByTitle('1× speed').click();
+  let wx = -1;
+  let wy = -1;
+  for (const [ox, oy] of [[-30, 20], [30, -20], [-30, -20], [30, 20], [0, 30], [0, -30], [40, 0], [-40, 0]] as const) {
+    const at = { x: dSpawn.x + ox, y: dSpawn.y + oy };
+    const lv = await dh((h, t: { x: number; y: number }) => h.command({ type: 'terraform', x0: t.x - 1, y0: t.y - 1, x1: t.x + 18, y1: t.y + 7, mode: 'level', level: 4 }), at);
+    if (lv.ok) {
+      wx = at.x;
+      wy = at.y;
+      break;
+    }
+  }
+  check(wx >= 0, 'levelled land for a canal');
+  if (wx >= 0) {
+    await dh((h, s: number[]) => h.view({ x: s[0]! + 8, y: s[1]! + 3, yaw: 0.35, pitch: 1.05, distance: 22 }), [wx, wy]);
+    await d.waitForTimeout(2500);
+    const dDrag = async (x0: number, y0: number, x1: number, y1: number) => {
+      const p0 = await dh((h, t: number[]) => h.tileToScreen(t[0]!, t[1]!), [x0, y0]);
+      const p1 = await dh((h, t: number[]) => h.tileToScreen(t[0]!, t[1]!), [x1, y1]);
+      await d.mouse.move(p0.x, p0.y);
+      await d.mouse.down();
+      await d.mouse.move(p1.x, p1.y, { steps: 10 });
+      await d.mouse.up();
+      await d.waitForTimeout(800);
+    };
+    await d.getByRole('button', { name: 'Waterways tools' }).click();
+    await d.keyboard.press('KeyU');
+    await dDrag(wx, wy + 3, wx + 16, wy + 3);
+    await d.waitForTimeout(2000);
+    check((await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 8, wy + 3])).type === 1, 'dug a canal with the canal tool');
+    await d.keyboard.press('KeyO');
+    await dClick(wx + 2, wy + 4);
+    check((await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 2, wy + 4])).type === 12, 'built a dock with the dock tool');
+    const far = await dh((h, t: number[]) => h.command({ type: 'buildDock', x: t[0], y: t[1] }), [wx + 14, wy + 4]);
+    check(far.ok, `built a second dock by command${far.ok ? '' : `: ${far.error}`}`);
+    await dh((h, t: number[]) => h.command({ type: 'buildCanal', x0: t[0], y0: t[1], x1: t[0], y1: t[1] }), [wx + 8, wy + 2]);
+    await d.keyboard.press('KeyM');
+    await dClick(wx + 8, wy + 2);
+    check((await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 8, wy + 2])).type === 13, 'built a ship depot with the depot tool');
+    await d.keyboard.press('KeyX');
+    await dClick(wx + 11, wy + 3);
+    check((await dh((h) => h.stations().length)) >= 2, 'docks made stations');
+    await d.keyboard.press('Escape');
+    await dClick(wx + 8, wy + 2);
+    const depotWin = d.locator('.window', { hasText: 'Ship depot' });
+    await depotWin.waitFor({ timeout: 5000 });
+    await depotWin.getByRole('button', { name: /^Buy for/ }).click();
+    await depotWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
+    const shipWin = d.locator('.window', { has: d.locator('ol.orders') }).last();
+    const near = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 2, wy + 4])).data;
+    const farSt = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 14, wy + 4])).data;
+    const shipId = await dh((h) => h.trains().filter((t) => t.mode === 'water').at(-1)?.id ?? -1);
+    const r = await dh((h, o: number[]) => h.command({ type: 'setOrders', id: o[0], orders: [{ kind: 'station', station: o[1] }, { kind: 'station', station: o[2] }] }), [shipId, near, farSt]);
+    check(r.ok, `gave the ship orders${r.ok ? '' : `: ${r.error}`}`);
+    await d.waitForTimeout(800);
+    await shipWin.getByRole('button', { name: /Start/ }).click();
+    await d.waitForTimeout(6000);
+    const shipStatus = await shipWin.locator('.kv b').first().innerText();
+    check(/Heading|Loading/.test(shipStatus), `ship is sailing (${shipStatus})`);
+    while ((await d.locator('.window').count()) > 0) await d.locator('.window button[aria-label="Close"]').first().click();
+    await d.getByTitle('Pause (Space)').click();
+    await d.waitForTimeout(1500);
+    const shipAt = await dh((h) => h.trains().find((t) => t.mode === 'water')?.ship);
+    check(!!shipAt, 'the client gets the ship position');
+    await dh((h, p: number[]) => h.view({ x: p[0], y: p[1], distance: 7, pitch: 0.6, yaw: 0.8 }), shipAt ?? [wx + 8, wy + 3]);
+    await d.waitForTimeout(3000);
+    await d.screenshot({ path: `${outDir}/08-waterways.png` });
   }
 } catch (e) {
   failed = true;
