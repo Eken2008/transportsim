@@ -41,6 +41,7 @@ import { OrdersEditor } from './OrdersEditor.tsx';
 import { capacityText, loadText } from './cargoText.ts';
 import { NewsWindow } from './NewsWindow.tsx';
 import { FinancesWindow, LeagueWindow } from './FinancesWindow.tsx';
+import { StatsWindow } from './StatsWindow.tsx';
 import { GameInfoWindow } from './GameInfoWindow.tsx';
 import { IndustryWindow } from './IndustryWindow.tsx';
 import { TownWindow } from './TownWindow.tsx';
@@ -147,6 +148,8 @@ export function WindowLayer() {
             return <FinancesWindow key={key} w={w} />;
           case 'league':
             return <LeagueWindow key={key} w={w} />;
+          case 'stats':
+            return <StatsWindow key={key} w={w} />;
           case 'game':
             return <GameInfoWindow key={key} w={w} />;
           case 'industry':

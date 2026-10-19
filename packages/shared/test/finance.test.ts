@@ -58,6 +58,34 @@ describe('finances', () => {
     expect(c.finances).toHaveLength(1);
   });
 
+  test('month-end statistics: books, deliveries and vehicles, kept in saves', () => {
+    const { state, c, map, must, days } = world();
+    buildLine(must, map);
+    for (const x of [4, 5, 6, 7, 8, 34, 35, 36, 37]) {
+      for (const y of [12, 13]) {
+        const i = map.tileIndex(x, y);
+        map.layers.type[i] = TileType.House;
+        map.layers.data[i] = 0;
+      }
+    }
+    const t = [...state.trains.values()][0]!;
+    must({ type: 'setOrders', id: t.id, orders: [{ kind: 'station', station: 0 }, { kind: 'station', station: 1 }] });
+    must({ type: 'trainAction', id: t.id, action: 'start' });
+    days(70);
+    expect(c.history.length).toBeGreaterThanOrEqual(2);
+    const last = c.history.at(-1)!;
+    expect(last.vehicles).toBe(1);
+    expect(last.date).toBeLessThanOrEqual(state.date);
+    expect(last.loan).toBe(c.loan);
+    expect(last.ledger.running).toBeLessThan(0);
+    const delivered = c.history.reduce((n, m) => n + (m.delivered.passengers ?? 0), 0);
+    expect(delivered).toBeGreaterThan(0);
+    expect(c.history.reduce((n, m) => n + m.ledger.income, 0)).toBeGreaterThan(0);
+    const restored = restoreSnapshot(encodeSnapshot(state), { maxPlayers: 15, maxMapSize: 256 });
+    expect(restored.companies.get(c.id)!.history).toEqual(c.history);
+    expect(restored.companies.get(c.id)!.month.ledger).toEqual(c.month.ledger);
+  });
+
   test('loans: steps, limits, permissions, and money off the books', () => {
     const { state, c, run, must, ledger } = world();
     const max = ECONOMY[state.settings.economy].maxLoan;
