@@ -19,19 +19,24 @@ import {
   turnSteps,
 } from '../src/index.ts';
 
-/** Every place where track bends 90° through a corner piece (enters and leaves it > 45° apart). */
+/** Every joint that turns more than 45°, and every switch whose branches are more than 45° apart. */
 function rightAngles(map: GameMap): string[] {
   const out: string[] = [];
   for (let t = 0; t < map.layers.type.length; t++) {
     const bits = map.layers.track[t]!;
     if (!bits) continue;
-    for (let p = 2; p < 6; p++) {
+    const at = `${t % map.width},${Math.floor(t / map.width)}`;
+    for (let p = 0; p < 6; p++) {
       if (!((bits >> p) & 1)) continue;
-      const [e0, e1] = PIECE_EDGES[p]!;
-      for (const r of linkedAcross(map, t, p, e0)) {
-        for (const q of linkedAcross(map, t, p, e1)) {
-          if (turnSteps(headingOut(r, OPPOSITE_EDGE[e0]), headingIn(q, OPPOSITE_EDGE[e1])) > 1) {
-            out.push(`${t % map.width},${Math.floor(t / map.width)}: ${PIECE_NAMES[r]} → ${PIECE_NAMES[p]} → ${PIECE_NAMES[q]}`);
+      for (const e of PIECE_EDGES[p]!) {
+        const opp = OPPOSITE_EDGE[e];
+        const linked = linkedAcross(map, t, p, e);
+        for (const q of linked) {
+          if (turnSteps(headingOut(p, e), headingIn(q, opp)) > 1) out.push(`${at}: joint ${PIECE_NAMES[p]} → ${PIECE_NAMES[q]}`);
+        }
+        for (const a of linked) {
+          for (const b of linked) {
+            if (a < b && turnSteps(headingIn(a, opp), headingIn(b, opp)) > 1) out.push(`${at}: switch ${PIECE_NAMES[p]} → ${PIECE_NAMES[a]} / ${PIECE_NAMES[b]}`);
           }
         }
       }
@@ -41,7 +46,7 @@ function rightAngles(map: GameMap): string[] {
 }
 
 describe('no 90° connections', () => {
-  test('random drags onto, along and across a line never connect at a right angle', () => {
+  test('random drags onto, along and across a line never make a 90° joint or switch', () => {
     const rng = new Random(7);
     for (let trial = 0; trial < 120; trial++) {
       const state = new GameState({ ...DEFAULT_SETTINGS, mapWidth: 128, mapHeight: 128 }, new GameMap(128, 128));

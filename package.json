@@ -10,6 +10,7 @@
     "test": "bun test",
     "smoke": "bun run build && node --experimental-strip-types --no-warnings scripts/smoke.ts",
     "visual": "bun run build && node --experimental-strip-types --no-warnings scripts/visual.ts",
+    "circle": "bun run build && node --experimental-strip-types --no-warnings scripts/clickCircle.ts",
     "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/client",
     "lint": "eslint .",
     "format": "prettier --write ."

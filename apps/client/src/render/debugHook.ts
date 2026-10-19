@@ -1,4 +1,4 @@
-import { HEIGHT_SCALE, TileType, type Command } from '@transportsim/shared';
+import { HEIGHT_SCALE, PIECE_NAMES, TileType, nextSegments, seg, trackdir, type Command } from '@transportsim/shared';
 import * as THREE from 'three';
 import { client } from '../net/client.ts';
 import { useApp } from '../store.ts';
@@ -35,11 +35,34 @@ export function installDebugHook(r: GameRenderer): () => void {
     },
     /** Client-space pixel position of a tile's centre with the current camera. */
     tileToScreen(x: number, y: number): { x: number; y: number } {
+      return api.pointToScreen(x + 0.5, y + 0.5);
+    },
+    /** Client-space pixel position of a map point (tile units; (x + 0.5, y + 0.5) is a tile centre). */
+    pointToScreen(x: number, y: number): { x: number; y: number } {
       r.controller.apply();
       const map = client.world!.map;
-      const p = new THREE.Vector3(x + 0.5, map.heightAt(x + 0.5, y + 0.5) * HEIGHT_SCALE, y + 0.5).project(r.camera);
+      const p = new THREE.Vector3(x, map.heightAt(x, y) * HEIGHT_SCALE, y).project(r.camera);
       const rect = r.renderer.domElement.getBoundingClientRect();
       return { x: rect.left + ((p.x + 1) / 2) * rect.width, y: rect.top + ((1 - p.y) / 2) * rect.height };
+    },
+    /**
+     * Follow your track from piece `piece` on (x, y) in direction `dir` (0/1), as a train would,
+     * for up to `steps` pieces. Each step lists every way on; the walk takes the first.
+     */
+    follow(x: number, y: number, piece: number, dir: number, steps: number) {
+      const world = client.world!;
+      const owner = world.state.players.get(useApp.getState().room?.playerId ?? -1)?.companyId ?? -1;
+      const map = world.map;
+      const out: { x: number; y: number; piece: string; ways: number }[] = [];
+      let s = seg(map.tileIndex(x, y), trackdir(piece, dir));
+      for (let k = 0; k < steps; k++) {
+        const next = nextSegments(map, s, owner);
+        const tile = Math.floor(s / 16);
+        out.push({ x: tile % map.width, y: Math.floor(tile / map.width), piece: PIECE_NAMES[(s % 16) >> 1]!, ways: next.length });
+        if (!next.length) break;
+        s = next[0]!;
+      }
+      return out;
     },
     /** Raw tile data for inspection. */
     tile(x: number, y: number) {

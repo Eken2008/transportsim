@@ -16,8 +16,8 @@ import {
 
 /**
  * Track connections. Pieces on neighbouring tiles that meet at the shared edge connect when the
- * turn between them is at most 45°, except that track never connects into a 90° bend through a
- * corner piece. Connections are stored, so trains, signals and rendering agree on them.
+ * turn between them is at most 45°, except that a switch never splits into branches 90° apart.
+ * Connections are stored, so trains, signals and rendering agree on them.
  *
  * Each edge has three pieces that can touch it. A tile stores the links across its own north
  * and west edges in the `links` layer: bit (i * 3 + j) for the N edge (bits 0-8) and 9 + (i * 3
@@ -147,40 +147,15 @@ export function unlinkPieces(map: GameMap, tile: number, pieceBits: number): num
   return [...changed];
 }
 
-/** The other edge of a piece. */
-const otherEdge = (p: number, e: Edge): Edge => {
-  const [e0, e1] = PIECE_EDGES[p]!;
-  return e === e0 ? e1 : e0;
-};
-
-const isCorner = (p: number) => p >= 2 && p <= 5;
-
 /**
- * Would linking piece `p` (on `tile`, across edge `e`) to piece `q` make a 90° bend through a
- * corner piece? Corner pieces are short, so straight → corner → perpendicular straight is a
- * right angle in half a tile; that never connects. Nor does a switch whose branches are 90°
- * apart (e.g. a straight with one diagonal leaving each way). Two 45° turns either side of a
- * straight piece — diagonal, straight, diagonal — are a normal curve and do connect.
+ * Would linking piece `p` (on `tile`, across edge `e`) to piece `q` make a switch whose branches
+ * are 90° apart (e.g. a straight with one diagonal leaving each way)? That never connects.
+ * Joints themselves turn at most 45° (see linkCandidates), so every curve is made of 45° steps:
+ * straight → corner → perpendicular straight is a tight curve, and eight pieces make a circle.
  */
 export function makesRightAngle(map: GameMap, tile: number, p: number, e: Edge, q: number): boolean {
-  const n = neighbourTile(map, tile, e);
-  if (n < 0) return false;
+  if (neighbourTile(map, tile, e) < 0) return false;
   const opp = OPPOSITE_EDGE[e];
-  // Through p: something linked to p's other end → p → q.
-  if (isCorner(p)) {
-    const pe = otherEdge(p, e);
-    for (const r of linkedAcross(map, tile, p, pe)) {
-      // r travels towards p (leaving its tile through the edge facing p), then on through q.
-      if (turnSteps(headingOut(r, OPPOSITE_EDGE[pe]), headingIn(q, opp)) > 1) return true;
-    }
-  }
-  // Through q: p → q → something linked to q's other end.
-  if (isCorner(q)) {
-    const qe = otherEdge(q, opp);
-    for (const s of linkedAcross(map, n, q, qe)) {
-      if (turnSteps(headingOut(p, e), headingIn(s, OPPOSITE_EDGE[qe])) > 1) return true;
-    }
-  }
   // Branches at this joint: tracks splitting from (or merging into) the same track must stay
   // within 45° of each other, or the two routes through the switch would be a right angle apart.
   const hp = headingOut(p, e);
@@ -197,7 +172,7 @@ export function makesRightAngle(map: GameMap, tile: number, p: number, e: Edge, 
 
 /**
  * Connect newly placed (or reused) pieces to every piece they touch with at most a 45° turn,
- * except where that would make a 90° bend through a corner piece. Links among the new pieces
+ * except where that would make a switch with branches 90° apart. Links among the new pieces
  * are made first, so a route keeps its own shape when it meets existing track.
  * Returns tiles whose link data changed.
  */

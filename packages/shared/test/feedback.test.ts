@@ -14,9 +14,6 @@ import {
   trackdir,
   type Command,
   type PlacedPiece,
-  TD_HEADING,
-  tdExit as tdExitEdge,
-  turnSteps,
 } from '../src/index.ts';
 
 function world() {
@@ -58,7 +55,7 @@ function drive(state: GameState, start: number, owner: number): Set<number> {
 const tileOf = (s: number) => Math.floor(s / 16);
 
 describe('track connections', () => {
-  test('a corner piece never joins two perpendicular straights (no 90° connections)', () => {
+  test('a stub ending in a corner piece on a line is a tight curve onto it (two 45° turns)', () => {
     for (const order of ['line first', 'stub first'] as const) {
       const { state, map, build, owner } = world();
       const line = () => build(Array.from({ length: 21 }, (_, k) => ({ x: 10 + k, y: 20, piece: Piece.X })));
@@ -76,14 +73,16 @@ describe('track connections', () => {
         line();
       }
       const row = (s: number) => Math.floor(tileOf(s) / map.width);
-      // Northbound on the stub a train reaches the corner piece but can't turn onto the line.
+      // Northbound on the stub a train curves onto the line, heading west.
       const up = drive(state, seg(map.tileIndex(20, 24), trackdir(Piece.Y, 1)), owner);
-      expect([...up].some((s) => row(s) === 20 && (s % 16) >> 1 === Piece.X)).toBe(false);
-      // Trains on the line run straight past.
-      for (const td of [0, 1]) {
-        const along = drive(state, seg(map.tileIndex(td ? 30 : 10, 20), trackdir(Piece.X, td)), owner);
-        expect([...along].every((s) => row(s) === 20 && (s % 16) >> 1 === Piece.X)).toBe(true);
-      }
+      expect(up.has(seg(map.tileIndex(10, 20), trackdir(Piece.X, 1)))).toBe(true);
+      expect(up.has(seg(map.tileIndex(30, 20), trackdir(Piece.X, 0)))).toBe(false);
+      // Westbound trains on the line run straight past; eastbound ones may take the curve.
+      const west = drive(state, seg(map.tileIndex(30, 20), trackdir(Piece.X, 1)), owner);
+      expect([...west].every((s) => row(s) === 20 && (s % 16) >> 1 === Piece.X)).toBe(true);
+      const east = drive(state, seg(map.tileIndex(10, 20), trackdir(Piece.X, 0)), owner);
+      expect(east.has(seg(map.tileIndex(30, 20), trackdir(Piece.X, 0)))).toBe(true);
+      expect(east.has(seg(map.tileIndex(20, 24), trackdir(Piece.Y, 0)))).toBe(true);
     }
   });
 
@@ -106,7 +105,8 @@ describe('track connections', () => {
     map.layers.links.fill(0);
     linkAllByGeometry(map);
     const up = drive(state, seg(map.tileIndex(20, 24), trackdir(Piece.Y, 1)), owner);
-    expect([...up].some((s) => Math.floor(tileOf(s) / map.width) === 20 && (s % 16) >> 1 === Piece.X)).toBe(false);
+    expect(up.has(seg(map.tileIndex(10, 20), trackdir(Piece.X, 1)))).toBe(true);
+    expect(up.has(seg(map.tileIndex(30, 20), trackdir(Piece.X, 0)))).toBe(false);
     const along = drive(state, seg(map.tileIndex(10, 20), trackdir(Piece.X, 0)), owner);
     expect(along.has(seg(map.tileIndex(30, 20), trackdir(Piece.X, 0)))).toBe(true);
   });
@@ -190,30 +190,5 @@ describe('consist editing', () => {
     run({ type: 'trainAction', id: t.id, action: 'start' });
     for (let i = 0; i < TICKS_PER_DAY; i++) state.step();
     expect(executeCommand(state, { playerId: 1, companyId: t.owner }, { type: 'editConsist', id: t.id, units: ['badger'] }).ok).toBe(false);
-  });
-});
-
-describe('route planner and right angles', () => {
-  test('planned routes never bend 90° through a single corner piece', () => {
-    const { map, owner } = world();
-    const heading = (q: PlacedPiece, next: PlacedPiece) => {
-      // Heading of q when travelling towards next: pick q's trackdir whose exit faces next.
-      for (const td of [trackdir(q.piece, 0), trackdir(q.piece, 1)]) {
-        const nx = q.x + [0, 1, 0, -1][tdExitEdge(td)]!;
-        const ny = q.y + [-1, 0, 1, 0][tdExitEdge(td)]!;
-        if (nx === next.x && ny === next.y) return TD_HEADING[td]!;
-      }
-      return -1;
-    };
-    for (const [ex, ey] of [[30, 12], [12, 30], [28, 25], [22, 30]] as const) {
-      const plan = planTrack(map, 10, 10, ex, ey, { owner })!;
-      expect(plan).not.toBeNull();
-      for (let i = 1; i + 2 < plan.length; i++) {
-        if (plan[i]!.piece < 2) continue;
-        const before = heading(plan[i - 1]!, plan[i]!);
-        const after = heading(plan[i + 1]!, plan[i + 2]!);
-        expect(turnSteps(before, after)).toBeLessThanOrEqual(1);
-      }
-    }
   });
 });

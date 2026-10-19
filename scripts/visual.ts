@@ -73,8 +73,8 @@ try {
   // A wye: a line from the south splitting both ways onto the main line at x = 9.
   for (let y = 3; y <= 8; y++) add(9, y, Y);
   add(9, 2, SW); add(9, 2, SE);
-  // The "weird intersection": a stub from below ending in a corner piece on the main line.
-  // That would be a 90° bend, so it must not connect (or draw as connected).
+  // A stub from below ending in a corner piece on the main line: a tight curve (two 45° turns)
+  // joining it as a switch.
   for (let y = 1; y <= 5; y++) add(-8, y, Y);
   add(-8, 0, SW);
   // A diamond crossing at x = 11.
@@ -113,7 +113,7 @@ try {
 
   await view({ x: ox - 8, y: oy + 1, yaw: 0, pitch: 1.35, distance: 7 });
   await page.waitForTimeout(2500);
-  await page.screenshot({ path: `${outDir}/right-angle.png` });
+  await page.screenshot({ path: `${outDir}/tight-curve.png` });
   await view({ x: ox - 2, y: oy + 1, yaw: 0.4, pitch: 1.1, distance: 9 });
   await page.waitForTimeout(3000);
   await page.screenshot({ path: `${outDir}/curve.png` });
