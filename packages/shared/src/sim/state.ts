@@ -2,6 +2,7 @@ import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, t
 import type { Station } from '../rail/station.ts';
 import { generateTowns, type Town } from '../town/towns.ts';
 import { CargoSystem } from '../economy/cargoSystem.ts';
+import { generateIndustries, type Industry } from '../economy/industries.ts';
 import { MaintenanceSystem } from '../vehicles/maintenance.ts';
 import { IncidentSystem } from '../incidents/rail.ts';
 import { COSTS } from '../economy/costs.ts';
@@ -57,6 +58,11 @@ export class GameState {
   readonly companies = new Map<number, Company>();
   readonly players = new Map<number, Player>();
   readonly towns = new Map<number, Town>();
+  readonly industries = new Map<number, Industry>();
+  nextIndustryId = 0;
+  /** Industries changed/removed since the last sync flush. */
+  readonly dirtyIndustries = new Set<number>();
+  readonly removedIndustries = new Set<number>();
   readonly stations = new Map<number, Station>();
   nextStationId = 0;
   /** Stations changed/removed since the last sync flush (server broadcasts these). */
@@ -121,6 +127,8 @@ export class GameState {
     });
     const state = new GameState(settings, map);
     for (const t of generateTowns(map, settings.seed, settings.startYear)) state.towns.set(t.id, t);
+    for (const ind of generateIndustries(map, [...state.towns.values()], settings.seed, settings.startYear)) state.industries.set(ind.id, ind);
+    state.nextIndustryId = state.industries.size;
     return state;
   }
 
@@ -168,6 +176,15 @@ export class GameState {
   }
 
   private onNewMonth(): void {
+    for (const ind of this.industries.values()) {
+      ind.lastProduced = ind.produced;
+      ind.lastTransported = ind.transported;
+      ind.lastDelivered = ind.delivered;
+      ind.produced = {};
+      ind.transported = {};
+      ind.delivered = {};
+      this.dirtyIndustries.add(ind.id);
+    }
     const econ = ECONOMY[this.settings.economy];
     this.countInfrastructure();
     for (const c of this.companies.values()) {

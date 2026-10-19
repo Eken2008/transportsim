@@ -6,6 +6,7 @@ import type { GameSettings, ServerLimits } from '../sim/settings.ts';
 import type { Player } from '../sim/state.ts';
 import type { NewsItem } from '../news/news.ts';
 import type { Town } from '../town/towns.ts';
+import type { Industry } from '../economy/industries.ts';
 import type { Station } from '../rail/station.ts';
 import type { TrainInfo, TrainMotion } from '../vehicles/train.ts';
 import type { ChunkData } from '../world/chunks.ts';
@@ -92,6 +93,8 @@ export type ServerMessage =
   | { t: 'chunk'; data: ChunkData }
   /** Town list; `full` replaces the client's list, otherwise entries are upserted. */
   | { t: 'towns'; towns: Town[]; full: boolean }
+  /** Industry list; `full` replaces the client's list. `removed` lists closed ones. */
+  | { t: 'industries'; industries: Industry[]; removed: number[]; full: boolean }
   /** Station list; `full` replaces the client's list. `removed` lists deleted ids. */
   | { t: 'stations'; stations: Station[]; removed: number[]; full: boolean }
   /** Train details (all trains; changes only unless `full`). */

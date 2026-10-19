@@ -8,6 +8,7 @@ import {
   type ChunkData,
   type GameSettings,
   type GlobalState,
+  type Industry,
   type Station,
   type Town,
   type TrainInfo,
@@ -26,6 +27,8 @@ export class ClientWorld {
   townsRev = 0;
   /** Bumped when stations change. */
   stationsRev = 0;
+  /** Bumped when industries change. */
+  industriesRev = 0;
   /** Bumped when the waypoint list changes. */
   waypointsRev = 0;
   private waypointsKey = '';
@@ -102,6 +105,14 @@ export class ClientWorld {
     if (full) this.state.towns.clear();
     for (const t of towns) this.state.towns.set(t.id, t);
     this.townsRev++;
+  }
+
+  applyIndustries(industries: Industry[], removed: number[], full: boolean): void {
+    const m = this.state.industries;
+    if (full) m.clear();
+    for (const ind of industries) m.set(ind.id, ind);
+    for (const id of removed) m.delete(id);
+    this.industriesRev++;
   }
 
   applyStations(stations: Station[], removed: number[], full: boolean): void {

@@ -24,6 +24,10 @@ export interface Station {
   waitingTotal: number;
   /** Cargo accepted around the station (from its catchment). */
   accepts?: CargoId[];
+  /** Cargo produced around the station (towns and industries in its catchment). */
+  supplies?: CargoId[];
+  /** Industries in its catchment. */
+  industries?: number[];
   /** 0..255 like OpenTTD; affects how much cargo the station receives. */
   rating: number;
   /** Day a train last picked up passengers here. */

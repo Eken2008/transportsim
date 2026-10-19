@@ -11,6 +11,7 @@ import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
 import { JUMP_CONDITIONS } from '../vehicles/train.ts';
 import { isCargo } from '../economy/cargo.ts';
+import { industryType, newIndustry, type CargoAmounts, type Industry } from '../economy/industries.ts';
 import type { StationPacket } from '../economy/cargoSystem.ts';
 import { emptyInfrastructure, sanitizeFinances } from '../economy/finance.ts';
 import { sanitizeSettings, type GameSettings, type ServerLimits } from '../sim/settings.ts';
@@ -45,6 +46,8 @@ export interface Snapshot {
   nextWaypointId?: number;
   /** Cargo waiting at stations: [station id, packets]. */
   cargoPackets?: [number, StationPacket[]][];
+  industries?: Industry[];
+  nextIndustryId?: number;
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -73,6 +76,8 @@ export function takeSnapshot(state: GameState): Snapshot {
     waypoints: [...state.waypoints.values()],
     nextWaypointId: state.nextWaypointId,
     cargoPackets: [...state.cargo.packets.entries()],
+    industries: [...state.industries.values()],
+    nextIndustryId: state.nextIndustryId,
   };
 }
 
@@ -144,6 +149,24 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
     });
   }
   recountTowns(map, state.towns.values());
+  const amounts = (v: unknown): CargoAmounts =>
+    Object.fromEntries(Object.entries(v && typeof v === 'object' ? v : {}).filter(([c, n]) => isCargo(c) && typeof n === 'number' && n >= 0));
+  for (const ind of Array.isArray(snap.industries) ? snap.industries : []) {
+    const type = ind && typeof ind.id === 'number' ? industryType(String(ind.type)) : undefined;
+    if (!type) continue;
+    state.industries.set(ind.id, {
+      ...newIndustry(ind.id, type, num(ind.x, 0), num(ind.y, 0), String(ind.name ?? type.name).slice(0, 60)),
+      level: Math.max(0.25, Math.min(8, num(ind.level, 1))),
+      input: amounts(ind.input),
+      produced: amounts(ind.produced),
+      transported: amounts(ind.transported),
+      delivered: amounts(ind.delivered),
+      lastProduced: amounts(ind.lastProduced),
+      lastTransported: amounts(ind.lastTransported),
+      lastDelivered: amounts(ind.lastDelivered),
+    });
+  }
+  state.nextIndustryId = Math.max(num(snap.nextIndustryId, 0), ...[...state.industries.keys()].map((k) => k + 1));
   const savedPackets = new Map(Array.isArray(snap.cargoPackets) ? snap.cargoPackets : []);
   for (const s of Array.isArray(snap.stations) ? snap.stations : []) {
     if (!s || typeof s.id !== 'number' || s.id < 0 || s.id > 0xffff) continue;

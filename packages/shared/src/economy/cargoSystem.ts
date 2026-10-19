@@ -6,6 +6,7 @@ import { Random } from '../util/random.ts';
 import { cargoCount, type Train } from '../vehicles/train.ts';
 import { CARGO_IDS, cargoPayment, type CargoId } from './cargo.ts';
 import { RATING_STEP, ratingParts } from './rating.ts';
+import { industryType } from './industries.ts';
 
 /** Passengers generated per day per resident in a station's catchment, at full rating. */
 const GENERATION_PER_RESIDENT = 1 / 45;
@@ -42,6 +43,10 @@ interface Catchment {
   /** Residents it draws from after competition with other stations. */
   share: number;
 }
+
+/** Towns accept goods and food once a station's catchment has this many residents. */
+export const GOODS_RESIDENTS = 200;
+export const FOOD_RESIDENTS = 100;
 
 /**
  * Cargo handling. Stations collect passengers and mail from the houses in their catchment, and
@@ -169,9 +174,29 @@ export class CargoSystem {
       for (const id of ids) this.catch.get(id)!.residents += pop;
     }
     for (const st of this.state.stations.values()) {
-      const accepts: CargoId[] = this.catch.get(st.id)!.residents > 0 ? ['passengers', 'mail'] : [];
-      if (accepts.join() !== (st.accepts ?? []).join()) {
-        st.accepts = accepts;
+      const residents = this.catch.get(st.id)!.residents;
+      const industries = this.industriesNear(st);
+      const accepts = new Set<CargoId>();
+      const supplies = new Set<CargoId>();
+      if (residents > 0) {
+        for (const c of ['passengers', 'mail'] as const) {
+          accepts.add(c);
+          supplies.add(c);
+        }
+      }
+      if (residents >= GOODS_RESIDENTS) accepts.add('goods');
+      if (residents >= FOOD_RESIDENTS) accepts.add('food');
+      for (const id of industries) {
+        const type = industryType(this.state.industries.get(id)!.type)!;
+        for (const c of type.accepts) accepts.add(c);
+        for (const c of type.produces) supplies.add(c);
+      }
+      const acc = CARGO_IDS.filter((c) => accepts.has(c));
+      const sup = CARGO_IDS.filter((c) => supplies.has(c));
+      if (acc.join() !== (st.accepts ?? []).join() || sup.join() !== (st.supplies ?? []).join() || industries.join() !== (st.industries ?? []).join()) {
+        st.accepts = acc;
+        st.supplies = sup;
+        st.industries = industries;
         this.state.markStationDirty(st.id);
       }
     }
@@ -212,9 +237,23 @@ export class CargoSystem {
     }
   }
 
-  /** Daily: update ratings, generate passengers and mail, let unserved or excess cargo give up. */
+  /** Industries whose footprint touches the station's catchment. */
+  private industriesNear(st: Station): number[] {
+    const x0 = st.x0 - STATION_CATCHMENT;
+    const y0 = st.y0 - STATION_CATCHMENT;
+    const x1 = st.x1 + STATION_CATCHMENT;
+    const y1 = st.y1 + STATION_CATCHMENT;
+    const out: number[] = [];
+    for (const ind of this.state.industries.values()) {
+      if (ind.x <= x1 && ind.x + ind.w - 1 >= x0 && ind.y <= y1 && ind.y + ind.h - 1 >= y0) out.push(ind.id);
+    }
+    return out;
+  }
+
+  /** Daily: update ratings, generate cargo, let unserved or excess cargo give up. */
   daily(): void {
     this.refresh();
+    this.produce();
     for (const st of this.state.stations.values()) {
       this.updateRating(st);
       // Cargo for destinations no longer served drifts away.
@@ -233,6 +272,78 @@ export class CargoSystem {
         this.scaleWaiting(st, () => keep);
       }
     }
+  }
+
+  /**
+   * Industries produce: primary ones at their monthly rate, secondary ones from what was
+   * delivered. Output goes to the (up to two) best-rated stations nearby that send that cargo
+   * somewhere; the share moved follows the best rating, the rest is lost.
+   */
+  private produce(): void {
+    const near = new Map<number, Station[]>();
+    for (const st of this.state.stations.values()) for (const id of st.industries ?? []) near.set(id, [...(near.get(id) ?? []), st]);
+    for (const ind of this.state.industries.values()) {
+      const type = industryType(ind.type);
+      if (!type) continue;
+      const out = new Map<CargoId, number>();
+      if (type.production > 0) {
+        for (const c of type.produces) {
+          const perDay = (type.production * ind.level) / 30;
+          out.set(c, Math.floor(perDay) + (this.rng.next() < perDay % 1 ? 1 : 0));
+        }
+      } else if (type.produces.length) {
+        let input = 0;
+        for (const c of type.accepts) input += ind.input[c] ?? 0;
+        ind.input = {};
+        const each = Math.floor(input / type.produces.length);
+        for (const c of type.produces) out.set(c, each);
+      }
+      for (const [cargo, n] of out) {
+        if (n <= 0) continue;
+        ind.produced[cargo] = (ind.produced[cargo] ?? 0) + n;
+        const stations = (near.get(ind.id) ?? []).filter((st) => this.destinations(cargo, st.id).length > 0).sort((a, b) => b.rating - a.rating).slice(0, 2);
+        if (stations.length === 0) continue;
+        const moved = Math.floor(n * (stations[0]!.rating / 255));
+        const total = stations.reduce((s, st) => s + st.rating, 0);
+        let left = moved;
+        stations.forEach((st, k) => {
+          const share = k === stations.length - 1 ? left : Math.floor((moved * st.rating) / total);
+          left -= share;
+          this.send(st, cargo, share);
+        });
+        ind.transported[cargo] = (ind.transported[cargo] ?? 0) + moved;
+      }
+      this.state.dirtyIndustries.add(ind.id);
+    }
+  }
+
+  /** Put `n` units of cargo produced near a station on its platforms, spread over destinations. */
+  private send(st: Station, cargo: CargoId, n: number): void {
+    const dests = this.destinations(cargo, st.id);
+    if (n <= 0 || dests.length === 0) return;
+    const per = Math.max(1, Math.ceil(n / dests.length));
+    for (const dest of dests) {
+      const k = Math.min(per, n);
+      if (k <= 0) break;
+      this.addWaiting(st, { cargo, dest, src: st.id, n: k, day: this.state.date });
+      n -= k;
+    }
+  }
+
+  /** Cargo delivered to a station: industries around it that accept it take it in. */
+  private deliverToIndustry(st: Station, cargo: CargoId, n: number): void {
+    let best: { id: number; d: number } | null = null;
+    for (const id of st.industries ?? []) {
+      const ind = this.state.industries.get(id);
+      if (!ind || !industryType(ind.type)?.accepts.includes(cargo)) continue;
+      const d = Math.abs(ind.x + ind.w / 2 - st.x) + Math.abs(ind.y + ind.h / 2 - st.y);
+      if (!best || d < best.d) best = { id, d };
+    }
+    if (!best) return;
+    const ind = this.state.industries.get(best.id)!;
+    ind.input[cargo] = (ind.input[cargo] ?? 0) + n;
+    ind.delivered[cargo] = (ind.delivered[cargo] ?? 0) + n;
+    this.state.dirtyIndustries.add(ind.id);
   }
 
   /** Generate `perDay` (at full rating) units of `cargo` at a station, spread over its destinations. */
@@ -289,6 +400,7 @@ export class CargoSystem {
       const src = this.state.stations.get(p.src);
       const dist = src ? Math.abs(src.x - st.x) + Math.abs(src.y - st.y) : 0;
       income += cargoPayment(p.cargo, p.n, dist, this.state.date - p.day);
+      this.deliverToIndustry(st, p.cargo, p.n);
     }
     t.cargo = keep;
     if (income > 0) {

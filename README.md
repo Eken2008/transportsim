@@ -12,7 +12,8 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Upkeep:** reliability that decays between services, breakdowns (a game setting), automatic service trips, ageing, autorenew and replacement rules.
 > - **Accidents:** with accidents on, trains only see so far ahead, so unsafe signalling crashes trains; brake failures pass red signals, and on realistic, overspeed derails trains. Wreckage blocks the line for a while.
 > - **Orders:** stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
-> - **Passengers:** destination-based passengers with payment by distance and journey time.
+> - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, paid by distance and journey time.
+> - **Industries:** mines, forests, farms and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
 > - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table. Three quarters in the red means bankruptcy.
 > - **Competition:** station ratings from service quality; stations that cover the same houses split them by rating.

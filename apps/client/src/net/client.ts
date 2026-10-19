@@ -109,6 +109,9 @@ class AppClient {
       case 'towns':
         this.world?.applyTowns(m.towns, m.full);
         return;
+      case 'industries':
+        this.world?.applyIndustries(m.industries, m.removed, m.full);
+        return;
       case 'stations':
         this.world?.applyStations(m.stations, m.removed, m.full);
         return;

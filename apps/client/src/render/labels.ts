@@ -11,7 +11,7 @@ interface LabelItem {
   title: string;
   sub: string;
   importance: number;
-  kind: 'town' | 'station' | 'waypoint';
+  kind: 'town' | 'station' | 'waypoint' | 'industry';
   color?: string;
 }
 
@@ -75,7 +75,17 @@ export class LabelLayer {
       importance: 1.2,
       kind: 'waypoint',
     }));
-    this.items = [...towns, ...stations, ...waypoints];
+    const industries: LabelItem[] = [...state.industries.values()].map((ind) => ({
+      key: `i${ind.id}`,
+      x: ind.x + ind.w / 2,
+      y: ind.y + ind.h / 2,
+      lift: 1.4,
+      title: ind.name,
+      sub: '',
+      importance: 1.5,
+      kind: 'industry',
+    }));
+    this.items = [...towns, ...stations, ...waypoints, ...industries];
     const keep = new Set(this.items.map((i) => i.key));
     for (const [k, n] of this.nodes) {
       if (!keep.has(k)) {
@@ -122,7 +132,7 @@ export class LabelLayer {
   }
 
   private revKey(): string {
-    return `${this.world.townsRev}:${this.world.stationsRev}:${this.world.waypointsRev}`;
+    return `${this.world.townsRev}:${this.world.stationsRev}:${this.world.waypointsRev}:${this.world.state.industries.size}`;
   }
 
   dispose(): void {

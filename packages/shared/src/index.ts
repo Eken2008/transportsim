@@ -32,6 +32,7 @@ export * from './economy/finance.ts';
 export * from './economy/rating.ts';
 export * from './economy/cargo.ts';
 export * from './economy/cargoSystem.ts';
+export * from './economy/industries.ts';
 export * from './commands/index.ts';
 export * from './protocol/messages.ts';
 export * from './protocol/codec.ts';

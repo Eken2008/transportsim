@@ -15,6 +15,7 @@ import { pickTerrain, type TerrainHit } from './picking.ts';
 import { TrackGhost } from './trackGhost.ts';
 import { TrainRenderer } from './trainRenderer.ts';
 import { SignalLights } from './signalLights.ts';
+import { IndustryRenderer } from './industryMesh.ts';
 import { FloatingText } from './floatingText.ts';
 import { CrossingBooms } from './crossings.ts';
 import { SignalTool } from '../tools/signalTool.ts';
@@ -41,6 +42,7 @@ export class GameRenderer {
   readonly catchment: AreaGhost;
   readonly trains: TrainRenderer;
   readonly signalLights: SignalLights;
+  private readonly industries: IndustryRenderer;
   /** Tiles blocked by accident wreckage. */
   private readonly wrecks: AreaGhost;
   private wrecksKey = '';
@@ -98,6 +100,8 @@ export class GameRenderer {
     this.scene.add(this.reservations.mesh);
     this.wrecks = new AreaGhost(world.map, 0.55);
     this.scene.add(this.wrecks.mesh);
+    this.industries = new IndustryRenderer(world);
+    this.scene.add(this.industries.mesh);
     this.floaters = new FloatingText(canvas.parentElement!, world);
     this.crossings = new CrossingBooms(world);
     this.scene.add(this.crossings.root);
@@ -297,6 +301,7 @@ export class GameRenderer {
     const type = map.layers.type[i];
     if (type === TileType.Depot) openWindow({ kind: 'depot', id: i });
     else if (type === TileType.Station) openWindow({ kind: 'station', id: map.layers.data[i]! });
+    else if (type === TileType.Industry) openWindow({ kind: 'industry', id: map.layers.data[i]! });
   }
 
   private pick(clientX: number, clientY: number): TerrainHit | null {
@@ -323,6 +328,7 @@ export class GameRenderer {
     this.signalLights.update();
     this.updateReservations();
     this.updateWrecks();
+    this.industries.update(now);
     this.crossings.update(dt, now, this.controller.target);
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;
@@ -361,6 +367,7 @@ export class GameRenderer {
     this.catchment.dispose();
     this.trains.dispose();
     this.signalLights.dispose();
+    this.industries.dispose();
     this.floaters.dispose();
     this.crossings.dispose();
     this.world.onIncome = null;

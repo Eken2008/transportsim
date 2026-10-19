@@ -159,6 +159,7 @@ export class Room {
       spawn: this.spawnFor(player),
     });
     this.send(session, { t: 'towns', towns: [...this.state.towns.values()], full: true });
+    this.send(session, { t: 'industries', industries: [...this.state.industries.values()], removed: [], full: true });
     this.send(session, { t: 'stations', stations: [...this.state.stations.values()], removed: [], full: true });
     this.send(session, { t: 'trains', trains: [...this.state.trains.values()].map(trainInfo), removed: [], full: true });
     this.send(session, { t: 'news', items: this.state.news.slice(-NEWS_ON_JOIN), full: true });
@@ -382,6 +383,12 @@ export class Room {
       this.broadcast({ t: 'stations', stations, removed: [...st.removedStations], full: false });
       st.dirtyStations.clear();
       st.removedStations.clear();
+    }
+    if (st.dirtyIndustries.size > 0 || st.removedIndustries.size > 0) {
+      const industries = [...st.dirtyIndustries].map((id) => st.industries.get(id)).filter((i) => i !== undefined);
+      this.broadcast({ t: 'industries', industries, removed: [...st.removedIndustries], full: false });
+      st.dirtyIndustries.clear();
+      st.removedIndustries.clear();
     }
     if (st.dirtyTrains.size > 0 || st.removedTrains.size > 0) {
       const trains = [...st.dirtyTrains].map((id) => st.trains.get(id)).filter((t) => t !== undefined).map(trainInfo);

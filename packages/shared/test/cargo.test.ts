@@ -80,7 +80,7 @@ describe('cargo', () => {
     for (let i = 0; i < TICKS_PER_DAY * 10; i++) state.step();
     expect(a.waiting.mail?.[b.id]).toBeGreaterThan(0);
     expect(a.waiting.passengers?.[b.id]).toBeGreaterThan(0);
-    expect(a.accepts).toEqual(['passengers', 'mail']);
+    expect(a.accepts).toEqual(['passengers', 'mail', 'goods', 'food']);
     run({ type: 'trainAction', id: t.id, action: 'start' });
     let mail = 0;
     const money = company.money;

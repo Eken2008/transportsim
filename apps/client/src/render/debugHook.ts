@@ -90,6 +90,10 @@ export function installDebugHook(r: GameRenderer): () => void {
     command(cmd: Command) {
       return client.command(cmd);
     },
+    /** Industries the client knows about. */
+    industries() {
+      return [...(client.world?.state.industries.values() ?? [])].map((i) => ({ id: i.id, type: i.type, x: i.x, y: i.y, w: i.w, h: i.h }));
+    },
   };
   const w = window as unknown as { transportsim?: typeof api };
   w.transportsim = api;

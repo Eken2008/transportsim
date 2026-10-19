@@ -37,6 +37,7 @@ import { capacityText, loadText } from './cargoText.ts';
 import { NewsWindow } from './NewsWindow.tsx';
 import { FinancesWindow, LeagueWindow } from './FinancesWindow.tsx';
 import { GameInfoWindow } from './GameInfoWindow.tsx';
+import { IndustryWindow } from './IndustryWindow.tsx';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
 export function useTick(ms: number): void {
@@ -142,6 +143,8 @@ export function WindowLayer() {
             return <LeagueWindow key={key} w={w} />;
           case 'game':
             return <GameInfoWindow key={key} w={w} />;
+          case 'industry':
+            return <IndustryWindow key={key} w={w} />;
         }
       })}
     </>

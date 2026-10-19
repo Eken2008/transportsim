@@ -153,6 +153,18 @@ try {
   await view({ x: ox - 12, y: oy + 0.5, yaw: 0.9, pitch: 0.5, distance: 6 });
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${outDir}/freight.png` });
+  // One of each industry type, close up.
+  type Ind = { id: number; type: string; x: number; y: number; w: number; h: number };
+  const industries = await page.evaluate(() => (window as unknown as { transportsim: { industries(): Ind[] } }).transportsim.industries());
+  const seen = new Set<string>();
+  for (const ind of industries) {
+    if (seen.has(ind.type)) continue;
+    seen.add(ind.type);
+    await view({ x: ind.x + ind.w / 2, y: ind.y + ind.h / 2, yaw: 0.7, pitch: 0.75, distance: 9 });
+    await page.waitForTimeout(2500);
+    await page.screenshot({ path: `${outDir}/industry-${ind.type}.png` });
+  }
+  console.log('industry types shown', [...seen].join(', '));
 } finally {
   await browser.close();
   if (process.platform === 'win32') spawnSync('taskkill', ['/pid', String(server.pid), '/T', '/F']);
