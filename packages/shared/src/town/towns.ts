@@ -6,6 +6,18 @@ import { HOUSE_TYPES, houseType } from './houses.ts';
 import { townName } from './names.ts';
 import { ROAD_EDGE_BITS } from './road.ts';
 
+/** What a town's stations handled in a month. */
+export interface TownStats {
+  /** Passengers and mail picked up at stations in the town. */
+  passengers: number;
+  mail: number;
+  /** Goods and food delivered to stations in the town. */
+  goods: number;
+  food: number;
+}
+
+export const emptyTownStats = (): TownStats => ({ passengers: 0, mail: 0, goods: 0, food: 0 });
+
 export interface Town {
   id: number;
   name: string;
@@ -14,6 +26,14 @@ export interface Town {
   y: number;
   population: number;
   houses: number;
+  /** Growth points; the town grows by one step each time they reach 1. */
+  growth?: number;
+  /** Growth points per day, from service (for display). */
+  growthRate?: number;
+  /** Stations serving the town well (recent pickups, good rating). */
+  served?: number;
+  stats?: TownStats;
+  lastStats?: TownStats;
 }
 
 export type TownSize = 'small' | 'medium' | 'large';

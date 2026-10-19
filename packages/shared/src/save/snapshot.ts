@@ -4,7 +4,7 @@ import { railVehicle } from '../vehicles/catalog.ts';
 import { linkAllByGeometry } from '../rail/links.ts';
 import type { Train } from '../vehicles/train.ts';
 import { TileType } from '../world/constants.ts';
-import { recountTowns, type Town } from '../town/towns.ts';
+import { recountTowns, type Town, type TownStats } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
@@ -146,6 +146,9 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       y: num(t.y, 0),
       population: 0,
       houses: 0,
+      growth: typeof t.growth === 'number' ? Math.max(0, Math.min(1, t.growth)) : undefined,
+      stats: townStats(t.stats),
+      lastStats: townStats(t.lastStats),
     });
   }
   recountTowns(map, state.towns.values());
@@ -259,6 +262,12 @@ function sanitizeMembers(input: unknown, needOwner: boolean): CompanyMember[] {
     for (const m of out) if (m.role === 'owner') m.role = 'manager';
   }
   return out.slice(0, MAX_MEMBERS);
+}
+
+function townStats(v: unknown): TownStats | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const s = v as Partial<TownStats>;
+  return { passengers: num(s.passengers, 0), mail: num(s.mail, 0), goods: num(s.goods, 0), food: num(s.food, 0) };
 }
 
 const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);

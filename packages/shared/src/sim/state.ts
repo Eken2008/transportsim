@@ -1,6 +1,8 @@
 import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, type CompanyRole } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
-import { generateTowns, type Town } from '../town/towns.ts';
+import { emptyTownStats, generateTowns, type Town } from '../town/towns.ts';
+import { growTown } from '../town/growth.ts';
+import { Random } from '../util/random.ts';
 import { CargoSystem } from '../economy/cargoSystem.ts';
 import { generateIndustries, type Industry } from '../economy/industries.ts';
 import { MaintenanceSystem } from '../vehicles/maintenance.ts';
@@ -59,6 +61,9 @@ export class GameState {
   readonly players = new Map<number, Player>();
   readonly towns = new Map<number, Town>();
   readonly industries = new Map<number, Industry>();
+  /** Towns changed since the last sync flush. */
+  readonly dirtyTowns = new Set<number>();
+  private townRng: Random;
   nextIndustryId = 0;
   /** Industries changed/removed since the last sync flush. */
   readonly dirtyIndustries = new Set<number>();
@@ -105,6 +110,7 @@ export class GameState {
     this.settings = settings;
     this.map = map;
     this.date = date ?? daysFromYmd(settings.startYear, 0, 1);
+    this.townRng = new Random(settings.seed ^ 0x70e115);
     for (let o = 0; o < 256; o++) this.joins[o * 257] = 1;
     this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
     this.rail = new RailSystem(this);
@@ -157,6 +163,7 @@ export class GameState {
     this.cargo.daily();
     this.maintenance.daily();
     this.rail.clearWrecks();
+    this.growTowns();
     this.billSharing();
     // Running costs for vehicles out of the depot, charged daily.
     for (const t of this.trains.values()) {
@@ -176,6 +183,11 @@ export class GameState {
   }
 
   private onNewMonth(): void {
+    for (const t of this.towns.values()) {
+      t.lastStats = t.stats ?? emptyTownStats();
+      t.stats = emptyTownStats();
+      this.dirtyTowns.add(t.id);
+    }
     for (const ind of this.industries.values()) {
       ind.lastProduced = ind.produced;
       ind.lastTransported = ind.transported;
@@ -193,6 +205,38 @@ export class GameState {
       c.value = this.companyValue(c);
     }
     if (ymdFromDays(this.date).month % 3 === 0) this.onNewQuarter();
+  }
+
+  /**
+   * Towns grow a little on their own and much faster with good service: each well-served
+   * station (picked up within 20 days, rated over 50%) adds growth, as do goods and food.
+   */
+  private growTowns(): void {
+    const served = new Map<number, number>();
+    for (const st of this.stations.values()) {
+      if (st.townId === null || st.rating < 128 || this.date - (st.lastPickup ?? -1e9) > 20) continue;
+      served.set(st.townId, (served.get(st.townId) ?? 0) + 1);
+    }
+    const year = ymdFromDays(this.date).year;
+    for (const t of this.towns.values()) {
+      const n = Math.min(4, served.get(t.id) ?? 0);
+      const last = t.lastStats ?? emptyTownStats();
+      const rate = 1 / 150 + n / 30 + (last.goods >= 30 ? 1 / 40 : 0) + (last.food >= 30 ? 1 / 40 : 0);
+      if (t.served !== n || t.growthRate !== rate) {
+        t.served = n;
+        t.growthRate = rate;
+        this.dirtyTowns.add(t.id);
+      }
+      t.growth = (t.growth ?? 0) + rate;
+      if (t.growth < 1) continue;
+      t.growth -= 1;
+      const changed = growTown(this.map, t, this.townRng, year);
+      for (const i of changed) {
+        const x = i % this.map.width;
+        this.map.touchTile(x, (i - x) / this.map.width);
+      }
+      if (changed.length) this.dirtyTowns.add(t.id);
+    }
   }
 
   /** Close the books for the quarter; companies in the red for too long go bankrupt. */

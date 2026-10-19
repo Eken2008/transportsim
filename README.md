@@ -4,7 +4,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 
 > Status: **M3 — advanced rail** is playable.
 >
-> - **World:** procedural terrain with towns, roads and houses; terraforming.
+> - **World:** procedural terrain with towns, roads and houses that grow with good service; terraforming.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
 > - **Stations and depots:** multi-platform stations and depots.
 > - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.
@@ -12,7 +12,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Upkeep:** reliability that decays between services, breakdowns (a game setting), automatic service trips, ageing, autorenew and replacement rules.
 > - **Accidents:** with accidents on, trains only see so far ahead, so unsafe signalling crashes trains; brake failures pass red signals, and on realistic, overspeed derails trains. Wreckage blocks the line for a while.
 > - **Orders:** stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
-> - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, paid by distance and journey time.
+> - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, routed by cargodist (demand to every reachable destination, transfers between trains), paid per leg by distance and journey time.
 > - **Industries:** mines, forests, farms and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
 > - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table. Three quarters in the red means bankruptcy.

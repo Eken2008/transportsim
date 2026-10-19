@@ -38,6 +38,7 @@ import { NewsWindow } from './NewsWindow.tsx';
 import { FinancesWindow, LeagueWindow } from './FinancesWindow.tsx';
 import { GameInfoWindow } from './GameInfoWindow.tsx';
 import { IndustryWindow } from './IndustryWindow.tsx';
+import { TownWindow } from './TownWindow.tsx';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
 export function useTick(ms: number): void {
@@ -145,6 +146,8 @@ export function WindowLayer() {
             return <GameInfoWindow key={key} w={w} />;
           case 'industry':
             return <IndustryWindow key={key} w={w} />;
+          case 'town':
+            return <TownWindow key={key} w={w} />;
         }
       })}
     </>

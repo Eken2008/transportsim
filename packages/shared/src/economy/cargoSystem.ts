@@ -498,7 +498,10 @@ export class CargoSystem {
       const from = this.state.stations.get(p.at ?? p.src);
       const dist = from ? Math.abs(from.x - st.x) + Math.abs(from.y - st.y) : 0;
       income += cargoPayment(p.cargo, p.n, dist, this.state.date - p.day);
-      if (deliver) this.deliverToIndustry(st, p.cargo, p.n);
+      if (deliver) {
+        this.deliverToIndustry(st, p.cargo, p.n);
+        if (p.cargo === 'goods' || p.cargo === 'food') this.countForTown(st, p.cargo, p.n);
+      }
       else this.addWaiting(st, { cargo: p.cargo, dest: p.dest, src: p.src, n: p.n, day: p.day });
     }
     t.cargo = keep;
@@ -508,6 +511,14 @@ export class CargoSystem {
       this.events.push({ tile: st.y * this.state.map.width + st.x, amount: income, owner: t.owner });
     }
     this.load(t, st);
+  }
+
+  /** Add to the town's monthly figures. */
+  private countForTown(st: Station, what: 'passengers' | 'mail' | 'goods' | 'food', n: number): void {
+    const town = st.townId === null ? undefined : this.state.towns.get(st.townId);
+    if (!town) return;
+    town.stats ??= { passengers: 0, mail: 0, goods: 0, food: 0 };
+    town.stats[what] += n;
   }
 
   /** Stations a train calls at after `here`, in order (one round of its orders). */
@@ -550,6 +561,7 @@ export class CargoSystem {
         const n = Math.min(p.n, space);
         p.n -= n;
         room.set(p.cargo, space - n);
+        if (p.cargo === 'passengers' || p.cargo === 'mail') this.countForTown(st, p.cargo, n);
         const same = t.cargo.find((q) => q.cargo === p.cargo && q.dest === p.dest && q.src === p.src && q.day === p.day && q.hop === hop && q.at === st.id);
         if (same) same.n += n;
         else t.cargo.push({ cargo: p.cargo, dest: p.dest, src: p.src, n, day: p.day, hop, at: st.id });

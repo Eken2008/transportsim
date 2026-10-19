@@ -389,6 +389,11 @@ export class Room {
       st.dirtyStations.clear();
       st.removedStations.clear();
     }
+    if (st.dirtyTowns.size > 0) {
+      const towns = [...st.dirtyTowns].map((id) => st.towns.get(id)).filter((t) => t !== undefined);
+      this.broadcast({ t: 'towns', towns, full: false });
+      st.dirtyTowns.clear();
+    }
     if (st.dirtyIndustries.size > 0 || st.removedIndustries.size > 0) {
       const industries = [...st.dirtyIndustries].map((id) => st.industries.get(id)).filter((i) => i !== undefined);
       this.broadcast({ t: 'industries', industries, removed: [...st.removedIndustries], full: false });
