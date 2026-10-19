@@ -13,17 +13,19 @@ import {
   segmentsConnect,
 } from '../rail/network.ts';
 import { depotGoal, extendThroughPlatform, findPath, stationGoal, type PathGoal } from '../rail/pathfinder.ts';
-import { headInfo, otherHead, segHeights } from '../rail/structures.ts';
+import { BRIDGE_TYPES, headInfo, otherHead, segHeights, spanOver } from '../rail/structures.ts';
 import { EDGE_PIECES, isLinked } from '../rail/links.ts';
 import {
   EDGE_DX,
   EDGE_DY,
   OPPOSITE_EDGE,
   PIECE_EDGES,
+  TD_HEADING,
   hasPiece,
   isSpanTd,
   pieceLength,
   tdPiece,
+  turnSteps,
 } from '../rail/track.ts';
 import { TICKS_PER_DAY, TICKS_PER_SECOND } from '../sim/date.ts';
 import type { GameState } from '../sim/state.ts';
@@ -51,6 +53,35 @@ const CREEP_KMH = 4;
 const DT = 1 / TICKS_PER_SECOND;
 /** The parallel (non-touching) partner of each corner piece. */
 const PARALLEL_PIECE = [-1, -1, 4, 5, 2, 3];
+
+/** Curve speed (km/h) is CURVE_K × √radius, radius in tiles. */
+export const CURVE_K = 57;
+/** Turns farther apart than this (tiles) don't limit speed. */
+const CURVE_FREE_DISTANCE = 30;
+
+/**
+ * Speed limits from curvature along a sequence of segments (back to front). Track turns in 45°
+ * steps; the distance between two turns gives the radius (distance / (π/4)), and the arc from
+ * the segment before the first turn to the segment after the second gets the limit
+ * √radius × CURVE_K. Diagonal staircases don't turn.
+ */
+export function curveLimits(seq: readonly number[]): number[] {
+  const out = new Array<number>(seq.length).fill(Infinity);
+  let since = CURVE_FREE_DISTANCE;
+  let lastTurn = -1;
+  for (let i = 1; i < seq.length; i++) {
+    const prev = seq[i - 1]!;
+    since += segLength(prev);
+    if (turnSteps(TD_HEADING[segTd(prev)]!, TD_HEADING[segTd(seq[i]!)]!) === 0) continue;
+    if (since < CURVE_FREE_DISTANCE && lastTurn >= 0) {
+      const lim = CURVE_K * Math.sqrt(since / (Math.PI / 4));
+      for (let k = lastTurn - 1; k <= i; k++) out[k] = Math.min(out[k]!, lim);
+    }
+    since = 0;
+    lastTurn = i;
+  }
+  return out;
+}
 
 /** Distance (tiles) needed to stop from `kmh`. */
 export function brakingDistance(kmh: number): number {
@@ -105,25 +136,67 @@ export class RailSystem {
     return this.state.accessFor(t.owner, this.statsOf(t).electric);
   }
 
-  /** Speed limit (km/h) of the track under a segment. */
+  /** Speed limit (km/h) of the track under a segment: its track type, or the bridge it is on. */
   segLimit(s: number): number {
-    if (isSpanTd(segTd(s))) return Infinity;
-    return RAIL_TYPE_SPEED[this.state.map.layers.railType[segTile(s)]!] ?? Infinity;
+    const map = this.state.map;
+    const tile = segTile(s);
+    const td = segTd(s);
+    if (isSpanTd(td)) return this.spanLimit(tile, td < 14 ? 0 : 1);
+    const lim = RAIL_TYPE_SPEED[map.layers.railType[tile]!] ?? Infinity;
+    const head = headInfo(map, tile);
+    return head?.kind === 'bridge' ? Math.min(lim, BRIDGE_TYPES[head.bridgeType]!.maxSpeed) : lim;
   }
 
-  /** Highest speed allowed now by track limits under the train and (braking) ahead of it. */
-  private trackLimit(t: Train): number {
-    let lim = Infinity;
-    for (const s of t.path) lim = Math.min(lim, this.segLimit(s));
-    let d = segLength(t.path[0]!) - t.pos;
-    const horizon = brakingDistance(t.speed) + 1;
-    for (const s of t.route) {
-      if (d > horizon) break;
-      const l = this.segLimit(s);
-      if (l < t.speed) lim = Math.min(lim, Math.hypot(l, speedForDistance(d)));
-      d += segLength(s);
+  private spanLimits = new Map<number, number>();
+  private spanLimitsFor = -1;
+
+  /** Bridge speed over a middle tile (tunnels have none). A bridge over a tunnel limits both. */
+  private spanLimit(tile: number, axis: 0 | 1): number {
+    if (this.spanLimitsFor !== this.state.trackVersion) {
+      this.spanLimits.clear();
+      this.spanLimitsFor = this.state.trackVersion;
+    }
+    const key = tile * 2 + axis;
+    let lim = this.spanLimits.get(key);
+    if (lim === undefined) {
+      const span = spanOver(this.state.map, tile, axis, 'bridge');
+      lim = span ? BRIDGE_TYPES[span.bridgeType]!.maxSpeed : Infinity;
+      this.spanLimits.set(key, lim);
     }
     return lim;
+  }
+
+  /**
+   * Highest speed allowed now by track, bridge and curve limits under the train, and by
+   * braking for lower limits ahead of it.
+   */
+  private trackLimit(t: Train): number {
+    const horizon = brakingDistance(t.speed) + 1;
+    // Segments from the tail to the head, then the route ahead up to the braking horizon.
+    const seq = t.path.slice().reverse();
+    const behind = seq.length;
+    let d = segLength(t.path[0]!) - t.pos;
+    for (const s of t.route) {
+      if (d > horizon) break;
+      seq.push(s);
+      d += segLength(s);
+    }
+    const limits = curveLimits(seq);
+    let lim = Infinity;
+    for (let i = 0; i < behind; i++) lim = Math.min(lim, limits[i]!, this.segLimit(seq[i]!));
+    d = segLength(t.path[0]!) - t.pos;
+    for (let i = behind; i < seq.length; i++) {
+      const l = Math.min(limits[i]!, this.segLimit(seq[i]!));
+      if (l < t.speed) lim = Math.min(lim, Math.hypot(l, speedForDistance(d)));
+      d += segLength(seq[i]!);
+    }
+    return lim;
+  }
+
+  /** Speed limit of the curves along a train's path and route (for the train window and accidents). */
+  curveLimitUnder(t: Train): number {
+    const limits = curveLimits(t.path.slice().reverse());
+    return Math.min(...limits);
   }
 
   /** The consist changed: recompute length, power and so on. */
@@ -639,12 +712,12 @@ export class RailSystem {
     return a * 3.6;
   }
 
-  /** Average climb (levels per tile) under the train, weighted by segment length. */
+  /** Average climb (levels per tile) under the whole train, weighted by segment length. */
   private gradeUnder(t: Train): number {
     const map = this.state.map;
     let sum = 0;
     let len = 0;
-    for (const s of t.path.slice(0, 6)) {
+    for (const s of t.path) {
       const td = segTd(s);
       const [h0, h1] = segHeights(map, segTile(s), td);
       sum += h1 - h0;
@@ -755,7 +828,14 @@ export class RailSystem {
     const order = t.orders[t.orderIndex];
     if (!t.toDepot && order?.kind === 'station' && map.layers.type[tile] === TileType.Station && map.layers.data[tile] === order.station) {
       t.status = 'loading';
-      t.loadTicks = DWELL_TICKS;
+      // A train longer than its platform takes longer to load (up to three times as long).
+      let covered = 0;
+      for (const s of t.path) {
+        const st = segTile(s);
+        if (map.layers.type[st] === TileType.Station && map.layers.data[st] === order.station) covered += segLength(s);
+      }
+      const length = this.statsOf(t).length;
+      t.loadTicks = Math.round(DWELL_TICKS * Math.min(3, Math.max(1, length / Math.max(0.5, covered))));
       t.lastStation = order.station;
       this.state.dirtyTrains.add(t.id);
       this.onArrive?.(t, order.station);

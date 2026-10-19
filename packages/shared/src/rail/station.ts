@@ -99,5 +99,38 @@ export function recomputeStationExtent(map: GameMap, st: Station): void {
   st.y = Math.floor((y0 + y1) / 2);
 }
 
+/**
+ * Longest platform of a station in tiles: the longest straight run of its tiles along their
+ * track. 0 if none of its tiles are known (e.g. not yet loaded on a client).
+ */
+export function longestPlatform(map: GameMap, st: Station): number {
+  let best = 0;
+  for (let y = st.y0; y <= st.y1; y++) {
+    for (let x = st.x0; x <= st.x1; x++) {
+      const i = map.tileIndex(x, y);
+      if (map.layers.type[i] !== TileType.Station || map.layers.data[i] !== st.id) continue;
+      const alongX = map.layers.track[i] === 1;
+      // Count only from the start of a run.
+      const px = alongX ? x - 1 : x;
+      const py = alongX ? y : y - 1;
+      if (map.inBounds(px, py)) {
+        const p = map.tileIndex(px, py);
+        if (map.layers.type[p] === TileType.Station && map.layers.data[p] === st.id && map.layers.track[p] === map.layers.track[i]) continue;
+      }
+      let n = 0;
+      for (let k = 0; ; k++) {
+        const tx = alongX ? x + k : x;
+        const ty = alongX ? y : y + k;
+        if (!map.inBounds(tx, ty)) break;
+        const t = map.tileIndex(tx, ty);
+        if (map.layers.type[t] !== TileType.Station || map.layers.data[t] !== st.id || map.layers.track[t] !== map.layers.track[i]) break;
+        n++;
+      }
+      best = Math.max(best, n);
+    }
+  }
+  return best;
+}
+
 /** Depot tiles: `data` bits 0-1 hold the exit edge. */
 export const depotExit = (data: number) => (data & 3) as 0 | 1 | 2 | 3;

@@ -4,6 +4,7 @@ import {
   cargoCount,
   isAvailable,
   isElectrified,
+  longestPlatform,
   railVehicle,
   ratingParts,
   ratingPercent,
@@ -242,7 +243,10 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
       <ol className="orders">
         {t.orders.map((o, i) => (
           <li key={i} className={i === t.orderIndex ? 'current' : ''}>
-            <span className="order-name">{o.kind === 'station' ? stationName(o.station) : 'Go to depot'}</span>
+            <span className="order-name">
+              {o.kind === 'station' ? stationName(o.station) : 'Go to depot'}
+              {o.kind === 'station' && <PlatformWarning station={o.station} length={stats.length} />}
+            </span>
             {mine && o.kind === 'station' && (
               <label className="row small" title="Wait until full before leaving">
                 <input
@@ -278,6 +282,19 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
         </button>
       )}
     </Win>
+  );
+}
+
+/** Warns when a train is longer than every platform of a station: it loads more slowly there. */
+function PlatformWarning({ station, length }: { station: number; length: number }) {
+  const w = client.world;
+  const st = w?.state.stations.get(station);
+  const longest = w && st ? longestPlatform(w.map, st) : 0;
+  if (longest === 0 || length <= longest + 0.05) return null;
+  return (
+    <span className="warn-tag" title={`The train is ${length.toFixed(1)} tiles long but the longest platform here is ${longest}: it loads more slowly`}>
+      ⚠ longer than the platform
+    </span>
   );
 }
 
@@ -393,7 +410,9 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
         <span>Owner</span>
         <b>{company?.name ?? '—'}</b>
         <span>Platforms</span>
-        <b className="mono">{st.tiles} tiles</b>
+        <b className="mono">
+          {st.tiles} tiles{client.world ? `, longest ${longestPlatform(client.world.map, st)}` : ''}
+        </b>
         <span>Waiting</span>
         <b className="mono">{st.waitingTotal} passengers</b>
         <span>Catchment</span>

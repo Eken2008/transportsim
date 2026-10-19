@@ -944,6 +944,12 @@ details.rating .kv {
   bottom: 212px;
 }
 
+.warn-tag {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
 /* Signal options */
 .tool-options.wrap {
   flex-wrap: wrap;
