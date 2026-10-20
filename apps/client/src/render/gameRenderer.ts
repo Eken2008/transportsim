@@ -126,7 +126,14 @@ export class GameRenderer {
     this.scene.add(this.crossings.root);
     this.lineOverlay = new LineOverlay(world);
     this.scene.add(this.lineOverlay.mesh);
-    world.onIncome = (tile, amount) => this.floaters.add(tile, '+£' + Math.round(amount).toLocaleString('en-GB'));
+    world.onIncome = (tile, amount) => {
+      this.floaters.add(tile, '+£' + Math.round(amount).toLocaleString('en-GB'));
+      // Coin only when the payment is near the focus, fading out with distance and zoom.
+      const t = this.controller.target;
+      const d = Math.hypot((tile % world.map.width) + 0.5 - t.x, Math.floor(tile / world.map.width) + 0.5 - t.z);
+      const near = 1 - Math.min(1, Math.max(0, (d - 8) / 16));
+      sound.coin(near * Math.min(1, Math.max(0.15, 30 / this.controller.distance)));
+    };
     this.labels = new LabelLayer(canvas.parentElement!, world);
     this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
     client.resubscribe = () => this.chunks.resubscribe();

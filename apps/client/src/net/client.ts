@@ -163,7 +163,6 @@ class AppClient {
         return;
       case 'income':
         this.world?.onIncome?.(m.tile, m.amount);
-        sound.coin();
         return;
       case 'global': {
         const g = this.withHistory(m.global);

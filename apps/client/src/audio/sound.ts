@@ -148,11 +148,11 @@ class Sound {
     this.burst(2200, 1, 0.12, 0.2, 'bandpass', 0.05);
   }
 
-  /** Money came in: a small coin. */
-  coin(): void {
-    if (!this.ensure() || !this.throttle('coin', 250)) return;
-    this.tone(1568, 0.09, 0.12, 'square', 0);
-    this.tone(2093, 0.18, 0.1, 'square', 0.07);
+  /** Money came in: a small coin, `level` (0..1) quieter the further away it was. */
+  coin(level = 1): void {
+    if (level <= 0.02 || !this.ensure() || !this.throttle('coin', 250)) return;
+    this.tone(1568, 0.09, 0.12 * level, 'square', 0);
+    this.tone(2093, 0.18, 0.1 * level, 'square', 0.07);
   }
 
   /** A news item: a soft two-note chime. */
