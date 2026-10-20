@@ -85,6 +85,14 @@ function tileColor(map: GameMap, x: number, y: number, out: [number, number, num
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
+const _rgb: [number, number, number] = [0, 0, 0];
+
+/** The terrain's colour on a tile (linear), for things that should blend into the ground. */
+export function groundColor(map: GameMap, x: number, y: number, out: THREE.Color): THREE.Color {
+  tileColor(map, x, y, _rgb);
+  return out.setRGB(_rgb[0], _rgb[1], _rgb[2], THREE.LinearSRGBColorSpace);
+}
+
 /** Tile-local x, z of the NW, NE, SE and SW corners. */
 const CORNER_XZ = [[0, 0], [1, 0], [1, 1], [0, 1]] as const;
 

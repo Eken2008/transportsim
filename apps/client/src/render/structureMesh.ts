@@ -7,14 +7,15 @@ import {
   HEIGHT_SCALE,
   OPPOSITE_EDGE,
   headLevel,
+  isElectrified,
   otherHead,
   type GameMap,
   type HeadInfo,
 } from '@transportsim/shared';
 import * as THREE from 'three';
 import { GeoBuilder, lin } from './geoBuilder.ts';
-import type { Lod } from './terrainMesh.ts';
-import { addPiece } from './trackMesh.ts';
+import { groundColor, type Lod } from './terrainMesh.ts';
+import { addDeckCatenary, addPiece } from './trackMesh.ts';
 
 const LIFT = 0.012;
 const DECK = lin('#6f6a63');
@@ -34,7 +35,7 @@ const _b = new THREE.Vector3();
  * Draw a whole bridge from its west/north head. (The east/south head draws nothing, so each
  * bridge is built exactly once, in the chunk of its first head.)
  */
-export function addBridge(g: GeoBuilder, map: GameMap, tile: number, info: HeadInfo, lod: Lod): void {
+export function addBridge(g: GeoBuilder, map: GameMap, tile: number, info: HeadInfo, lod: Lod, railType = 0): void {
   if (info.dir !== 1 && info.dir !== 2) return; // only heads facing E or S draw
   const far = otherHead(map, tile, info);
   if (far < 0) return;
@@ -56,10 +57,15 @@ export function addBridge(g: GeoBuilder, map: GameMap, tile: number, info: HeadI
   const bz = fz + EDGE_MID_Y[OPPOSITE_EDGE[info.dir]];
   const deckDepth = look === 'concrete' ? 0.16 : 0.09;
   g.color(look === 'concrete' ? CONCRETE : DECK).box(_a.set(ax, y - deckDepth, az), _b.set(bx, y - deckDepth, bz), 0.62, deckDepth, true);
+  const wires = isElectrified(railType) && lod <= 1;
   for (let k = 1; k <= span; k++) {
     const mx = x0 + dx * k;
     const mz = z0 + dz * k;
-    addPiece(g, _a.set(mx + 0.5 - dx * 0.5, y, mz + 0.5 - dz * 0.5), _b.set(mx + 0.5 + dx * 0.5, y, mz + 0.5 + dz * 0.5), lod);
+    _a.set(mx + 0.5 - dx * 0.5, y, mz + 0.5 - dz * 0.5);
+    _b.set(mx + 0.5 + dx * 0.5, y, mz + 0.5 + dz * 0.5);
+    addPiece(g, _a, _b, lod, railType);
+    // A mast on every other tile, and at the last one.
+    if (wires) addDeckCatenary(g, _a, _b, k % 2 === 1 || k === span);
   }
 
   const sideX = -dz; // perpendicular
@@ -148,20 +154,66 @@ export function addTunnelPortal(g: GeoBuilder, map: GameMap, tile: number, info:
   const w = map.width;
   const x = tile % w;
   const z = (tile - x) / w;
-  const level = headLevel(map, tile, info);
-  const y = level * HEIGHT_SCALE;
-  // Facade against the hill at the back of the portal's cutting, facing out.
-  const t = 0.08;
-  const fx = x + 0.5 + EDGE_DX[info.dir] * (0.5 - t);
-  const fz = z + 0.5 + EDGE_DY[info.dir] * (0.5 - t);
-  const along = info.dir === 1 || info.dir === 3;
+  const y = headLevel(map, tile, info) * HEIGHT_SCALE;
+  // `u` runs from the tile centre into the hill, `v` across the track, `h` up from the floor.
+  const fdx = EDGE_DX[info.dir];
+  const fdz = EDGE_DY[info.dir];
+  const P = (u: number, v: number, h: number) => new THREE.Vector3(x + 0.5 + fdx * u - fdz * v, y + h, z + 0.5 + fdz * u + fdx * v);
+  const outward = P(-1, 0, 0).sub(P(0, 0, 0));
+  // The hill is gentler than the portal is tall, so the hill swells up over it: a mound in the
+  // colour of the ground that slopes back and to the sides into the real terrain.
+  const front = 0.34;
+  const top = 0.74;
+  const half = 0.45;
+  const back = 0.55; // height lost per tile going back
+  const side = 2.4; // ... and per tile going sideways past the portal
+  const wide = half + top / side;
+  const long = top / back;
+  const crest = (v: number) => top - Math.max(0, Math.abs(v) - half) * side;
+  const ground = (u: number, v: number) => {
+    const p = P(u, v, 0);
+    const gx = Math.max(0, Math.min(map.width - 0.001, p.x));
+    const gz = Math.max(0, Math.min(map.height - 0.001, p.z));
+    return map.heightAt(gx, gz) * HEIGHT_SCALE - y;
+  };
+  const NU = 6;
+  const NV = 8;
+  const grid: THREE.Vector3[][] = [];
+  for (let i = 0; i <= NU; i++) {
+    const u = front + (long * i) / NU;
+    grid.push(
+      Array.from({ length: NV + 1 }, (_, j) => {
+        const v = -wide + (2 * wide * j) / NV;
+        return P(u, v, Math.max(ground(u, v) - 0.03, crest(v) - (u - front) * back));
+      }),
+    );
+  }
+  const behind = map.tileIndex(Math.max(0, Math.min(map.width - 1, x + fdx)), Math.max(0, Math.min(map.height - 1, z + fdz)));
+  groundColor(map, behind % w, Math.floor(behind / w), _col);
+  g.color(_col);
+  for (let i = 0; i < NU; i++) {
+    for (let j = 0; j < NV; j++) face(g, [grid[i]![j]!, grid[i + 1]![j]!, grid[i + 1]![j + 1]!, grid[i]![j + 1]!], _up);
+  }
+  // Stone facade with wing walls whose tops follow the mound down to the ground.
   g.color(PORTAL);
-  if (along) g.aabb(fx - t, y, fz - 0.45, fx + t, y + 0.74, fz + 0.45);
-  else g.aabb(fx - 0.45, y, fz - t, fx + 0.45, y + 0.74, fz + t);
-  g.color(DARK);
-  const o = -EDGE_DX[info.dir] * (t + 0.004);
-  const p = -EDGE_DY[info.dir] * (t + 0.004);
+  const foot = -0.05;
+  face(g, [P(front, -half, foot), P(front, half, foot), P(front, half, top), P(front, -half, top)], outward);
+  for (const s of [-1, 1]) face(g, [P(front, s * half, foot), P(front, s * wide, foot), P(front, s * half, top)], outward);
   // The mouth clears a pantograph at the contact wire.
-  if (along) g.aabb(fx + o - 0.002, y, fz - 0.26, fx + o + 0.002, y + 0.6, fz + 0.26);
-  else g.aabb(fx - 0.26, y, fz + p - 0.002, fx + 0.26, y + 0.6, fz + p + 0.002);
+  g.color(DARK);
+  const m = front - 0.004;
+  face(g, [P(m, -0.26, 0), P(m, 0.26, 0), P(m, 0.26, 0.6), P(m, -0.26, 0.6)], outward);
+}
+
+const _up = new THREE.Vector3(0, 1, 0);
+const _col = new THREE.Color();
+const _n = new THREE.Vector3();
+const _e = new THREE.Vector3();
+
+/** A flat polygon (3 or 4 points) wound to face `out`. */
+function face(g: GeoBuilder, pts: THREE.Vector3[], out: THREE.Vector3): void {
+  _n.subVectors(pts[1]!, pts[0]!).cross(_e.subVectors(pts[2]!, pts[0]!));
+  if (_n.dot(out) < 0) pts.reverse();
+  if (pts.length === 3) g.tri(pts[0]!, pts[1]!, pts[2]!);
+  else g.quad(pts[0]!, pts[1]!, pts[2]!, pts[3]!);
 }

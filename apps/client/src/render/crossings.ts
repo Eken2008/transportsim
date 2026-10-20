@@ -9,7 +9,8 @@ import { GeoBuilder, lin } from './geoBuilder.ts';
  * each side of the track and swing down across the road.
  */
 const ARM_LENGTH = 0.58;
-const POST_H = 0.32;
+/** Arm pivot height: a barrier is about waist-high to a bus. */
+const POST_H = 0.13;
 const PIVOTS: readonly { x: number; z: number; yaw: number }[] = [
   { x: 0.82, z: 0.17, yaw: Math.PI }, // north side, arm reaching west
   { x: 0.18, z: 0.83, yaw: 0 }, // south side, arm reaching east
@@ -30,13 +31,13 @@ export function addCrossingFurniture(g: GeoBuilder, map: GameMap, x: number, y: 
   for (const p of PIVOTS) {
     const { px, pz } = place(p.x, p.z);
     g.color(POST).aabb(px - 0.025, h, pz - 0.025, px + 0.025, h + POST_H, pz + 0.025);
-    g.color(POST).aabb(px - 0.04, h + POST_H - 0.02, pz - 0.04, px + 0.04, h + POST_H + 0.07, pz + 0.04);
+    g.color(POST).aabb(px - 0.035, h + POST_H - 0.02, pz - 0.035, px + 0.035, h + POST_H + 0.04, pz + 0.035);
   }
   for (const sgn of SIGNS) {
     const { px, pz } = place(sgn.x, sgn.z);
-    g.color(POST).aabb(px - 0.015, h, pz - 0.015, px + 0.015, h + 0.42, pz + 0.015);
+    g.color(POST).aabb(px - 0.015, h, pz - 0.015, px + 0.015, h + 0.27, pz + 0.015);
     // Crossbuck: two crossed white boards
-    const top = h + 0.4;
+    const top = h + 0.25;
     const a = new THREE.Vector3(px - 0.08, top - 0.06, pz);
     const b = new THREE.Vector3(px + 0.08, top + 0.06, pz);
     const c = new THREE.Vector3(px - 0.08, top + 0.06, pz);
@@ -123,7 +124,7 @@ export class CrossingBooms {
       _q.setFromEuler(_e);
       _m.compose(b.pivot, _q, _s);
       this.arms.setMatrixAt(i, _m);
-      _m.makeTranslation(b.pivot.x, b.pivot.y + 0.06, b.pivot.z);
+      _m.makeTranslation(b.pivot.x, b.pivot.y + 0.07, b.pivot.z);
       this.lamps.setMatrixAt(i, _m);
       const lit = a > 0.02 && (i % 2 === 0 ? flash : !flash);
       this.lamps.setColorAt(i, lit ? CLOSED_COLOR : OFF_COLOR);

@@ -202,8 +202,21 @@ function addCatenary(g: GeoBuilder, map: GameMap, curves: TrackCurves, x: number
 }
 
 /** A straight piece between two points (bridge decks). */
-export function addPiece(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, lod: Lod): void {
-  addPieceCurve(g, straightCurve(a, b), lod);
+export function addPiece(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, lod: Lod, railType = 0): void {
+  addPieceCurve(g, straightCurve(a, b), lod, railType);
+}
+
+/** Contact wire over a straight piece on a bridge deck, with a mast on the deck edge if `mast`. */
+export function addDeckCatenary(g: GeoBuilder, a: THREE.Vector3, b: THREE.Vector3, mast: boolean): void {
+  g.color(WIRE).box(_a2.copy(a).setY(a.y + WIRE_HEIGHT), _b2.copy(b).setY(b.y + WIRE_HEIGHT), 0.012, 0.012, false);
+  if (!mast) return;
+  _p.addVectors(a, b).multiplyScalar(0.5);
+  const side = _q.set(-(b.z - a.z), 0, b.x - a.x).normalize();
+  const fx = _p.x + side.x * MAST_OFFSET;
+  const fz = _p.z + side.z * MAST_OFFSET;
+  const top = _p.y + WIRE_HEIGHT + 0.06;
+  g.color(MAST).aabb(fx - 0.014, _p.y - 0.03, fz - 0.014, fx + 0.014, top, fz + 0.014);
+  g.box(_a2.set(fx, top - 0.02, fz), _b2.set(_p.x - side.x * 0.05, top - 0.02, _p.z - side.z * 0.05), 0.012, 0.012, false);
 }
 const _a2 = new THREE.Vector3();
 const _b2 = new THREE.Vector3();
@@ -239,7 +252,7 @@ export function addTrack(
       if (head) {
         if (head.kind === 'bridge') {
           addHeadFoundation(g, map, i, head);
-          addBridge(g, map, i, head, lod);
+          addBridge(g, map, i, head, lod, map.layers.railType[i]!);
         } else {
           addTunnelPortal(g, map, i, head);
         }
