@@ -897,6 +897,15 @@ table.ledger tr.total td {
   border-top: 1px solid var(--line-strong);
   font-weight: 600;
 }
+/* The total split by transport type, under it. */
+table.ledger tr.by-mode td {
+  border-top: none;
+  font-size: 12px;
+}
+table.ledger tr.by-mode td:first-child button {
+  padding: 0;
+  color: var(--muted);
+}
 
 /* Station rating */
 details.rating {

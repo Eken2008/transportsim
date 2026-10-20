@@ -5,15 +5,21 @@ import {
   LEDGER_CATEGORIES,
   LEDGER_LABELS,
   LOAN_STEP,
+  VEHICLE_MODES,
+  ledgerOf,
   ledgerTotal,
   roleAllows,
   sumLedgers,
   yearlyMaintenance,
+  type Infrastructure,
+  type VehicleMode,
 } from '@transportsim/shared';
+import { useState } from 'react';
 import { client } from '../net/client.ts';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
 import { Win, act, useMyRole } from './windows.tsx';
+import { MODE_LABELS } from './LinesWindow.tsx';
 
 const QUARTERS = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'];
 
@@ -21,11 +27,15 @@ function Money({ v }: { v: number }) {
   return <span className={`mono ${Math.round(v) < 0 ? 'neg' : ''}`}>{Math.round(v) === 0 ? '–' : formatMoney(v)}</span>;
 }
 
-/** A company's books for the last four quarters, its loan and its infrastructure. */
+/**
+ * A company's books for the last four quarters, in total or for one transport type, with what
+ * each type earned; its loan and its infrastructure.
+ */
 export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) {
   const c = useApp((s) => s.global?.companies.find((x) => x.id === w.id));
   const settings = useApp((s) => s.room?.settings);
   const my = useMyRole();
+  const [mode, setMode] = useState<VehicleMode | undefined>(undefined);
   if (!c || !settings) {
     return (
       <Win w={w} title="Finances">
@@ -37,8 +47,11 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
   const maxLoan = client.world?.state.maxLoan() ?? econ.maxLoan;
   const canBorrow = my.companyId === c.id && roleAllows(my.role, 'build');
   const quarters = c.finances.slice(-4);
-  const maintenance = Math.round((yearlyMaintenance(c.infrastructure) * econ.costFactor * (client.world?.state.inflation.costs ?? 1)) / 12);
-  const yearTotal = ledgerTotal(sumLedgers(quarters));
+  const infra: Infrastructure = mode ? (c.infrastructure.modes?.[mode] ?? { track: 0, stations: 0, depots: 0, signals: 0 }) : c.infrastructure;
+  const maintenance = Math.round((yearlyMaintenance(infra) * econ.costFactor * (client.world?.state.inflation.costs ?? 1)) / 12);
+  const yearTotal = ledgerTotal(sumLedgers(quarters, mode));
+  // Categories that can't happen for a transport type are left out of its books.
+  const categories = LEDGER_CATEGORIES.filter((cat) => !mode || (cat !== 'interest' && (cat !== 'sharing' || mode === 'rail')));
   const repayAll = Math.min(c.loan, Math.floor(Math.max(0, c.money) / LOAN_STEP) * LOAN_STEP);
 
   return (
@@ -57,6 +70,13 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
           {BANKRUPT_QUARTERS} it goes bankrupt and everything it owns is removed.
         </div>
       )}
+      <div className="seg" role="tablist" aria-label="Transport type" style={{ flexWrap: 'wrap', marginBottom: 10 }}>
+        {[undefined, ...VEHICLE_MODES].map((m) => (
+          <button key={m ?? 'all'} role="tab" aria-selected={mode === m} className={mode === m ? 'primary' : ''} onClick={() => setMode(m)}>
+            {m ? MODE_LABELS[m] : 'All'}
+          </button>
+        ))}
+      </div>
       <div className="table-scroll">
         <table className="ledger">
           <thead>
@@ -72,24 +92,49 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
             </tr>
           </thead>
           <tbody>
-            {LEDGER_CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <tr key={cat}>
                 <td>{LEDGER_LABELS[cat]}</td>
                 {quarters.map((q) => (
                   <td key={`${q.year}-${q.quarter}`}>
-                    <Money v={q.ledger[cat]} />
+                    <Money v={ledgerOf(q, mode)[cat]} />
                   </td>
                 ))}
               </tr>
             ))}
             <tr className="total">
-              <td>Total</td>
+              <td>{mode ? `${MODE_LABELS[mode]} total` : 'Total'}</td>
               {quarters.map((q) => (
                 <td key={`${q.year}-${q.quarter}`}>
-                  <Money v={ledgerTotal(q.ledger)} />
+                  <Money v={ledgerTotal(ledgerOf(q, mode))} />
                 </td>
               ))}
             </tr>
+            {!mode &&
+              VEHICLE_MODES.map((m) => (
+                <tr key={m} className="by-mode">
+                  <td>
+                    <button className="ghost small" onClick={() => setMode(m)} title={`Show the ${MODE_LABELS[m].toLowerCase()} books`}>
+                      {MODE_LABELS[m]}
+                    </button>
+                  </td>
+                  {quarters.map((q) => (
+                    <td key={`${q.year}-${q.quarter}`}>
+                      <Money v={ledgerTotal(ledgerOf(q, m))} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            {!mode && (
+              <tr className="by-mode">
+                <td title="Not tied to a transport type: terraforming, clearing land and loan interest">Other</td>
+                {quarters.map((q) => (
+                  <td key={`${q.year}-${q.quarter}`}>
+                    <Money v={ledgerTotal(q.ledger) - VEHICLE_MODES.reduce((sum, m) => sum + ledgerTotal(ledgerOf(q, m)), 0)} />
+                  </td>
+                ))}
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -101,7 +146,7 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
         <span className="mono">
           {formatMoney(c.loan)} <span className="muted">of {formatMoney(maxLoan)} at {(econ.interestRate * 100).toFixed(1)}% a year</span>
         </span>
-        <span>Last 4 quarters</span>
+        <span>Last 4 quarters{mode ? ` (${MODE_LABELS[mode].toLowerCase()})` : ''}</span>
         <Money v={yearTotal} />
         <span>Company value</span>
         <span className="mono">{formatMoney(c.value)}</span>
@@ -123,16 +168,28 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
         </div>
       )}
 
-      <h4>Infrastructure</h4>
+      <h4>Infrastructure{mode ? ` (${MODE_LABELS[mode].toLowerCase()})` : ''}</h4>
       <div className="kv">
-        <span>Track</span>
-        <span className="mono">{c.infrastructure.track} pieces</span>
+        {(!mode || mode === 'rail' || mode === 'water') && (
+          <>
+            <span>{mode === 'water' ? 'Canals and locks' : 'Track'}</span>
+            <span className="mono">{infra.track} {mode === 'water' ? 'tiles' : 'pieces'}</span>
+          </>
+        )}
         <span>Station tiles</span>
-        <span className="mono">{c.infrastructure.stations}</span>
-        <span>Depots</span>
-        <span className="mono">{c.infrastructure.depots}</span>
-        <span>Signals</span>
-        <span className="mono">{c.infrastructure.signals}</span>
+        <span className="mono">{infra.stations}</span>
+        {mode !== 'air' && (
+          <>
+            <span>Depots</span>
+            <span className="mono">{infra.depots}</span>
+          </>
+        )}
+        {(!mode || mode === 'rail') && (
+          <>
+            <span>Signals</span>
+            <span className="mono">{infra.signals}</span>
+          </>
+        )}
         <span>Maintenance</span>
         <span className="mono">{formatMoney(maintenance)} a month</span>
       </div>

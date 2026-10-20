@@ -16,6 +16,7 @@ export interface BuildAirportCommand {
 
 export const buildAirportHandler: CommandHandler<BuildAirportCommand> = {
   needsCompany: true,
+  mode: 'air',
   plan(state, ctx, cmd): PlanResult {
     const { x, y, kind } = cmd;
     const map = state.map;

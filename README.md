@@ -18,7 +18,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, routed by cargodist (demand to every reachable destination, transfers between trains), paid per leg by distance and journey time.
 > - **Industries:** mines, forests, farms (among their fields) and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food. Served industries grow, neglected ones close, new ones open. Optional inflation.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
-> - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table; graphs of ten years of company history and of cargo payment rates. Three quarters in the red means bankruptcy.
+> - **Finances:** quarterly books, in total and for each transport type (rail, road, air, water, each paying for the property it uses), loans with interest, property maintenance, company value and a league table; graphs of ten years of company history and of cargo payment rates. Three quarters in the red means bankruptcy.
 > - **Competition:** station ratings from service quality; stations that cover the same houses split them by rating.
 > - **Cooperation:** track and station sharing agreements with a fee per train per day.
 > - **Multiplayer:** live multiplayer sync, chat with a company channel, and a news feed. The host can rename the game, change slots and visibility, and remove players.

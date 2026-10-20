@@ -53,6 +53,7 @@ const MAX_CLEAR = 32;
 
 export const buildStationHandler: CommandHandler<BuildStationCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const { x, y, axis, platforms, length } = cmd;
     if (![x, y, platforms, length].every(isInt) || (axis !== 0 && axis !== 1)) return fail('Invalid station');
@@ -150,6 +151,7 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
 
 export const buildDepotHandler: CommandHandler<BuildDepotCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const { x, y, exit } = cmd;
     if (![x, y, exit].every(isInt) || exit < 0 || exit > 3) return fail('Invalid depot');

@@ -81,6 +81,7 @@ const at = (map: GameMap, i: number) => `(${i % map.width},${Math.floor(i / map.
 
 export const buildRoadHandler: CommandHandler<BuildRoadCommand> = {
   needsCompany: true,
+  mode: 'road',
   plan(state, ctx, cmd): PlanResult {
     const map = state.map;
     const l = line(map, cmd.x0, cmd.y0, cmd.x1, cmd.y1);
@@ -162,6 +163,7 @@ export const buildRoadHandler: CommandHandler<BuildRoadCommand> = {
 
 export const removeRoadHandler: CommandHandler<RemoveRoadCommand> = {
   needsCompany: true,
+  mode: 'road',
   plan(state, ctx, cmd): PlanResult {
     const map = state.map;
     const l = line(map, cmd.x0, cmd.y0, cmd.x1, cmd.y1);
@@ -210,6 +212,7 @@ export const removeRoadHandler: CommandHandler<RemoveRoadCommand> = {
 
 export const setOneWayHandler: CommandHandler<SetOneWayCommand> = {
   needsCompany: true,
+  mode: 'road',
   plan(state, ctx, cmd): PlanResult {
     const map = state.map;
     if (!isInt(cmd.x) || !isInt(cmd.y) || !map.inBounds(cmd.x, cmd.y)) return fail('Out of bounds');
@@ -235,6 +238,7 @@ export const setOneWayHandler: CommandHandler<SetOneWayCommand> = {
 
 export const buildRoadDepotHandler: CommandHandler<BuildRoadDepotCommand> = {
   needsCompany: true,
+  mode: 'road',
   plan(state, ctx, cmd): PlanResult {
     const { x, y, exit } = cmd;
     const map = state.map;
@@ -272,6 +276,7 @@ export const buildRoadDepotHandler: CommandHandler<BuildRoadDepotCommand> = {
 
 export const buildRoadStopHandler: CommandHandler<BuildRoadStopCommand> = {
   needsCompany: true,
+  mode: 'road',
   plan(state, ctx, cmd): PlanResult {
     const { x, y, kind } = cmd;
     const map = state.map;

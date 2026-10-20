@@ -12,6 +12,7 @@ import { COSTS } from '../economy/costs.ts';
 import {
   BANKRUPT_QUARTERS,
   HISTORY_MONTHS,
+  bookInto,
   LEDGER_QUARTERS,
   LOAN_STEP,
   emptyInfrastructure,
@@ -39,7 +40,7 @@ import { removeWaterTile } from '../commands/water.ts';
 import { hangarTile } from '../air/airports.ts';
 import { isRailVehicle } from '../vehicles/train.ts';
 import type { Order, Train } from '../vehicles/train.ts';
-import { deleteLine, setLineOrders, type Line } from '../vehicles/lines.ts';
+import { VEHICLE_MODES, deleteLine, setLineOrders, vehicleMode, type Line, type VehicleMode } from '../vehicles/lines.ts';
 import { GameMap } from '../world/map.ts';
 import { generateTerrain } from '../world/terrain.ts';
 import { TICKS_PER_DAY, daysFromYmd, ymdFromDays } from './date.ts';
@@ -222,7 +223,7 @@ export class GameState {
       if (t.status === 'depot') continue;
       const daily = this.cost(this.rail.statsOf(t).runningCost) / 365;
       t.profitThisYear -= daily;
-      this.addMoney(t.owner, -daily, 'running');
+      this.addMoney(t.owner, -daily, 'running', vehicleMode(t));
     }
   }
 
@@ -259,11 +260,16 @@ export class GameState {
     for (const t of this.trains.values()) vehicles.set(t.owner, (vehicles.get(t.owner) ?? 0) + 1);
     for (const c of this.companies.values()) {
       if (c.loan > 0) this.addMoney(c.id, -Math.round((c.loan * econ.interestRate) / 12), 'interest');
-      this.addMoney(c.id, -Math.round(this.cost(yearlyMaintenance(c.infrastructure)) / 12), 'property');
+      // Each transport type pays for the property it uses.
+      for (const mode of VEHICLE_MODES) {
+        const infra = c.infrastructure.modes?.[mode];
+        const due = infra ? Math.round(this.cost(yearlyMaintenance(infra)) / 12) : 0;
+        if (due) this.addMoney(c.id, -due, 'property', mode);
+      }
       c.value = this.companyValue(c);
       c.history.push({ date: this.date, money: c.money, loan: c.loan, value: c.value, vehicles: vehicles.get(c.id) ?? 0, ...c.month });
       if (c.history.length > HISTORY_MONTHS) c.history.splice(0, c.history.length - HISTORY_MONTHS);
-      c.month = { ledger: emptyLedger(), delivered: {} };
+      c.month = { ledger: emptyLedger(), modes: {}, delivered: {} };
       this.historyChanged.add(c.id);
     }
     industryMonthly(this, this.industryRng, ymdFromDays(this.date).year);
@@ -320,25 +326,29 @@ export class GameState {
           this.addNews('finance', `${c.name} is in financial trouble: borrow money or sell trains to stay afloat`, extra);
         }
       }
-      c.finances.push({ ...quarterOf(this.date), ledger: emptyLedger() });
+      c.finances.push({ ...quarterOf(this.date), ledger: emptyLedger(), modes: {} });
       if (c.finances.length > LEDGER_QUARTERS) c.finances.splice(0, c.finances.length - LEDGER_QUARTERS);
     }
   }
 
-  /** Change a company's money, booking it under `category` (null: off the books, e.g. loans). */
-  addMoney(companyId: number, delta: number, category: LedgerCategory | null): void {
+  /**
+   * Change a company's money, booking it under `category` (null: off the books, e.g. loans) and
+   * the transport type it belongs to, if any.
+   */
+  addMoney(companyId: number, delta: number, category: LedgerCategory | null, mode?: VehicleMode): void {
     const c = this.companies.get(companyId);
     if (!c) return;
     c.money += delta;
+    if (!category) return;
     const q = c.finances[c.finances.length - 1];
-    if (category && q) q.ledger[category] += delta;
-    if (category) c.month.ledger[category] += delta;
+    if (q) bookInto(q, delta, category, mode);
+    bookInto(c.month, delta, category, mode);
   }
 
-  /** Count every company's track, stations, depots and signals (for maintenance and value). */
+  /** Count every company's track, stations, depots and signals (for maintenance and value), in total and by transport type. */
   countInfrastructure(): void {
     const counts = new Map<number, Infrastructure>();
-    for (const c of this.companies.values()) counts.set(c.id, emptyInfrastructure());
+    for (const c of this.companies.values()) counts.set(c.id, { ...emptyInfrastructure(), modes: {} });
     const { type, owner, track, signals } = this.map.layers;
     for (let i = 0; i < type.length; i++) {
       const o = owner[i]!;
@@ -346,6 +356,7 @@ export class GameState {
       const infra = counts.get(o);
       if (!infra) continue;
       const t = type[i];
+      const of = (mode: VehicleMode) => (infra.modes![mode] ??= emptyInfrastructure());
       if (t === TileType.Rail) {
         let bits = track[i]!;
         let n = 0;
@@ -353,12 +364,23 @@ export class GameState {
           n += bits & 1;
           bits >>= 1;
         }
-        infra.track += Math.max(1, n);
         const sig = signals[i]!;
-        for (let p = 0; p < 6; p++) if ((sig >> (p * 2)) & 3) infra.signals++;
-      } else if (t === TileType.Lock || (t === TileType.Water && this.map.layers.data[i]! & WATER_CANAL)) infra.track++;
-      else if (t === TileType.Station || t === TileType.RoadStop || t === TileType.Airport || t === TileType.Dock) infra.stations++;
-      else if (t === TileType.Depot || t === TileType.RoadDepot || t === TileType.ShipDepot) infra.depots++;
+        let s = 0;
+        for (let p = 0; p < 6; p++) if ((sig >> (p * 2)) & 3) s++;
+        for (const x of [infra, of('rail')]) {
+          x.track += Math.max(1, n);
+          x.signals += s;
+        }
+      } else if (t === TileType.Lock || (t === TileType.Water && this.map.layers.data[i]! & WATER_CANAL)) {
+        infra.track++;
+        of('water').track++;
+      } else if (t === TileType.Station || t === TileType.RoadStop || t === TileType.Airport || t === TileType.Dock) {
+        infra.stations++;
+        of(t === TileType.Station ? 'rail' : t === TileType.RoadStop ? 'road' : t === TileType.Airport ? 'air' : 'water').stations++;
+      } else if (t === TileType.Depot || t === TileType.RoadDepot || t === TileType.ShipDepot) {
+        infra.depots++;
+        of(t === TileType.Depot ? 'rail' : t === TileType.RoadDepot ? 'road' : 'water').depots++;
+      }
     }
     for (const [id, infra] of counts) this.companies.get(id)!.infrastructure = infra;
   }
@@ -518,7 +540,7 @@ export class GameState {
       this.systemOf(t).enterDepot(t, best);
       return;
     }
-    this.addMoney(t.owner, resaleValue(t.value, (this.date - t.builtDays) / 365), 'vehicles');
+    this.addMoney(t.owner, resaleValue(t.value, (this.date - t.builtDays) / 365), 'vehicles', vehicleMode(t));
     this.removeVehicle(t);
   }
 
@@ -556,8 +578,8 @@ export class GameState {
       const a = this.agreementBetween(k >> 8, k & 255);
       if (a?.status !== 'active' || a.fee <= 0) continue;
       const fee = (a.fee * ticks) / TICKS_PER_DAY;
-      this.addMoney(a.guest, -fee, 'sharing');
-      this.addMoney(a.host, fee, 'sharing');
+      this.addMoney(a.guest, -fee, 'sharing', 'rail');
+      this.addMoney(a.host, fee, 'sharing', 'rail');
     }
     this.sharingTicks.clear();
   }
@@ -713,14 +735,14 @@ export class GameState {
       requests: [],
       invites: [],
       foundedDays: this.date,
-      finances: [{ ...quarterOf(this.date), ledger: emptyLedger() }],
+      finances: [{ ...quarterOf(this.date), ledger: emptyLedger(), modes: {} }],
       badQuarters: 0,
       infrastructure: emptyInfrastructure(),
       value: econ.startMoney,
       autorenew: true,
       replace: {},
       history: [],
-      month: { ledger: emptyLedger(), delivered: {} },
+      month: { ledger: emptyLedger(), modes: {}, delivered: {} },
     };
     this.companies.set(id, company);
     this.addMember(company, founder.name, 'owner');

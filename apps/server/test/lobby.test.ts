@@ -143,8 +143,8 @@ describe('lobby & rooms', () => {
     const { host, room } = hostGame(lobby);
     host.send({ t: 'command', seq: 1, cmd: { type: 'foundCompany', name: 'H Rail', color: 1 } });
     const c = [...room.state.companies.values()][0]!;
-    c.finances.unshift({ year: 1899, quarter: 3, ledger: { ...c.finances[0]!.ledger, income: 500 } });
-    c.history.push({ date: 1, money: 1, loan: 0, value: 1, vehicles: 0, ledger: { ...c.finances[0]!.ledger }, delivered: {} });
+    c.finances.unshift({ year: 1899, quarter: 3, ledger: { ...c.finances[0]!.ledger, income: 500 }, modes: {} });
+    c.history.push({ date: 1, money: 1, loan: 0, value: 1, vehicles: 0, ledger: { ...c.finances[0]!.ledger }, modes: {}, delivered: {} });
     expect(room.globalState().companies[0]!.finances).toHaveLength(1);
     expect(room.globalState().companies[0]!.history).toHaveLength(0);
     const late = client(lobby, 'Late');

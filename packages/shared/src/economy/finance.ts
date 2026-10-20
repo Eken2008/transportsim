@@ -1,4 +1,5 @@
 import { ymdFromDays } from '../sim/date.ts';
+import { VEHICLE_MODES, type VehicleMode } from '../vehicles/lines.ts';
 import { isCargo, type CargoId } from './cargo.ts';
 
 /** Where money comes from and goes to, as in a company's books. Income is positive. */
@@ -17,11 +18,16 @@ export const LEDGER_LABELS: Record<LedgerCategory, string> = {
   incidents: 'Accidents',
 };
 
+/** The books split by transport type; money not tied to one (loan interest, terraforming) is in none. */
+export type ModeLedgers = Partial<Record<VehicleMode, Ledger>>;
+
 export interface QuarterRecord {
   year: number;
   /** 0..3 */
   quarter: number;
   ledger: Ledger;
+  /** The part of `ledger` that belongs to each transport type. */
+  modes: ModeLedgers;
 }
 
 /** A company at the end of a month, for its statistics. */
@@ -34,6 +40,8 @@ export interface MonthRecord {
   vehicles: number;
   /** The month's books. */
   ledger: Ledger;
+  /** The part of `ledger` that belongs to each transport type. */
+  modes: ModeLedgers;
   /** Cargo delivered to its final destination during the month. */
   delivered: Partial<Record<CargoId, number>>;
 }
@@ -41,7 +49,24 @@ export interface MonthRecord {
 /** The month so far. */
 export interface MonthSoFar {
   ledger: Ledger;
+  modes: ModeLedgers;
   delivered: Partial<Record<CargoId, number>>;
+}
+
+/** Book `delta` under `category` (and `mode`, if any) in a ledger and its split by transport type. */
+export function bookInto(books: { ledger: Ledger; modes: ModeLedgers }, delta: number, category: LedgerCategory, mode?: VehicleMode): void {
+  books.ledger[category] += delta;
+  if (mode) (books.modes[mode] ??= emptyLedger())[category] += delta;
+}
+
+export function sanitizeModes(input: unknown): ModeLedgers {
+  const out: ModeLedgers = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const m of VEHICLE_MODES) {
+    const l = (input as Record<string, unknown>)[m];
+    if (l && typeof l === 'object') out[m] = sanitizeLedger(l);
+  }
+  return out;
 }
 
 /** Months of statistics kept per company (ten years). */
@@ -60,6 +85,7 @@ export function sanitizeHistory(input: unknown): MonthRecord[] {
       value: num(r.value),
       vehicles: num(r.vehicles),
       ledger: sanitizeLedger(r.ledger),
+      modes: sanitizeModes(r.modes),
       delivered: sanitizeDelivered(r.delivered),
     }));
 }
@@ -96,11 +122,13 @@ export const MAINTENANCE = {
 } as const;
 
 export interface Infrastructure {
-  /** Track pieces, counting each bridge or tunnel as one. */
+  /** Track pieces, counting each bridge or tunnel as one (and canal and lock tiles). */
   track: number;
   stations: number;
   depots: number;
   signals: number;
+  /** The same counts for each transport type. */
+  modes?: Partial<Record<VehicleMode, Infrastructure>>;
 }
 
 export const emptyInfrastructure = (): Infrastructure => ({ track: 0, stations: 0, depots: 0, signals: 0 });
@@ -131,12 +159,18 @@ export function resaleValue(value: number, ageYears: number): number {
 
 export const ledgerTotal = (l: Ledger): number => LEDGER_CATEGORIES.reduce((s, c) => s + l[c], 0);
 
-/** Sum of the given quarters' ledgers. */
-export function sumLedgers(records: readonly QuarterRecord[]): Ledger {
+/** Sum of the given quarters' ledgers (or of their part for one transport type). */
+export function sumLedgers(records: readonly QuarterRecord[], mode?: VehicleMode): Ledger {
   const out = emptyLedger();
-  for (const r of records) for (const c of LEDGER_CATEGORIES) out[c] += r.ledger[c];
+  for (const r of records) {
+    const l = mode ? r.modes?.[mode] : r.ledger;
+    if (l) for (const c of LEDGER_CATEGORIES) out[c] += l[c];
+  }
   return out;
 }
+
+/** A quarter's (or month's) books, or their part for one transport type. */
+export const ledgerOf = (books: { ledger: Ledger; modes?: ModeLedgers }, mode?: VehicleMode): Ledger => (mode ? (books.modes?.[mode] ?? emptyLedger()) : books.ledger);
 
 export function sanitizeFinances(input: unknown, date: number): QuarterRecord[] {
   const out: QuarterRecord[] = [];
@@ -148,11 +182,11 @@ export function sanitizeFinances(input: unknown, date: number): QuarterRecord[] 
         const v = r.ledger?.[c];
         if (typeof v === 'number' && Number.isFinite(v)) ledger[c] = v;
       }
-      out.push({ year: r.year, quarter: Math.min(3, Math.max(0, Math.floor(r.quarter))), ledger });
+      out.push({ year: r.year, quarter: Math.min(3, Math.max(0, Math.floor(r.quarter))), ledger, modes: sanitizeModes(r.modes) });
     }
   }
   const now = quarterOf(date);
   const last = out[out.length - 1];
-  if (!last || last.year !== now.year || last.quarter !== now.quarter) out.push({ ...now, ledger: emptyLedger() });
+  if (!last || last.year !== now.year || last.quarter !== now.quarter) out.push({ ...now, ledger: emptyLedger(), modes: {} });
   return out.slice(-LEDGER_QUARTERS);
 }

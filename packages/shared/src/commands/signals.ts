@@ -48,6 +48,7 @@ const PARALLEL = [0, 0, 1 << 4, 1 << 5, 1 << 2, 1 << 3];
 
 export const setSignalHandler: CommandHandler<SetSignalCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const { x, y, piece, dirs } = cmd;
     const oneWay = cmd.oneWay === true;

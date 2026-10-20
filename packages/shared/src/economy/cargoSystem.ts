@@ -6,6 +6,7 @@ import { TileType } from '../world/constants.ts';
 import { Random } from '../util/random.ts';
 import { cargoCount, type Train } from '../vehicles/train.ts';
 import { isBus } from '../vehicles/catalog.ts';
+import { vehicleMode } from '../vehicles/lines.ts';
 import { CARGO_IDS, cargoPayment, type CargoId } from './cargo.ts';
 import { RATING_STEP, ratingParts } from './rating.ts';
 import { industryType } from './industries.ts';
@@ -522,7 +523,7 @@ export class CargoSystem {
     t.cargo = keep;
     if (income > 0) {
       t.profitThisYear += income;
-      this.state.addMoney(t.owner, income, 'income');
+      this.state.addMoney(t.owner, income, 'income', vehicleMode(t));
       this.events.push({ tile: st.y * this.state.map.width + st.x, amount: income, owner: t.owner });
     }
     this.load(t, st);

@@ -117,3 +117,26 @@ describe('lines', () => {
     expect(state.lines.get(t.line!)!.orders).toEqual([...both(top, bottom), { kind: 'jump', to: 0, cond: 'always', op: 'lt', value: 0 }]);
   });
 });
+
+describe('books by transport type', () => {
+  test('costs and income are booked to the type they belong to', () => {
+    const { state, company, run, buy, top, bottom } = loop();
+    const q = () => company.finances.at(-1)!;
+    const before = q().modes.rail?.construction ?? 0;
+    run({ type: 'buildTrack', pieces: [60, 60, 0] });
+    expect((q().modes.rail?.construction ?? 0) - before).toBeLessThan(0);
+    const general = q().ledger.construction - (q().modes.rail?.construction ?? 0);
+    run({ type: 'terraform', x0: 70, y0: 70, x1: 71, y1: 71, mode: 'raise' });
+    // Terraforming belongs to no transport type.
+    expect(q().ledger.construction - (q().modes.rail?.construction ?? 0)).toBeLessThan(general);
+    const t = buy();
+    expect(q().modes.rail!.vehicles).toBeLessThan(0);
+    run({ type: 'setOrders', id: t.id, orders: both(top, bottom) });
+    run({ type: 'trainAction', id: t.id, action: 'start' });
+    for (let i = 0; i < TICKS_PER_DAY * 40; i++) state.step();
+    const rail = state.companies.get(company.id)!.month.modes.rail!;
+    expect(rail.running).toBeLessThan(0);
+    expect(company.history.at(-1)!.modes.rail!.property).toBeLessThan(0);
+    expect(company.history.at(-1)!.modes.road).toBeUndefined();
+  });
+});

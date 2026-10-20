@@ -20,6 +20,7 @@ const DOWNGRADE_FACTOR = 0.2;
 
 export const convertRailHandler: CommandHandler<ConvertRailCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const { x0, y0, x1, y1, railType } = cmd;
     if (![x0, y0, x1, y1].every(isInt)) return fail('Invalid area');

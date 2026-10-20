@@ -126,7 +126,7 @@ describe('airports', () => {
   });
 
   test('an aircraft carries passengers between two airports', () => {
-    const { state, run, days, airport, hangar, buy } = world();
+    const { state, company, run, days, airport, hangar, buy } = world();
     const a = airport(5, 4);
     const b = airport(67, 4);
     const plane = buy(hangar(5, 4), 'skyliner');
@@ -144,6 +144,10 @@ describe('airports', () => {
     expect(visits.filter((v) => v === a.id).length).toBeGreaterThanOrEqual(2);
     expect(visits.filter((v) => v === b.id).length).toBeGreaterThanOrEqual(2);
     expect(plane.profitThisYear + plane.profitLastYear).toBeGreaterThan(0);
+    // Its fares are booked as air income.
+    const fares = company.finances.reduce((sum, q) => sum + (q.modes.air?.income ?? 0), 0);
+    expect(fares).toBeGreaterThan(0);
+    expect(fares).toBe(company.finances.reduce((sum, q) => sum + q.ledger.income, 0));
     // Its position is streamed as an air tuple.
     expect(state.air.motion(plane).air).toHaveLength(6);
   });

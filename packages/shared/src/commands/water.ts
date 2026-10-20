@@ -65,6 +65,7 @@ const foreignCanal = (state: GameState, i: number, company: number) => isCanal(s
 
 export const buildCanalHandler: CommandHandler<BuildCanalCommand> = {
   needsCompany: true,
+  mode: 'water',
   plan(state, ctx, cmd): PlanResult {
     const { x0, y0, x1, y1 } = cmd;
     const map = state.map;
@@ -109,6 +110,7 @@ export const buildCanalHandler: CommandHandler<BuildCanalCommand> = {
 
 export const buildLockHandler: CommandHandler<BuildLockCommand> = {
   needsCompany: true,
+  mode: 'water',
   plan(state, ctx, cmd): PlanResult {
     const { x, y } = cmd;
     const map = state.map;
@@ -152,6 +154,7 @@ function waterEdges(state: GameState, x: number, y: number, company: number): nu
 
 export const buildDockHandler: CommandHandler<BuildDockCommand> = {
   needsCompany: true,
+  mode: 'water',
   plan(state, ctx, cmd): PlanResult {
     const { x, y } = cmd;
     const map = state.map;
@@ -196,6 +199,7 @@ export const buildDockHandler: CommandHandler<BuildDockCommand> = {
 
 export const buildShipDepotHandler: CommandHandler<BuildShipDepotCommand> = {
   needsCompany: true,
+  mode: 'water',
   plan(state, ctx, cmd): PlanResult {
     const { x, y } = cmd;
     const map = state.map;
@@ -239,6 +243,7 @@ export const buildShipDepotHandler: CommandHandler<BuildShipDepotCommand> = {
 
 export const buildBuoyHandler: CommandHandler<BuildBuoyCommand> = {
   needsCompany: true,
+  mode: 'water',
   plan(state, ctx, cmd): PlanResult {
     const { x, y } = cmd;
     const map = state.map;

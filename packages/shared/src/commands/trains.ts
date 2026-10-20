@@ -7,7 +7,8 @@ import { isHeavy } from '../vehicles/airSystem.ts';
 import { AirportRole } from '../air/airports.ts';
 import { isRailVehicle, trainStats, type Train, type TrainUnit } from '../vehicles/train.ts';
 import { advanceOrder } from '../vehicles/orders.ts';
-import { assignVehicle, parseOrders, vehicleMode } from '../vehicles/lines.ts';
+import { assignVehicle, parseOrders, vehicleMode, type VehicleMode } from '../vehicles/lines.ts';
+import type { GameState } from '../sim/state.ts';
 import { MAX_TRAIN_TILES } from '../vehicles/maintenance.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
@@ -72,6 +73,7 @@ const noEffects = () => ({ dirtyChunks: new Set<number>() });
 
 export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
   needsCompany: true,
+  mode: (cmd, state) => depotMode(state, cmd.depot),
   category: 'vehicles',
   plan(state, ctx, cmd): PlanResult {
     const { depot } = cmd;
@@ -149,6 +151,7 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
 
 export const trainActionHandler: CommandHandler<TrainActionCommand> = {
   needsCompany: true,
+  mode: (cmd, state) => vehicleModeOf(state, cmd.id),
   permission: (cmd) => (cmd.action === 'sell' ? 'build' : 'operate'),
   category: 'vehicles',
   plan(state, ctx, cmd): PlanResult {
@@ -209,6 +212,7 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
 
 export const editConsistHandler: CommandHandler<EditConsistCommand> = {
   needsCompany: true,
+  mode: (cmd, state) => vehicleModeOf(state, cmd.id),
   category: 'vehicles',
   plan(state, ctx, cmd): PlanResult {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
@@ -265,6 +269,7 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
 
 export const cloneVehicleHandler: CommandHandler<CloneVehicleCommand> = {
   needsCompany: true,
+  mode: (cmd, state) => vehicleModeOf(state, cmd.id),
   category: 'vehicles',
   plan(state, ctx, cmd): PlanResult {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
@@ -297,3 +302,18 @@ export const cloneVehicleHandler: CommandHandler<CloneVehicleCommand> = {
     };
   },
 };
+
+/** The kind of vehicle a depot (or hangar) sells, for booking the purchase. */
+function depotMode(state: GameState, depot: number): VehicleMode | undefined {
+  const type = isInt(depot) ? state.map.layers.type[depot] : undefined;
+  if (type === TileType.Depot) return 'rail';
+  if (type === TileType.RoadDepot) return 'road';
+  if (type === TileType.Airport) return 'air';
+  if (type === TileType.ShipDepot) return 'water';
+  return undefined;
+}
+
+function vehicleModeOf(state: GameState, id: number): VehicleMode | undefined {
+  const t = isInt(id) ? state.trains.get(id) : undefined;
+  return t ? vehicleMode(t) : undefined;
+}

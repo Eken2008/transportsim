@@ -1,6 +1,7 @@
 import type { Permission } from '../company/company.ts';
 import type { LedgerCategory } from '../economy/finance.ts';
 import type { GameState } from '../sim/state.ts';
+import type { VehicleMode } from '../vehicles/lines.ts';
 
 export interface CommandContext {
   playerId: number;
@@ -25,6 +26,8 @@ export interface CommandHandler<C> {
   permission?: Permission | ((cmd: C) => Permission);
   /** Ledger category for the cost; defaults to 'construction'. null moves money off the books (loans). */
   category?: LedgerCategory | null;
+  /** The transport type the cost is booked to (none: general, e.g. terraforming). Read before the command runs. */
+  mode?: VehicleMode | ((cmd: C, state: GameState) => VehicleMode | undefined);
 }
 
 export const fail = (error: string): PlanResult => ({ ok: false, error });

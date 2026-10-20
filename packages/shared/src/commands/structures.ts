@@ -57,6 +57,7 @@ function headTileCost(state: GameState, company: number, i: number, piece: numbe
 
 export const buildBridgeHandler: CommandHandler<BuildBridgeCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const { x0, y0, x1, y1, bridgeType } = cmd;
     if (![x0, y0, x1, y1, bridgeType].every(isInt)) return fail('Invalid bridge');
@@ -138,6 +139,7 @@ export const buildBridgeHandler: CommandHandler<BuildBridgeCommand> = {
 
 export const buildTunnelHandler: CommandHandler<BuildTunnelCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const { x, y, dir } = cmd;
     if (![x, y, dir].every(isInt) || dir < 0 || dir > 3) return fail('Invalid tunnel');

@@ -5,6 +5,7 @@ import type { GameState } from '../sim/state.ts';
 import { Random } from '../util/random.ts';
 import { isAvailable, railVehicle } from './catalog.ts';
 import { trainStats, type Train, type TrainUnit } from './train.ts';
+import { vehicleMode } from './lines.ts';
 
 /** Reliability lost per day between services. */
 export const RELIABILITY_DECAY_PER_DAY = 0.0015;
@@ -125,7 +126,7 @@ export class MaintenanceSystem {
       t.oldWarned = false;
     }
     state.rail.invalidateStats(t);
-    state.addMoney(t.owner, -cost, 'vehicles');
+    state.addMoney(t.owner, -cost, 'vehicles', vehicleMode(t));
     state.dirtyTrains.add(t.id);
     return true;
   }

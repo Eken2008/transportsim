@@ -52,6 +52,7 @@ function at(x: number, y: number) {
 
 export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const parsed = parsePieces(state, cmd.pieces);
     if (typeof parsed === 'string') return fail(parsed);
@@ -139,6 +140,7 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
 
 export const removeTrackHandler: CommandHandler<RemoveTrackCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const parsed = parsePieces(state, cmd.pieces);
     if (typeof parsed === 'string') return fail(parsed);

@@ -4,6 +4,7 @@ import type { AccidentSeverity } from '../sim/settings.ts';
 import type { GameState } from '../sim/state.ts';
 import { Random } from '../util/random.ts';
 import { cargoCount, isRailVehicle, type Train } from '../vehicles/train.ts';
+import { vehicleMode, type VehicleMode } from '../vehicles/lines.ts';
 import { isHeavy } from '../vehicles/airSystem.ts';
 import type { Station } from '../rail/station.ts';
 
@@ -124,17 +125,20 @@ export class IncidentSystem {
     const until = state.tick + rules.cleanupDays * TICKS_PER_DAY;
     let aboard = 0;
     const byOwner = new Map<number, number>();
+    /** Each owner's loss is booked to the kind of vehicle it lost. */
+    const modeOf = new Map<number, VehicleMode>();
     const pieces: number[] = [];
     for (const t of trains) {
       const n = cargoCount(t);
       aboard += n;
       byOwner.set(t.owner, (byOwner.get(t.owner) ?? 0) + n);
+      if (!modeOf.has(t.owner)) modeOf.set(t.owner, vehicleMode(t));
       if (isRailVehicle(t)) for (const s of t.path) pieces.push(pieceKey(s));
       state.removeVehicle(t);
     }
     if (blockTrack) for (const k of pieces) state.rail.addWreck(k, until);
     for (const [owner, n] of byOwner) {
-      state.addMoney(owner, -state.cost(rules.base + rules.perPassenger * n), 'incidents');
+      state.addMoney(owner, -state.cost(rules.base + rules.perPassenger * n), 'incidents', modeOf.get(owner));
       for (const st of state.stations.values()) {
         if (st.owner !== owner) continue;
         st.rating = Math.max(0, st.rating - rules.ratingHit);

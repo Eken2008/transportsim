@@ -23,6 +23,7 @@ const noEffects = () => ({ dirtyChunks: new Set<number>() });
 
 export const buildWaypointHandler: CommandHandler<BuildWaypointCommand> = {
   needsCompany: true,
+  mode: 'rail',
   plan(state, ctx, cmd): PlanResult {
     const { x, y } = cmd;
     const map = state.map;
@@ -54,6 +55,7 @@ export const buildWaypointHandler: CommandHandler<BuildWaypointCommand> = {
 
 export const removeWaypointHandler: CommandHandler<RemoveWaypointCommand> = {
   needsCompany: true,
+  mode: (cmd, state) => (state.map.inBounds(cmd.x, cmd.y) && state.map.type(cmd.x, cmd.y) === TileType.Water ? 'water' : 'rail'),
   plan(state, ctx, cmd): PlanResult {
     const { x, y } = cmd;
     const map = state.map;
