@@ -1,6 +1,7 @@
 import { createNoise2D } from 'simplex-noise';
 import { Random } from '../util/random.ts';
-import { Ground, MAX_HEIGHT, MAX_TREES, SNOW_LINE, TileType, WATER_CANAL, WATER_RAPIDS, WATER_RIVER } from './constants.ts';
+import { WorldClimate, type Climate } from './climate.ts';
+import { Ground, MAX_HEIGHT, MAX_TREES, TileType, WATER_CANAL, WATER_RAPIDS, WATER_RIVER } from './constants.ts';
 import { GameMap } from './map.ts';
 import { carveRivers } from './rivers.ts';
 
@@ -17,11 +18,17 @@ export interface TerrainOptions {
   rivers?: number;
 }
 
+/** `arcticSnowLine`: in the sub-arctic, about a third of the land and a quarter of the towns lie above it. */
 const ROUGHNESS = {
-  flat: { maxHeight: 10, octaves: 4, scale: 1 / 380, mountain: 0.15 },
-  hilly: { maxHeight: 22, octaves: 5, scale: 1 / 300, mountain: 0.45 },
-  mountainous: { maxHeight: MAX_HEIGHT, octaves: 6, scale: 1 / 260, mountain: 0.9 },
+  flat: { maxHeight: 10, octaves: 4, scale: 1 / 380, mountain: 0.15, arcticSnowLine: 4 },
+  hilly: { maxHeight: 22, octaves: 5, scale: 1 / 300, mountain: 0.45, arcticSnowLine: 6 },
+  mountainous: { maxHeight: MAX_HEIGHT, octaves: 6, scale: 1 / 260, mountain: 0.9, arcticSnowLine: 8 },
 } as const;
+
+/** The climate of a world made with these settings. */
+export function worldClimate(s: { climate?: Climate; seed: number; roughness: TerrainRoughness }): WorldClimate {
+  return new WorldClimate(s.climate ?? 'temperate', s.seed, (ROUGHNESS[s.roughness] ?? ROUGHNESS.hilly).arcticSnowLine);
+}
 
 /**
  * Enforce the slope rule: orthogonally adjacent corners may differ by at most one
@@ -49,7 +56,7 @@ export function enforceSlopeLimit(heights: Uint8Array, w: number, h: number): vo
   }
 }
 
-/** Generate heights, water, ground variants and trees. */
+/** Generate heights, water, ground variants and trees, for the map's climate. */
 export function generateTerrain(map: GameMap, opts: TerrainOptions): void {
   const rng = new Random(opts.seed);
   const base = createNoise2D(() => rng.next());
@@ -102,6 +109,9 @@ export function generateTerrain(map: GameMap, opts: TerrainOptions): void {
   const rivers = carveRivers(heights, map.width, map.height, opts.seed, opts.rivers ?? 1, Math.max(3, Math.round(params.maxHeight * 0.3)));
 
   // 4. Tile classification: water, ground and trees
+  const climate = map.climate;
+  // Rocky ground below the snow line (the sub-arctic one is low, so only just below it).
+  const rockBand = climate.id === 'arctic' ? 2 : 5;
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       const i = y * map.width + x;
@@ -118,18 +128,24 @@ export function generateTerrain(map: GameMap, opts: TerrainOptions): void {
         continue;
       }
       const min = Math.min(a, b, c, d);
+      const zone = climate.zone(x, y, min);
       // Low-frequency noise drives coherent patches rather than per-tile speckle.
       const patch = detail(x / 23 + 100, y / 23 - 100);
       let ground: Ground = Ground.Grass;
-      if (min >= SNOW_LINE) ground = Ground.Snow;
+      if (zone === 'snow') ground = Ground.Snow;
       else if (min === 0 && max <= 1 && patch > -0.35) ground = Ground.Sand; // beaches
-      else if (max - min >= 2 || (min > SNOW_LINE - 5 && patch > 0.1)) ground = Ground.Rocks;
-      else if (patch > 0.62) ground = Ground.Rough;
+      else if (max - min >= 2 || (min > climate.snowLine - rockBand && patch > 0.1)) ground = Ground.Rocks;
+      else if (patch > (zone === 'desert' ? 0.3 : 0.62)) ground = Ground.Rough; // scrub in the desert
 
       let trees = 0;
-      if (ground === Ground.Grass || ground === Ground.Rough) {
-        // Forests: dense cores with soft edges, plus a few scattered trees in the open.
-        const f = forest(x / 48, y / 48) * 0.5 + 0.5 + 0.12 * forest(x / 10, y / 10);
+      // Sub-arctic forests run on up into the snow; deserts have only the odd cactus.
+      const wooded = ground === Ground.Grass || ground === Ground.Rough || (ground === Ground.Snow && climate.id === 'arctic' && min < climate.snowLine + 6);
+      if (zone === 'desert') {
+        if (rng.chance(0.015 * opts.treeDensity)) trees = 1;
+      } else if (wooded) {
+        // Forests: dense cores with soft edges, plus a few scattered trees in the open. The
+        // rainforest is mostly forest.
+        const f = forest(x / 48, y / 48) * 0.5 + 0.5 + 0.12 * forest(x / 10, y / 10) + (zone === 'rainforest' ? 0.22 : 0);
         const density = (f - 0.52) * opts.treeDensity;
         if (density > 0 && rng.chance(Math.min(1, density * 4))) {
           trees = Math.max(1, Math.min(MAX_TREES, Math.round(1 + density * 9 + rng.next())));

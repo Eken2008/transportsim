@@ -1,4 +1,6 @@
 import type { CargoId } from '../economy/cargo.ts';
+import { climateCargos } from '../economy/industries.ts';
+import type { Climate } from '../world/climate.ts';
 
 export type Traction = 'steam' | 'diesel' | 'electric';
 
@@ -79,9 +81,11 @@ const wagon = (v: Omit<RailVehicleType, 'kind' | 'power' | 'tractiveEffort' | 'r
   ...v,
 });
 
-const BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood'];
-const PIECE: CargoId[] = ['goods', 'food', 'grain', 'mail'];
+const BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'copper_ore'];
+const PIECE: CargoId[] = ['goods', 'food', 'grain', 'mail', 'paper', 'fruit'];
 const FLAT: CargoId[] = ['steel', 'wood'];
+const TANK: CargoId[] = ['oil', 'rubber', 'water'];
+const VALUABLES: CargoId[] = ['gold', 'diamonds'];
 
 /** All rail vehicles, 1850–2050 and beyond. Names are fictional. */
 export const RAIL_VEHICLES: readonly RailVehicleType[] = [
@@ -112,21 +116,23 @@ export const RAIL_VEHICLES: readonly RailVehicleType[] = [
   wagon({ id: 'open_wagon', name: 'Open wagon', model: 'openwagon', cargoes: BULK, capacity: 20, length: 8, maxSpeed: 80, mass: 8, cost: 3_500, runningCost: 180, intro: 1850, retire: 1950, lifespan: 40 }),
   wagon({ id: 'covered_van', name: 'Covered van', model: 'boxvan', cargoes: PIECE, capacity: 16, length: 8, maxSpeed: 90, mass: 9, cost: 4_200, runningCost: 200, intro: 1850, retire: 1955, lifespan: 40 }),
   wagon({ id: 'stock_car', name: 'Cattle wagon', model: 'stockcar', cargoes: ['livestock'], capacity: 14, length: 8, maxSpeed: 80, mass: 8, cost: 4_000, runningCost: 200, intro: 1850, retire: 1975, lifespan: 40 }),
-  wagon({ id: 'tank_wagon', name: 'Tank wagon', model: 'tanker', cargoes: ['oil'], capacity: 18, length: 8, maxSpeed: 80, mass: 9, cost: 4_800, runningCost: 220, intro: 1870, retire: 1965, lifespan: 40 }),
+  wagon({ id: 'tank_wagon', name: 'Tank wagon', model: 'tanker', cargoes: TANK, capacity: 18, length: 8, maxSpeed: 80, mass: 9, cost: 4_800, runningCost: 220, intro: 1870, retire: 1965, lifespan: 40 }),
+  wagon({ id: 'armoured_van', name: 'Armoured van', model: 'mailvan', cargoes: VALUABLES, capacity: 12, length: 8, maxSpeed: 90, mass: 14, cost: 7_500, runningCost: 300, intro: 1850, retire: 1960, lifespan: 40 }),
   wagon({ id: 'flat_wagon', name: 'Flat wagon', model: 'flatwagon', cargoes: FLAT, capacity: 20, length: 8, maxSpeed: 85, mass: 8, cost: 3_800, runningCost: 180, intro: 1855, retire: 1960, lifespan: 40 }),
   // Bogie freight wagons
   wagon({ id: 'hopper', name: 'Steel hopper', model: 'hopper', cargoes: BULK, capacity: 45, length: 9, maxSpeed: 120, mass: 20, cost: 9_500, runningCost: 360, intro: 1935, retire: 2100, lifespan: 45 }),
   wagon({ id: 'box_wagon', name: 'Bogie box wagon', model: 'boxvan', cargoes: PIECE, capacity: 36, length: 10, maxSpeed: 120, mass: 22, cost: 11_000, runningCost: 380, intro: 1945, retire: 2100, lifespan: 45 }),
-  wagon({ id: 'tanker', name: 'Bogie tanker', model: 'tanker', cargoes: ['oil'], capacity: 48, length: 10, maxSpeed: 120, mass: 24, cost: 12_500, runningCost: 400, intro: 1955, retire: 2100, lifespan: 45 }),
+  wagon({ id: 'tanker', name: 'Bogie tanker', model: 'tanker', cargoes: TANK, capacity: 48, length: 10, maxSpeed: 120, mass: 24, cost: 12_500, runningCost: 400, intro: 1955, retire: 2100, lifespan: 45 }),
   wagon({ id: 'bogie_flat', name: 'Bogie flat', model: 'flatwagon', cargoes: FLAT, capacity: 50, length: 10, maxSpeed: 120, mass: 22, cost: 10_000, runningCost: 360, intro: 1955, retire: 2100, lifespan: 45 }),
+  wagon({ id: 'armoured_bogie', name: 'Bogie armoured van', model: 'mailvan', cargoes: VALUABLES, capacity: 26, length: 10, maxSpeed: 160, mass: 28, cost: 17_000, runningCost: 560, intro: 1950, retire: 2100, lifespan: 40 }),
   wagon({ id: 'stock_modern', name: 'Livestock transporter', model: 'stockcar', cargoes: ['livestock'], capacity: 30, length: 10, maxSpeed: 140, mass: 20, cost: 12_000, runningCost: 420, intro: 1975, retire: 2100, lifespan: 40 }),
-  wagon({ id: 'reefer', name: 'Refrigerated van', model: 'boxvan', cargoes: ['food', 'goods'], capacity: 34, length: 10, maxSpeed: 160, mass: 24, cost: 15_000, runningCost: 520, intro: 1965, retire: 2100, lifespan: 40 }),
-  wagon({ id: 'freight_hs', name: 'Express freight van', model: 'boxvan', cargoes: ['goods', 'mail', 'food'], capacity: 32, length: 12, maxSpeed: 220, mass: 26, cost: 26_000, runningCost: 800, intro: 2005, retire: 2100, lifespan: 35 }),
+  wagon({ id: 'reefer', name: 'Refrigerated van', model: 'boxvan', cargoes: ['food', 'goods', 'fruit'], capacity: 34, length: 10, maxSpeed: 160, mass: 24, cost: 15_000, runningCost: 520, intro: 1965, retire: 2100, lifespan: 40 }),
+  wagon({ id: 'freight_hs', name: 'Express freight van', model: 'boxvan', cargoes: ['goods', 'mail', 'food', 'fruit'], capacity: 32, length: 12, maxSpeed: 220, mass: 26, cost: 26_000, runningCost: 800, intro: 2005, retire: 2100, lifespan: 35 }),
 ];
 
 const road = (v: Omit<RailVehicleType, 'kind' | 'mode'>): RailVehicleType => ({ kind: 'loco', mode: 'road', ...v });
-const ROAD_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood'];
-const ROAD_PIECE: CargoId[] = ['goods', 'food', 'mail', 'grain'];
+const ROAD_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'copper_ore'];
+const ROAD_PIECE: CargoId[] = ['goods', 'food', 'mail', 'grain', 'paper', 'fruit'];
 
 /** Buses (passengers, at bus stops) and trucks (everything else, at truck stops). */
 export const ROAD_VEHICLES: readonly RailVehicleType[] = [
@@ -135,12 +141,13 @@ export const ROAD_VEHICLES: readonly RailVehicleType[] = [
   road({ id: 'city_bus', name: 'City bus', model: 'bus', cargoes: ['passengers'], capacity: 50, length: 10, maxSpeed: 80, power: 140, tractiveEffort: 30, mass: 10, cost: 14_000, runningCost: 1_300, intro: 1950, retire: 2025, lifespan: 15, reliability: 0.88 }),
   road({ id: 'express_coach', name: 'Express coach', model: 'coachbus', cargoes: ['passengers'], capacity: 46, length: 11, maxSpeed: 110, power: 260, tractiveEffort: 40, mass: 13, cost: 26_000, runningCost: 1_900, intro: 1968, retire: 2100, lifespan: 15, reliability: 0.92 }),
   road({ id: 'electric_bus', name: 'Electric bus', model: 'bus', cargoes: ['passengers'], capacity: 64, length: 11, maxSpeed: 90, power: 250, tractiveEffort: 45, mass: 14, cost: 34_000, runningCost: 1_100, intro: 2015, retire: 2100, lifespan: 15, reliability: 0.96 }),
-  road({ id: 'steam_wagon', name: 'Steam wagon', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail'], capacity: 8, length: 8, maxSpeed: 30, power: 35, tractiveEffort: 14, mass: 5, cost: 4_000, runningCost: 650, intro: 1850, retire: 1925, lifespan: 15, reliability: 0.72 }),
-  road({ id: 'lorry', name: 'Motor lorry', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail', 'steel'], capacity: 12, length: 8, maxSpeed: 50, power: 60, tractiveEffort: 20, mass: 5, cost: 6_500, runningCost: 850, intro: 1915, retire: 1965, lifespan: 15, reliability: 0.8 }),
-  road({ id: 'tanker_truck', name: 'Tanker truck', model: 'tankertruck', cargoes: ['oil'], capacity: 18, length: 9, maxSpeed: 70, power: 110, tractiveEffort: 30, mass: 8, cost: 11_000, runningCost: 1_100, intro: 1930, retire: 2100, lifespan: 15, reliability: 0.86 }),
+  road({ id: 'steam_wagon', name: 'Steam wagon', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail', 'paper', 'fruit'], capacity: 8, length: 8, maxSpeed: 30, power: 35, tractiveEffort: 14, mass: 5, cost: 4_000, runningCost: 650, intro: 1850, retire: 1925, lifespan: 15, reliability: 0.72 }),
+  road({ id: 'lorry', name: 'Motor lorry', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail', 'steel', 'paper', 'fruit'], capacity: 12, length: 8, maxSpeed: 50, power: 60, tractiveEffort: 20, mass: 5, cost: 6_500, runningCost: 850, intro: 1915, retire: 1965, lifespan: 15, reliability: 0.8 }),
+  road({ id: 'tanker_truck', name: 'Tanker truck', model: 'tankertruck', cargoes: TANK, capacity: 18, length: 9, maxSpeed: 70, power: 110, tractiveEffort: 30, mass: 8, cost: 11_000, runningCost: 1_100, intro: 1930, retire: 2100, lifespan: 15, reliability: 0.86 }),
   road({ id: 'tipper', name: 'Tipper truck', model: 'tipper', cargoes: ROAD_BULK, capacity: 24, length: 9, maxSpeed: 80, power: 180, tractiveEffort: 45, mass: 10, cost: 14_000, runningCost: 1_300, intro: 1955, retire: 2100, lifespan: 15, reliability: 0.9 }),
   road({ id: 'box_truck', name: 'Box truck', model: 'truck', cargoes: ROAD_PIECE, capacity: 22, length: 9, maxSpeed: 90, power: 180, tractiveEffort: 40, mass: 9, cost: 13_000, runningCost: 1_250, intro: 1955, retire: 2100, lifespan: 15, reliability: 0.9 }),
   road({ id: 'flatbed', name: 'Flatbed truck', model: 'flatbed', cargoes: ['steel', 'wood'], capacity: 22, length: 10, maxSpeed: 80, power: 180, tractiveEffort: 45, mass: 10, cost: 13_500, runningCost: 1_250, intro: 1940, retire: 2100, lifespan: 15, reliability: 0.88 }),
+  road({ id: 'armoured_truck', name: 'Armoured truck', model: 'truck', cargoes: VALUABLES, capacity: 8, length: 8, maxSpeed: 70, power: 110, tractiveEffort: 28, mass: 7, cost: 10_000, runningCost: 1_000, intro: 1925, retire: 2100, lifespan: 15, reliability: 0.86 }),
   road({ id: 'livestock_truck', name: 'Livestock truck', model: 'truck', cargoes: ['livestock'], capacity: 15, length: 9, maxSpeed: 80, power: 160, tractiveEffort: 40, mass: 9, cost: 12_500, runningCost: 1_200, intro: 1935, retire: 2100, lifespan: 15, reliability: 0.88 }),
 ];
 
@@ -154,12 +161,12 @@ export const AIRCRAFT: readonly RailVehicleType[] = [
   air({ id: 'jetliner', name: 'Jetliner', model: 'jet', cargoes: ['passengers', 'mail'], capacity: 140, length: 20, maxSpeed: 850, power: 20_000, mass: 60, cost: 420_000, runningCost: 30_000, intro: 1960, retire: 2035, lifespan: 25, reliability: 0.9, heavy: true }),
   air({ id: 'jumbo', name: 'Jumbo jet', model: 'jumbo', cargoes: ['passengers', 'mail'], capacity: 380, length: 26, maxSpeed: 900, power: 60_000, mass: 160, cost: 1_100_000, runningCost: 70_000, intro: 1971, retire: 2100, lifespan: 25, reliability: 0.93, heavy: true }),
   air({ id: 'regional_jet', name: 'Regional jet', model: 'jet', cargoes: ['passengers', 'mail'], capacity: 80, length: 16, maxSpeed: 780, power: 12_000, mass: 30, cost: 300_000, runningCost: 20_000, intro: 1992, retire: 2100, lifespan: 25, reliability: 0.95 }),
-  air({ id: 'cargo_jet', name: 'Cargo jet', model: 'jet', cargoes: ['goods', 'mail', 'food'], capacity: 70, length: 20, maxSpeed: 850, power: 20_000, mass: 60, cost: 400_000, runningCost: 28_000, intro: 1975, retire: 2100, lifespan: 25, reliability: 0.92, heavy: true }),
+  air({ id: 'cargo_jet', name: 'Cargo jet', model: 'jet', cargoes: ['goods', 'mail', 'food', 'fruit', 'gold', 'diamonds'], capacity: 70, length: 20, maxSpeed: 850, power: 20_000, mass: 60, cost: 400_000, runningCost: 28_000, intro: 1975, retire: 2100, lifespan: 25, reliability: 0.92, heavy: true }),
 ];
 
 const ship = (v: Omit<RailVehicleType, 'kind' | 'mode' | 'tractiveEffort'>): RailVehicleType => ({ kind: 'loco', mode: 'water', tractiveEffort: 0, ...v });
-const SHIP_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'steel'];
-const SHIP_PIECE: CargoId[] = ['goods', 'food', 'mail', 'livestock', 'grain'];
+const SHIP_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'steel', 'copper_ore'];
+const SHIP_PIECE: CargoId[] = ['goods', 'food', 'mail', 'livestock', 'grain', 'paper', 'fruit'];
 
 /** Ships, bought at ship depots: slow, but they carry a lot. */
 export const SHIPS: readonly RailVehicleType[] = [
@@ -167,11 +174,11 @@ export const SHIPS: readonly RailVehicleType[] = [
   ship({ id: 'paddle_steamer', name: 'Paddle steamer', model: 'paddle', cargoes: ['passengers', 'mail'], capacity: 140, length: 20, maxSpeed: 24, power: 250, mass: 180, cost: 30_000, runningCost: 2_800, intro: 1860, retire: 1950, lifespan: 30, reliability: 0.78 }),
   ship({ id: 'steam_coaster', name: 'Steam coaster', model: 'cargoship', cargoes: SHIP_BULK, capacity: 160, length: 20, maxSpeed: 18, power: 200, mass: 300, cost: 26_000, runningCost: 2_400, intro: 1850, retire: 1950, lifespan: 30, reliability: 0.76 }),
   ship({ id: 'cargo_steamer', name: 'Cargo steamer', model: 'cargoship', cargoes: SHIP_PIECE, capacity: 120, length: 20, maxSpeed: 20, power: 220, mass: 260, cost: 28_000, runningCost: 2_500, intro: 1870, retire: 1955, lifespan: 30, reliability: 0.77 }),
-  ship({ id: 'oil_barge', name: 'Oil barge', model: 'tankership', cargoes: ['oil'], capacity: 140, length: 20, maxSpeed: 16, power: 180, mass: 280, cost: 27_000, runningCost: 2_300, intro: 1880, retire: 1960, lifespan: 30, reliability: 0.78 }),
+  ship({ id: 'oil_barge', name: 'Oil barge', model: 'tankership', cargoes: TANK, capacity: 140, length: 20, maxSpeed: 16, power: 180, mass: 280, cost: 27_000, runningCost: 2_300, intro: 1880, retire: 1960, lifespan: 30, reliability: 0.78 }),
   ship({ id: 'motor_ferry', name: 'Motor ferry', model: 'ferry', cargoes: ['passengers', 'mail'], capacity: 200, length: 22, maxSpeed: 32, power: 800, mass: 250, cost: 60_000, runningCost: 4_500, intro: 1925, retire: 2000, lifespan: 30, reliability: 0.85 }),
   ship({ id: 'bulk_carrier', name: 'Bulk carrier', model: 'cargoship', cargoes: SHIP_BULK, capacity: 300, length: 24, maxSpeed: 26, power: 1_200, mass: 500, cost: 75_000, runningCost: 5_200, intro: 1935, retire: 2100, lifespan: 30, reliability: 0.87 }),
   ship({ id: 'freighter', name: 'Freighter', model: 'cargoship', cargoes: SHIP_PIECE, capacity: 220, length: 24, maxSpeed: 28, power: 1_200, mass: 450, cost: 72_000, runningCost: 5_000, intro: 1935, retire: 2100, lifespan: 30, reliability: 0.87 }),
-  ship({ id: 'oil_tanker', name: 'Oil tanker', model: 'tankership', cargoes: ['oil'], capacity: 320, length: 26, maxSpeed: 26, power: 1_500, mass: 600, cost: 85_000, runningCost: 5_600, intro: 1940, retire: 2100, lifespan: 30, reliability: 0.87 }),
+  ship({ id: 'oil_tanker', name: 'Oil tanker', model: 'tankership', cargoes: TANK, capacity: 320, length: 26, maxSpeed: 26, power: 1_500, mass: 600, cost: 85_000, runningCost: 5_600, intro: 1940, retire: 2100, lifespan: 30, reliability: 0.87 }),
   ship({ id: 'hovercraft', name: 'Hovercraft', model: 'hovercraft', cargoes: ['passengers', 'mail'], capacity: 120, length: 16, maxSpeed: 110, power: 3_000, mass: 60, cost: 180_000, runningCost: 14_000, intro: 1968, retire: 2100, lifespan: 20, reliability: 0.88 }),
   ship({ id: 'fast_ferry', name: 'Fast catamaran ferry', model: 'ferry', cargoes: ['passengers', 'mail'], capacity: 300, length: 22, maxSpeed: 65, power: 6_000, mass: 200, cost: 160_000, runningCost: 11_000, intro: 1990, retire: 2100, lifespan: 25, reliability: 0.93 }),
 ];
@@ -187,8 +194,26 @@ export const vehicleType = railVehicle;
 /** Buses carry passengers and use bus stops; every other road vehicle is a truck. */
 export const isBus = (u: { type: string; cargo?: CargoId }) => railVehicle(u.type)?.mode === 'road' && unitCargo(u) === 'passengers';
 
-/** Whether a vehicle can be bought in the given year under the timeline setting. */
-export function isAvailable(v: RailVehicleType, year: number, timeline: 'era' | 'sandbox'): boolean {
+/** The cargoes a vehicle can carry in a climate; the first is what it carries unless refitted. */
+export function cargoesIn(v: RailVehicleType, climate: Climate): readonly CargoId[] {
+  const there = climateCargos(climate);
+  return v.cargoes?.filter((c) => there.includes(c)) ?? [];
+}
+
+/** The cargo a unit carries in a climate: its refit, or the first of the climate's cargo it can carry. */
+export function unitCargoIn(u: { type: string; cargo?: CargoId }, climate: Climate): CargoId | undefined {
+  const v = railVehicle(u.type);
+  if (!v?.cargoes?.length) return undefined;
+  const options = cargoesIn(v, climate);
+  return u.cargo && options.includes(u.cargo) ? u.cargo : options[0];
+}
+
+/**
+ * Whether a vehicle can be bought in the given year under the timeline setting, in a climate
+ * (wagons and road vehicles need some cargo of that climate to carry).
+ */
+export function isAvailable(v: RailVehicleType, year: number, timeline: 'era' | 'sandbox', climate: Climate): boolean {
+  if (v.cargoes && !cargoesIn(v, climate).length) return false;
   return timeline === 'sandbox' || (v.intro <= year && year < v.retire);
 }
 

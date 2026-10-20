@@ -1,5 +1,6 @@
 export * from './util/random.ts';
 export * from './world/constants.ts';
+export * from './world/climate.ts';
 export * from './world/map.ts';
 export * from './world/foundation.ts';
 export * from './world/terrain.ts';

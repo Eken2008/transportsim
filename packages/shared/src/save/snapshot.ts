@@ -341,7 +341,7 @@ function sanitizeMembers(input: unknown, needOwner: boolean): CompanyMember[] {
 function townStats(v: unknown): TownStats | undefined {
   if (!v || typeof v !== 'object') return undefined;
   const s = v as Partial<TownStats>;
-  return { passengers: num(s.passengers, 0), mail: num(s.mail, 0), goods: num(s.goods, 0), food: num(s.food, 0) };
+  return { passengers: num(s.passengers, 0), mail: num(s.mail, 0), goods: num(s.goods, 0), food: num(s.food, 0), water: num(s.water, 0) };
 }
 
 function townRatings(v: unknown): Record<number, number> | undefined {

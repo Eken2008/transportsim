@@ -1,6 +1,6 @@
 import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, type CompanyRole } from '../company/company.ts';
 import type { Station } from '../rail/station.ts';
-import { emptyTownStats, generateTowns, type Town } from '../town/towns.ts';
+import { TOWN_NEED, emptyTownStats, generateTowns, townNeeds, type Town } from '../town/towns.ts';
 import { growTown } from '../town/growth.ts';
 import { monthlyReputation } from '../town/reputation.ts';
 import { FUNDED_GROWTH, forgetCompanyInTowns, townActionsDaily } from '../town/actions.ts';
@@ -45,7 +45,7 @@ import { isRailVehicle } from '../vehicles/train.ts';
 import type { Order, Train } from '../vehicles/train.ts';
 import { VEHICLE_MODES, deleteLine, setLineOrders, vehicleMode, type Line, type VehicleMode } from '../vehicles/lines.ts';
 import { GameMap } from '../world/map.ts';
-import { generateTerrain } from '../world/terrain.ts';
+import { generateTerrain, worldClimate } from '../world/terrain.ts';
 import { TICKS_PER_DAY, daysFromYmd, ymdFromDays } from './date.ts';
 import { ECONOMY, type GameSettings } from './settings.ts';
 
@@ -149,6 +149,7 @@ export class GameState {
   constructor(settings: GameSettings, map: GameMap, date?: number) {
     this.settings = settings;
     this.map = map;
+    map.climate = worldClimate(settings);
     this.date = date ?? daysFromYmd(settings.startYear, 0, 1);
     this.townRng = new Random(settings.seed ^ 0x70e115);
     this.councilRng = new Random(settings.seed ^ 0xc0c111);
@@ -181,6 +182,7 @@ export class GameState {
 
   static create(settings: GameSettings): GameState {
     const map = new GameMap(settings.mapWidth, settings.mapHeight);
+    map.climate = worldClimate(settings);
     generateTerrain(map, {
       seed: settings.seed,
       roughness: settings.roughness,
@@ -290,7 +292,8 @@ export class GameState {
   /**
    * Towns grow a little on their own and much faster with good service: each well-served
    * station (picked up within 20 days, rated over 50%) adds growth, as do goods and food, and
-   * a company funding new buildings.
+   * a company funding new buildings. Towns above the sub-arctic snow line, or in the desert,
+   * only grow with food (and water) delivered.
    */
   private growTowns(): void {
     const served = new Map<number, number>();
@@ -303,7 +306,9 @@ export class GameState {
       const n = Math.min(4, served.get(t.id) ?? 0);
       const last = t.lastStats ?? emptyTownStats();
       const funded = t.funded && t.funded.until > this.date ? FUNDED_GROWTH : 0;
-      const rate = 1 / 150 + n / 30 + (last.goods >= 30 ? 1 / 40 : 0) + (last.food >= 30 ? 1 / 40 : 0) + funded;
+      // Towns in the snow or the desert don't grow without food (and water) unless funded.
+      const lacking = townNeeds(this.map, t).some((c) => (last[c] ?? 0) < TOWN_NEED);
+      const rate = lacking ? funded : 1 / 150 + n / 30 + (last.goods >= 30 ? 1 / 40 : 0) + (last.food >= 30 ? 1 / 40 : 0) + funded;
       if (t.served !== n || t.growthRate !== rate) {
         t.served = n;
         t.growthRate = rate;

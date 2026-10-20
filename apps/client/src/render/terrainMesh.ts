@@ -14,6 +14,7 @@ import {
   HEIGHT_SCALE,
   SNOW_LINE,
   TileType,
+  type WorldClimate,
   tileSplitsNWSE,
   type GameMap,
 } from '@transportsim/shared';
@@ -40,6 +41,14 @@ export const CROP_RGB: [number, number, number][] = [rgb('#d2b35a'), rgb('#7e5f3
 const HIGH_GRASS = rgb('#73984f');
 const SEABED = rgb('#b3a274');
 const ROCK = rgb('#9c968c');
+/** Sub-arctic: grass turns to tundra towards the snow line, and snow covers what lies above it. */
+const TUNDRA = rgb('#8f9470');
+const SNOW = rgb('#eef2f6');
+const SNOWY_ROCK = rgb('#c4c8cc');
+/** Sub-tropical grassland, desert and rainforest, by ground (grass, rough, rocks). */
+const SAVANNA = rgb('#9db55a');
+const DESERT_RGB = [rgb('#e3c78f'), rgb('#cdae72'), rgb('#b88a62')];
+const JUNGLE_RGB = [rgb('#4a8a36'), rgb('#557f38'), rgb('#7d8a6c')];
 /** Stone walls of foundations, where a levelled tile stands above the land beside it. */
 const FOUNDATION = rgb('#a69c8b');
 
@@ -73,13 +82,13 @@ function tileColor(map: GameMap, x: number, y: number, out: [number, number, num
       return;
     }
     base = GROUND_RGB[ground] ?? GROUND_RGB[Ground.Grass]!;
-    if (ground === Ground.Grass) {
+    const climate = map.climate;
+    if (climate.id === 'arctic') base = arcticColor(map, climate, x, y, ground, maxH, base);
+    else if (climate.id === 'tropical') base = tropicalColor(climate, x, y, ground, base);
+    else if (ground === Ground.Grass) {
       const t = Math.min(1, maxH / (SNOW_LINE - 4));
-      base = [lerp(base[0], HIGH_GRASS[0], t), lerp(base[1], HIGH_GRASS[1], t), lerp(base[2], HIGH_GRASS[2], t)];
-      if (maxH > SNOW_LINE - 6) {
-        const r = (maxH - (SNOW_LINE - 6)) / 6;
-        base = [lerp(base[0], ROCK[0], r), lerp(base[1], ROCK[1], r), lerp(base[2], ROCK[2], r)];
-      }
+      base = mix(base, HIGH_GRASS, t);
+      if (maxH > SNOW_LINE - 6) base = mix(base, ROCK, (maxH - (SNOW_LINE - 6)) / 6);
     }
   }
   const v = 0.94 + tileHash(x, y) * 0.12;
@@ -89,6 +98,27 @@ function tileColor(map: GameMap, x: number, y: number, out: [number, number, num
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const mix = (a: readonly number[], b: readonly number[], t: number): [number, number, number] => [lerp(a[0]!, b[0]!, t), lerp(a[1]!, b[1]!, t), lerp(a[2]!, b[2]!, t)];
+
+/** Sub-arctic ground: tundra towards the snow line, snow above it (and half way on tiles reaching it). */
+function arcticColor(map: GameMap, climate: WorldClimate, x: number, y: number, ground: number, maxH: number, base: [number, number, number]): [number, number, number] {
+  if (ground === Ground.Sand) return base;
+  if (ground === Ground.Grass || ground === Ground.Rough) base = mix(base, TUNDRA, Math.min(1, maxH / climate.snowLine) * 0.8);
+  const snow = ground === Ground.Rocks ? SNOWY_ROCK : SNOW;
+  if (map.zone(x, y) === 'snow') return snow;
+  return maxH >= climate.snowLine ? mix(base, snow, 0.55) : base;
+}
+
+/** Sub-tropical ground: grassland, easing into desert sand or rainforest green. */
+function tropicalColor(climate: WorldClimate, x: number, y: number, ground: number, base: [number, number, number]): [number, number, number] {
+  const k = ground === Ground.Grass ? 0 : ground === Ground.Rough ? 1 : ground === Ground.Rocks ? 2 : -1;
+  if (k < 0) return base;
+  if (k === 0) base = SAVANNA;
+  const w = climate.wetness(x, y);
+  if (w < 0) return mix(base, DESERT_RGB[k]!, -w);
+  if (w > 0) return mix(base, JUNGLE_RGB[k]!, w);
+  return base;
+}
 
 const _rgb: [number, number, number] = [0, 0, 0];
 

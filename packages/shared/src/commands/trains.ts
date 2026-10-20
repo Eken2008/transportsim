@@ -2,7 +2,8 @@ import { resaleValue } from '../economy/finance.ts';
 import { isElectrified } from '../rail/railTypes.ts';
 import { ymdFromDays } from '../sim/date.ts';
 import { TileType } from '../world/constants.ts';
-import { isAvailable, isBus, railVehicle, unitCargo } from '../vehicles/catalog.ts';
+import { cargoesIn, isAvailable, isBus, railVehicle, unitCargo } from '../vehicles/catalog.ts';
+import type { Climate } from '../world/climate.ts';
 import { isHeavy } from '../vehicles/airSystem.ts';
 import { AirportRole } from '../air/airports.ts';
 import { isRailVehicle, trainStats, type Train, type TrainUnit } from '../vehicles/train.ts';
@@ -25,16 +26,22 @@ export interface BuyTrainCommand {
   units: UnitSpec[];
 }
 
-/** Validate unit specs; refits must be cargoes the wagon can carry. */
-export function parseUnits(input: unknown): TrainUnit[] | string {
+/**
+ * Validate unit specs; refits must be cargoes the wagon can carry in the climate. A wagon whose
+ * usual cargo isn't found in the climate is refitted to the first one that is.
+ */
+export function parseUnits(input: unknown, climate: Climate = 'temperate'): TrainUnit[] | string {
   if (!Array.isArray(input) || input.length === 0 || input.length > MAX_UNITS) return `A train has 1–${MAX_UNITS} vehicles`;
   const out: TrainUnit[] = [];
   for (const u of input) {
     const type = typeof u === 'string' ? u : u && typeof u === 'object' ? (u as TrainUnit).type : undefined;
     const v = typeof type === 'string' ? railVehicle(type) : undefined;
     if (!v) return 'Unknown vehicle';
-    const cargo = typeof u === 'object' ? (u as TrainUnit).cargo : undefined;
-    if (cargo !== undefined && !v.cargoes?.includes(cargo)) return `${v.name} can't carry that`;
+    const options = v.cargoes && cargoesIn(v, climate);
+    if (options && !options.length) return `${v.name} has nothing to carry in this climate`;
+    const asked = typeof u === 'object' ? (u as TrainUnit).cargo : undefined;
+    if (asked !== undefined && !options?.includes(asked)) return `${v.name} can't carry that`;
+    const cargo = asked ?? options?.[0];
     out.push(cargo && cargo !== v.cargoes?.[0] ? { type: v.id, cargo } : { type: v.id });
   }
   return out;
@@ -85,7 +92,7 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
     if ((depotType !== TileType.Depot && depotType !== TileType.RoadDepot && !hangar && !shipyard) || map.layers.owner[depot] !== ctx.companyId) return fail('Not your depot');
     const road = depotType === TileType.RoadDepot;
     const mode: 'rail' | 'road' | 'air' | 'water' = road ? 'road' : hangar ? 'air' : shipyard ? 'water' : 'rail';
-    const parsed = parseUnits(cmd.units);
+    const parsed = parseUnits(cmd.units, state.map.climate.id);
     if (typeof parsed === 'string') return fail(parsed);
     if (parsed.some((u) => (railVehicle(u.type)!.mode ?? 'rail') !== mode)) {
       return fail(road ? 'Road depots sell road vehicles' : hangar ? 'Hangars sell aircraft' : shipyard ? 'Ship depots sell ships' : 'Train depots sell rail vehicles');
@@ -100,7 +107,7 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
     for (const [k, id] of units.entries()) {
       const v = typeof id === 'string' ? railVehicle(id) : undefined;
       if (!v) return fail('Unknown vehicle');
-      if (!isAvailable(v, year, state.settings.timeline)) return fail(`${v.name} is not available in ${year}`);
+      if (!isAvailable(v, year, state.settings.timeline, state.settings.climate)) return fail(`${v.name} is not available in ${year}`);
       if (k === 0 && v.kind !== 'loco') return fail('A train needs an engine at the front');
       cost += v.cost;
     }
@@ -218,7 +225,7 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
     const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
     if (!t || t.owner !== ctx.companyId) return fail('Not your train');
     if (t.status !== 'depot') return fail('Trains can only be changed inside a depot');
-    const parsed = parseUnits(cmd.units);
+    const parsed = parseUnits(cmd.units, state.map.climate.id);
     if (typeof parsed === 'string') return fail(parsed);
     if (!isRailVehicle(t) && (parsed.length !== 1 || parsed[0]!.type !== t.units[0]!.type)) return fail('Road vehicles, aircraft and ships can only be refitted');
     if (isRailVehicle(t) && parsed.some((u) => railVehicle(u.type)!.mode)) return fail('That is not a rail vehicle');
@@ -236,7 +243,7 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
       const have = old.get(id) ?? 0;
       if (have > 0) old.set(id, have - 1);
       else {
-        if (!isAvailable(v, year, state.settings.timeline)) return fail(`${v.name} is not available in ${year}`);
+        if (!isAvailable(v, year, state.settings.timeline, state.settings.climate)) return fail(`${v.name} is not available in ${year}`);
         added += v.cost;
       }
     }

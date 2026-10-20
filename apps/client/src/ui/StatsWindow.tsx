@@ -3,6 +3,7 @@ import {
   CARGO_IDS,
   COMPANY_COLORS,
   cargoPayment,
+  climateCargos,
   ledgerTotal,
   ymdFromDays,
   type CargoId,
@@ -189,6 +190,7 @@ const perCompany = (companies: Company[], pick: (m: MonthRecord) => number): Ser
 export function StatsWindow({ w }: { w: GameWindow & { kind: 'stats' } }) {
   const companies = useApp((s) => s.global?.companies ?? []);
   const myCompany = useApp((s) => s.global?.players.find((p) => p.id === s.room?.playerId)?.companyId ?? null);
+  const climate = useApp((s) => s.room?.settings.climate ?? 'temperate');
   const [tab, setTab] = useState<Tab>('value');
   const [cargoOf, setCargoOf] = useState<number | null>(null);
   const focus = companies.find((c) => c.id === (cargoOf ?? myCompany)) ?? companies[0];
@@ -196,7 +198,7 @@ export function StatsWindow({ w }: { w: GameWindow & { kind: 'stats' } }) {
   let body: React.ReactNode;
   if (tab === 'rates') {
     // What a load of 10 units pays over 20 tiles, by days in transit.
-    const series = CARGO_IDS.map((c: CargoId) => ({
+    const series = climateCargos(climate).map((c: CargoId) => ({
       name: CARGOS[c].name,
       color: CARGOS[c].color,
       points: Array.from({ length: 31 }, (_, d) => [d * 3, cargoPayment(c, 10, 20, d * 3)] as [number, number]),

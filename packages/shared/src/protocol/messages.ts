@@ -30,6 +30,7 @@ export interface RoomSummary {
   year: number;
   timeline: GameSettings['timeline'];
   economy: GameSettings['economy'];
+  climate?: GameSettings['climate'];
 }
 
 export interface GlobalState {

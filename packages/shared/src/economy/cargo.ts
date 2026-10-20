@@ -1,4 +1,25 @@
-export const CARGO_IDS = ['passengers', 'mail', 'coal', 'iron_ore', 'steel', 'wood', 'goods', 'grain', 'livestock', 'food', 'oil'] as const;
+export const CARGO_IDS = [
+  'passengers',
+  'mail',
+  'coal',
+  'iron_ore',
+  'steel',
+  'wood',
+  'goods',
+  'grain',
+  'livestock',
+  'food',
+  'oil',
+  // Sub-arctic
+  'paper',
+  'gold',
+  // Sub-tropical
+  'copper_ore',
+  'rubber',
+  'fruit',
+  'water',
+  'diamonds',
+] as const;
 export type CargoId = (typeof CARGO_IDS)[number];
 
 export interface CargoType {
@@ -34,6 +55,13 @@ export const CARGOS: Record<CargoId, CargoType> = {
   livestock: { id: 'livestock', name: 'Livestock', unit: 'head', color: '#b5835a', rate: 0.88, patience: 1.2, weight: 0.6 },
   food: { id: 'food', name: 'Food', unit: 'tonnes', color: '#6abf69', rate: 0.95, patience: 1, weight: 1 },
   oil: { id: 'oil', name: 'Oil', unit: 'kilolitres', color: '#2f2f4f', rate: 0.6, patience: 2.5, weight: 0.9 },
+  paper: { id: 'paper', name: 'Paper', unit: 'tonnes', color: '#e4dcc6', rate: 0.64, patience: 2, weight: 1 },
+  gold: { id: 'gold', name: 'Gold', unit: 'bags', color: '#d4af37', rate: 1.6, patience: 1.2, weight: 0.2 },
+  copper_ore: { id: 'copper_ore', name: 'Copper ore', unit: 'tonnes', color: '#b87333', rate: 0.39, patience: 3, weight: 1 },
+  rubber: { id: 'rubber', name: 'Rubber', unit: 'kilolitres', color: '#6b5a48', rate: 0.6, patience: 2.5, weight: 0.9 },
+  fruit: { id: 'fruit', name: 'Fruit', unit: 'tonnes', color: '#f2a03d', rate: 0.82, patience: 1, weight: 0.8 },
+  water: { id: 'water', name: 'Water', unit: 'kilolitres', color: '#5fb6d9', rate: 0.5, patience: 2, weight: 1 },
+  diamonds: { id: 'diamonds', name: 'Diamonds', unit: 'bags', color: '#b9e8f5', rate: 1.8, patience: 1.2, weight: 0.1 },
 };
 
 /** Share of the rate a very late delivery still earns. */

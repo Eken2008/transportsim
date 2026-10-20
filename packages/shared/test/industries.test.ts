@@ -5,7 +5,7 @@ import {
   GameMap,
   GameState,
   Ground,
-  INDUSTRY_TYPES,
+  CLIMATES,
   Piece,
   TICKS_PER_DAY,
   TileType,
@@ -15,6 +15,8 @@ import {
   newIndustry,
   placeIndustry,
   restoreSnapshot,
+  typesFor,
+  zoneFits,
   type Command,
 } from '../src/index.ts';
 
@@ -52,12 +54,14 @@ function world(startYear = 1960) {
 }
 
 describe('industries', () => {
-  test('new worlds get industries of every type, on their own tiles away from towns', () => {
-    const state = GameState.create({ ...DEFAULT_SETTINGS, mapWidth: 256, mapHeight: 256, seed: 3, waterLevel: 0.1, startYear: 1950 });
+  test.each(CLIMATES)('new %s worlds get industries of every type of the climate, on their own tiles in their zones', (climate) => {
+    const state = GameState.create({ ...DEFAULT_SETTINGS, mapWidth: 256, mapHeight: 256, seed: 3, waterLevel: 0.1, startYear: 1950, climate });
     const kinds = new Set([...state.industries.values()].map((i) => i.type));
-    expect(state.industries.size).toBeGreaterThanOrEqual(INDUSTRY_TYPES.length);
-    expect(kinds.size).toBe(INDUSTRY_TYPES.length);
+    const types = typesFor(1950, climate);
+    expect(state.industries.size).toBeGreaterThanOrEqual(types.length);
+    expect([...kinds].sort()).toEqual(types.map((t) => t.id).sort());
     for (const ind of state.industries.values()) {
+      expect(zoneFits(state.map, industryType(ind.type)!, ind.x, ind.y)).toBe(true);
       for (let y = ind.y; y < ind.y + ind.h; y++) {
         for (let x = ind.x; x < ind.x + ind.w; x++) {
           const i = state.map.tileIndex(x, y);

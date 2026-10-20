@@ -3,7 +3,7 @@ import { isElectrified } from '../rail/railTypes.ts';
 import { TICKS_PER_DAY, ymdFromDays } from '../sim/date.ts';
 import type { GameState } from '../sim/state.ts';
 import { Random } from '../util/random.ts';
-import { isAvailable, railVehicle } from './catalog.ts';
+import { isAvailable, railVehicle, unitCargo, unitCargoIn } from './catalog.ts';
 import { trainStats, type Train, type TrainUnit } from './train.ts';
 import { vehicleMode } from './lines.ts';
 
@@ -100,12 +100,17 @@ export class MaintenanceSystem {
     const units = t.units.map((u) => {
       const to = c.replace[u.type];
       const v = to ? railVehicle(to) : undefined;
-      if (v && isAvailable(v, year, state.settings.timeline)) return to!;
-      if (old && isAvailable(railVehicle(u.type)!, year, state.settings.timeline)) return u.type;
+      if (v && isAvailable(v, year, state.settings.timeline, state.settings.climate)) return to!;
+      if (old && isAvailable(railVehicle(u.type)!, year, state.settings.timeline, state.settings.climate)) return u.type;
       return null;
     });
     if (units.every((u) => u === null)) return false;
-    const next = t.units.map((u, i) => ({ type: units[i] ?? u.type }));
+    // Wagons keep their cargo where the new type can carry it.
+    const next = t.units.map((u, i): TrainUnit => {
+      const type = units[i] ?? u.type;
+      const cargo = unitCargoIn({ type, cargo: unitCargo(u) }, state.settings.climate);
+      return cargo && cargo !== railVehicle(type)!.cargoes?.[0] ? { type, cargo } : { type };
+    });
     if (railVehicle(next[0]!.type)?.kind !== 'loco') return false;
     if (trainStats(next).length > MAX_TRAIN_TILES) return false;
     if (next.some((u) => railVehicle(u.type)?.traction === 'electric') && !isElectrified(state.map.layers.railType[t.depot]!)) return false;

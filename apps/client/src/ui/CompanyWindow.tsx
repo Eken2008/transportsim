@@ -5,6 +5,7 @@ import {
   RAIL_VEHICLES,
   ROLE_LABELS,
   hqSizeFor,
+  cargoesIn,
   isAvailable,
   railVehicle,
   roleAllows,
@@ -209,10 +210,11 @@ function Headquarters({ c, canBuild }: { c: Company; canBuild: boolean }) {
 function VehiclePolicy({ c, canAct }: { c: Company; canAct: boolean }) {
   const date = useApp((s) => s.global?.date ?? 0);
   const timeline = useApp((s) => s.room?.settings.timeline ?? 'era');
+  const climate = useApp((s) => s.room?.settings.climate ?? 'temperate');
   const year = ymdFromDays(date).year;
   const [from, setFrom] = useState(RAIL_VEHICLES[0]!.id);
   const fromType = railVehicle(from)!;
-  const targets = RAIL_VEHICLES.filter((v) => v.kind === fromType.kind && v.id !== from && isAvailable(v, year, timeline));
+  const targets = RAIL_VEHICLES.filter((v) => v.kind === fromType.kind && v.id !== from && isAvailable(v, year, timeline, climate));
   const [to, setTo] = useState('');
   const target = targets.some((v) => v.id === to) ? to : (targets[0]?.id ?? '');
   const rules = Object.entries(c.replace);
@@ -238,7 +240,7 @@ function VehiclePolicy({ c, canAct }: { c: Company; canAct: boolean }) {
       {canAct && (
         <div className="row wrap" style={{ marginTop: 6 }}>
           <select value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Replace" style={{ flex: 1, minWidth: 0 }}>
-            {RAIL_VEHICLES.map((v) => (
+            {RAIL_VEHICLES.filter((v) => !v.cargoes || cargoesIn(v, climate).length).map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
               </option>

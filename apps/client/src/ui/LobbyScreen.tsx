@@ -1,8 +1,11 @@
 import {
+  CLIMATES,
+  CLIMATE_NAMES,
   DEFAULT_SETTINGS,
   MAP_SIZES,
   formatDate,
   type AccidentSeverity,
+  type Climate,
   type EconomyDifficulty,
   type GameSettings,
   type TerrainRoughness,
@@ -100,7 +103,7 @@ function JoinCard({ disabled, onBeforeJoin }: { disabled: boolean; onBeforeJoin:
             <div style={{ flex: 1, minWidth: 0 }}>
               <b>{r.name}</b>
               <span className="muted">
-                {r.hostName} · {r.mapWidth}×{r.mapHeight} · {r.year} · {r.timeline === 'era' ? 'eras' : 'sandbox'} · {r.economy} economy
+                {r.hostName} · {r.mapWidth}×{r.mapHeight} · {CLIMATE_NAMES[r.climate ?? 'temperate'].toLowerCase()} · {r.year} · {r.timeline === 'era' ? 'eras' : 'sandbox'} · {r.economy} economy
               </span>
             </div>
             <span className="mono muted">
@@ -171,6 +174,16 @@ function HostCard({ disabled, onBeforeHost, busy }: { disabled: boolean; onBefor
                   </option>
                 )),
             )}
+          </select>
+        </label>
+        <label className="field">
+          <span>Climate</span>
+          <select value={s.climate} onChange={(e) => set('climate', e.target.value as Climate)}>
+            {CLIMATES.map((c) => (
+              <option key={c} value={c}>
+                {CLIMATE_NAMES[c]}
+              </option>
+            ))}
           </select>
         </label>
         <label className="field">

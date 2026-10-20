@@ -1,6 +1,6 @@
 import type { Town } from '../town/towns.ts';
 import { CARGO_IDS, type CargoId } from './cargo.ts';
-import { FOOD_RESIDENTS, GOODS_RESIDENTS } from './cargoSystem.ts';
+import { TOWN_CARGO_RESIDENTS } from './cargoSystem.ts';
 import { INDUSTRY_TYPES, industryType, type Industry, type IndustryType } from './industries.ts';
 
 /** Freight cargoes: everything industries make or take (not passengers and mail). */
@@ -8,7 +8,7 @@ export const FREIGHT_CARGOS: readonly CargoId[] = CARGO_IDS.filter((c) => INDUST
 
 /** Residents a town needs before stations in it can take this cargo (undefined: towns never take it). */
 export function townAcceptsAt(cargo: CargoId): number | undefined {
-  return cargo === 'goods' ? GOODS_RESIDENTS : cargo === 'food' ? FOOD_RESIDENTS : undefined;
+  return TOWN_CARGO_RESIDENTS[cargo];
 }
 
 /** Which industry types make a cargo and which take it, and whether towns take it. */

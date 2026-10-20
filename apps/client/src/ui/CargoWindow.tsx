@@ -4,12 +4,14 @@ import {
   cargoAmount,
   cargoDestinations,
   cargoSources,
+  climateCargos,
   industryType,
   townAcceptsAt,
   transportedShare,
   typesFor,
   ymdFromDays,
   type CargoId,
+  type Climate,
   type Industry,
   type RouteEnd,
 } from '@transportsim/shared';
@@ -53,7 +55,7 @@ interface RouteRow {
 const names = (list: readonly string[]) => (list.length ? list.join(', ') : 'nothing on the map');
 
 /** What the selected node takes and gives, in words. */
-function describe(g: ChainGraph, key: string): string {
+function describe(g: ChainGraph, key: string, climate: Climate): string {
   const node = g.nodes.get(key);
   if (!node) return '';
   const nameOf = (k: string) => {
@@ -67,7 +69,11 @@ function describe(g: ChainGraph, key: string): string {
   const sends = outOf(key).map((c) => `${nameOf(c).toLowerCase()} to ${names(outOf(c).map(nameOf))}`);
   const who = node.kind === 'towns' ? 'Towns' : node.type.name;
   const parts = [takes.length ? `takes ${takes.join('; ')}` : '', sends.length ? `sends ${sends.join('; ')}` : ''].filter(Boolean);
-  const extra = node.kind === 'towns' ? ` A station needs ${townAcceptsAt('goods')} residents in reach for goods, ${townAcceptsAt('food')} for food.` : '';
+  const needs = climateCargos(climate).flatMap((c) => {
+    const n = townAcceptsAt(c);
+    return n === undefined ? [] : [`${n} for ${CARGOS[c].name.toLowerCase()}`];
+  });
+  const extra = node.kind === 'towns' ? ` A station needs residents in reach: ${needs.join(', ')}.` : '';
   return `${who} ${parts.join(', and ')}.${extra}`;
 }
 
@@ -75,7 +81,8 @@ function describe(g: ChainGraph, key: string): string {
 export function CargoWindow({ w }: { w: GameWindow & { kind: 'cargo' } }) {
   useTick(2000);
   const date = useApp((s) => s.global?.date ?? 0);
-  const [sel, setSel] = useState<string>(w.select ?? 'c:coal');
+  const climate = useApp((s) => s.room?.settings.climate ?? 'temperate');
+  const [sel, setSel] = useState<string>(w.select ?? `c:${climateCargos(climate).find((c) => c !== 'passengers' && c !== 'mail')}`);
   useEffect(() => {
     if (w.select) setSel(w.select);
   }, [w.select]);
@@ -84,7 +91,7 @@ export function CargoWindow({ w }: { w: GameWindow & { kind: 'cargo' } }) {
   const towns = [...(state?.towns.values() ?? [])];
   const year = ymdFromDays(date).year;
   // Types that exist this year, or on the map from a save.
-  const typeKey = [...new Set([...typesFor(year).map((t) => t.id), ...industries.map((i) => i.type)])].sort().join();
+  const typeKey = [...new Set([...typesFor(year, climate).map((t) => t.id), ...industries.map((i) => i.type)])].sort().join();
   const graph = useMemo(() => chainGraph(typeKey.split(',').flatMap((id) => industryType(id) ?? [])), [typeKey]);
   const counts = new Map<string, number>([['towns', towns.length]]);
   for (const i of industries) counts.set(`t:${i.type}`, (counts.get(`t:${i.type}`) ?? 0) + 1);
@@ -113,7 +120,7 @@ export function CargoWindow({ w }: { w: GameWindow & { kind: 'cargo' } }) {
         Cargo flows down the chain. Click an industry, cargo or the towns to see what it takes and where it goes.
       </p>
       <ChainDiagram graph={graph} counts={counts} selected={sel} onSelect={setSel} />
-      <p className="small">{describe(graph, sel)}</p>
+      <p className="small">{describe(graph, sel, climate)}</p>
       <h4>Nearest routes, shortest first</h4>
       {rows.length === 0 && <p className="muted small">None of these on the map yet.</p>}
       {rows.map(({ ind, cargo, send, ends }) => {

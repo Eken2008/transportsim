@@ -1,3 +1,4 @@
+import { CLIMATES, type Climate } from '../world/climate.ts';
 import { MAP_SIZES } from '../world/constants.ts';
 import type { TerrainRoughness } from '../world/terrain.ts';
 
@@ -10,6 +11,8 @@ export interface GameSettings {
   mapWidth: number;
   mapHeight: number;
   seed: number;
+  /** Temperate, sub-arctic or sub-tropical: the land, its industries and cargo, and what towns need. */
+  climate: Climate;
   roughness: TerrainRoughness;
   waterLevel: number;
   treeDensity: number;
@@ -36,6 +39,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   mapWidth: 512,
   mapHeight: 512,
   seed: 1,
+  climate: 'temperate',
   roughness: 'hilly',
   waterLevel: 0.22,
   treeDensity: 1,
@@ -76,6 +80,7 @@ export function sanitizeSettings(input: Partial<GameSettings>, limits: ServerLim
     mapWidth: oneOf(input.mapWidth, sizes, Math.min(d.mapWidth, limits.maxMapSize)),
     mapHeight: oneOf(input.mapHeight, sizes, Math.min(d.mapHeight, limits.maxMapSize)),
     seed: Math.floor(clamp(input.seed, 0, 0xffffffff, Math.floor(Math.random() * 0xffffffff))),
+    climate: oneOf(input.climate, CLIMATES, d.climate),
     roughness: oneOf(input.roughness, ['flat', 'hilly', 'mountainous'] as const, d.roughness),
     waterLevel: clamp(input.waterLevel, 0, 0.8, d.waterLevel),
     treeDensity: clamp(input.treeDensity, 0, 2, d.treeDensity),

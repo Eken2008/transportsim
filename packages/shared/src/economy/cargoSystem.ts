@@ -3,6 +3,7 @@ import { STATION_CATCHMENT, type Station } from '../rail/station.ts';
 import type { GameState } from '../sim/state.ts';
 import { houseType } from '../town/houses.ts';
 import { exclusionBarred } from '../town/actions.ts';
+import { emptyTownStats } from '../town/towns.ts';
 import { TileType } from '../world/constants.ts';
 import { Random } from '../util/random.ts';
 import { cargoCount, type Train } from '../vehicles/train.ts';
@@ -10,7 +11,7 @@ import { isBus } from '../vehicles/catalog.ts';
 import { vehicleMode } from '../vehicles/lines.ts';
 import { CARGO_IDS, cargoPayment, type CargoId } from './cargo.ts';
 import { RATING_STEP, ratingParts } from './rating.ts';
-import { industryType } from './industries.ts';
+import { climateCargos, industryType } from './industries.ts';
 import { solveLinkGraph, type LinkGraphInput, type LinkGraphResult } from './linkGraph.ts';
 
 /** Solve link graphs and hand back the results (possibly later, e.g. from a worker). */
@@ -58,6 +59,19 @@ interface Catchment {
 /** Towns accept goods and food once a station's catchment has this many residents. */
 export const GOODS_RESIDENTS = 200;
 export const FOOD_RESIDENTS = 100;
+/** Sub-tropical towns take water (at their water towers) from this many residents. */
+export const WATER_RESIDENTS = 100;
+/** Towns take gold and diamonds (at their banks) from this many residents. */
+export const VALUABLES_RESIDENTS = 600;
+
+/** Residents a station needs in reach before it takes each cargo that towns take. */
+export const TOWN_CARGO_RESIDENTS: Partial<Record<CargoId, number>> = {
+  goods: GOODS_RESIDENTS,
+  food: FOOD_RESIDENTS,
+  water: WATER_RESIDENTS,
+  gold: VALUABLES_RESIDENTS,
+  diamonds: VALUABLES_RESIDENTS,
+};
 
 /**
  * Cargo handling. Stations collect passengers and mail from the houses in their catchment, and
@@ -273,6 +287,7 @@ export class CargoSystem {
       const pop = houseType(map.layers.data[i]!).population;
       for (const id of ids) this.catch.get(id)!.residents += pop;
     }
+    const townCargos = climateCargos(this.state.map.climate.id).filter((c) => TOWN_CARGO_RESIDENTS[c] !== undefined);
     for (const st of this.state.stations.values()) {
       const residents = this.catch.get(st.id)!.residents;
       const industries = this.industriesNear(st);
@@ -284,8 +299,7 @@ export class CargoSystem {
           supplies.add(c);
         }
       }
-      if (residents >= GOODS_RESIDENTS) accepts.add('goods');
-      if (residents >= FOOD_RESIDENTS) accepts.add('food');
+      for (const c of townCargos) if (residents >= TOWN_CARGO_RESIDENTS[c]!) accepts.add(c);
       for (const id of industries) {
         const type = industryType(this.state.industries.get(id)!.type)!;
         for (const c of type.accepts) accepts.add(c);
@@ -524,7 +538,7 @@ export class CargoSystem {
         const c = this.state.companies.get(t.owner);
         if (c) c.month.delivered[p.cargo] = (c.month.delivered[p.cargo] ?? 0) + p.n;
         this.deliverToIndustry(st, p.cargo, p.n);
-        if (p.cargo === 'goods' || p.cargo === 'food') this.countForTown(st, p.cargo, p.n);
+        if (p.cargo === 'goods' || p.cargo === 'food' || p.cargo === 'water') this.countForTown(st, p.cargo, p.n);
       }
       else this.addWaiting(st, { cargo: p.cargo, dest: p.dest, src: p.src, n: p.n, day: p.day });
     }
@@ -538,11 +552,11 @@ export class CargoSystem {
   }
 
   /** Add to the town's monthly figures. */
-  private countForTown(st: Station, what: 'passengers' | 'mail' | 'goods' | 'food', n: number): void {
+  private countForTown(st: Station, what: 'passengers' | 'mail' | 'goods' | 'food' | 'water', n: number): void {
     const town = st.townId === null ? undefined : this.state.towns.get(st.townId);
     if (!town) return;
-    town.stats ??= { passengers: 0, mail: 0, goods: 0, food: 0 };
-    town.stats[what] += n;
+    town.stats ??= emptyTownStats();
+    town.stats[what] = (town.stats[what] ?? 0) + n;
   }
 
   /** Stations a train calls at after `here`, in order (one round of its orders). */

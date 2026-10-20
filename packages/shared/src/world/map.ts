@@ -1,3 +1,4 @@
+import { TEMPERATE, type WorldClimate, type Zone } from './climate.ts';
 import { CHUNK_SIZE, Ground, MAX_TREES, OWNER_NONE, TileType } from './constants.ts';
 import { foundationCorners, foundationEdge, halfCorner, isGentleSlope } from './foundation.ts';
 
@@ -55,6 +56,8 @@ export class GameMap {
   readonly layers: TileLayers;
   /** Version counter per chunk, bumped whenever anything in that chunk changes. */
   readonly chunkVersions: Uint32Array;
+  /** The world's climate (set from the game settings). */
+  climate: WorldClimate = TEMPERATE;
 
   constructor(width: number, height: number) {
     if (width % CHUNK_SIZE !== 0 || height % CHUNK_SIZE !== 0) {
@@ -144,6 +147,11 @@ export class GameMap {
     const [a0, a1] = this.edgeCorners(tile % w, Math.floor(tile / w), e);
     const [b0, b1] = this.edgeCorners(n % w, Math.floor(n / w), (e + 2) & 3);
     return a0 === b0 && a1 === b1;
+  }
+
+  /** The climate zone of a tile: snow, desert, rainforest or neither. */
+  zone(x: number, y: number): Zone {
+    return this.climate.zone(x, y, Math.min(...this.rawCorners(x, y)));
   }
 
   tileMinHeight(x: number, y: number): number {

@@ -9,7 +9,8 @@ import {
   CARGOS,
   CARGO_IDS,
   cargoAmount,
-  unitCargo,
+  cargoesIn,
+  unitCargoIn,
   isAvailable,
   MAX_SERVICE_INTERVAL,
   MIN_SERVICE_INTERVAL,
@@ -30,6 +31,8 @@ import {
   type CompanyRole,
   type Station,
   type CargoId,
+  type Climate,
+  type RailVehicleType,
   type TrainInfo,
   type TrainUnit,
 } from '@transportsim/shared';
@@ -414,6 +417,12 @@ function PlatformWarning({ station, length }: { station: number; length: number 
   );
 }
 
+/** What a vehicle's capacity counts in the climate: seats, or the unit of what it carries there. */
+function capacityUnit(v: RailVehicleType, climate: Climate): string {
+  const c = cargoesIn(v, climate)[0];
+  return c === 'passengers' ? 'seats' : c ? CARGOS[c].unit : '';
+}
+
 function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
   useApp((s) => s.trainsRev);
   const global = useApp((s) => s.global);
@@ -423,13 +432,15 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
   const map = client.world?.map;
   const year = global ? ymdFromDays(global.date).year : 1900;
   const timeline = settings?.timeline ?? 'era';
-  const engines = RAIL_VEHICLES.filter((v) => v.kind === 'loco' && isAvailable(v, year, timeline));
-  const wagons = RAIL_VEHICLES.filter((v) => v.kind === 'wagon' && isAvailable(v, year, timeline));
+  const climate = settings?.climate ?? 'temperate';
+  const engines = RAIL_VEHICLES.filter((v) => v.kind === 'loco' && isAvailable(v, year, timeline, climate));
+  const wagons = RAIL_VEHICLES.filter((v) => v.kind === 'wagon' && isAvailable(v, year, timeline, climate));
   const [engine, setEngine] = useState(engines.filter((v) => v.traction !== 'electric').sort((a, b) => b.maxSpeed - a.maxSpeed)[0]?.id ?? engines[0]?.id ?? '');
   const [wagon, setWagon] = useState(wagons.find((v) => v.cargoes?.[0] === 'passengers')?.id ?? wagons[0]?.id ?? '');
   const wagonType = railVehicle(wagon);
   const [cargoChoice, setCargo] = useState<CargoId | ''>('');
-  const cargo = cargoChoice && wagonType?.cargoes?.includes(cargoChoice) ? cargoChoice : wagonType?.cargoes?.[0];
+  const wagonCargoes = wagonType ? cargoesIn(wagonType, climate) : [];
+  const cargo = cargoChoice && wagonCargoes.includes(cargoChoice) ? cargoChoice : wagonCargoes[0];
   const [count, setCount] = useState(4);
   const units = useMemo<TrainUnit[]>(
     () => [...(engine ? [{ type: engine }] : []), ...Array.from({ length: wagon ? count : 0 }, () => ({ type: wagon, cargo }))],
@@ -481,16 +492,16 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
               <select value={wagon} onChange={(e) => setWagon(e.target.value)}>
                 {wagons.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.name} — {v.capacity} {v.cargoes?.[0] === 'passengers' ? 'seats' : CARGOS[v.cargoes?.[0] ?? 'goods'].unit}, {v.maxSpeed} km/h
+                    {v.name} — {v.capacity} {capacityUnit(v, climate)}, {v.maxSpeed} km/h
                   </option>
                 ))}
               </select>
             </label>
-            {wagonType?.cargoes && wagonType.cargoes.length > 1 && (
+            {wagonCargoes.length > 1 && (
               <label className="field" style={{ width: 110 }}>
                 <span>Carrying</span>
                 <select value={cargo} onChange={(e) => setCargo(e.target.value as CargoId)}>
-                  {wagonType.cargoes.map((c) => (
+                  {wagonCargoes.map((c) => (
                     <option key={c} value={c}>
                       {CARGOS[c].name}
                     </option>
@@ -528,13 +539,15 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
   const air = w.kind === 'hangar';
   const airport = air && map ? client.world?.state.stations.get(map.layers.data[w.id]!) : undefined;
   const sea = w.kind === 'shipDepot';
-  const types = (air ? AIRCRAFT : sea ? SHIPS : ROAD_VEHICLES).filter((v) => isAvailable(v, year, settings?.timeline ?? 'era'));
+  const climate = settings?.climate ?? 'temperate';
+  const types = (air ? AIRCRAFT : sea ? SHIPS : ROAD_VEHICLES).filter((v) => isAvailable(v, year, settings?.timeline ?? 'era', climate));
   /** Heavy jets can't be bought at a small airport. */
   const tooBig = (t: { heavy?: boolean }) => air && !!t.heavy && airport?.airport?.kind !== 'large';
   const [type, setType] = useState(types.filter((t) => t.cargoes?.[0] === 'passengers' && !tooBig(t)).at(-1)?.id ?? types[0]?.id ?? '');
   const v = railVehicle(type) ?? types[0];
   const [cargoChoice, setCargo] = useState<CargoId | ''>('');
-  const cargo = cargoChoice && v?.cargoes?.includes(cargoChoice) ? cargoChoice : v?.cargoes?.[0];
+  const vCargoes = v ? cargoesIn(v, climate) : [];
+  const cargo = cargoChoice && vCargoes.includes(cargoChoice) ? cargoChoice : vCargoes[0];
   const inDepot = [...(client.world?.trains.values() ?? [])].filter((t) => t.status === 'depot' && t.depot === w.id);
   const ours = map?.layers.owner[w.id] === my.companyId;
   const canBuy = ours && roleAllows(my.role, 'build');
@@ -566,17 +579,17 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
               <select value={v.id} onChange={(e) => setType(e.target.value)}>
                 {types.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} — {t.capacity} {t.cargoes?.[0] === 'passengers' ? 'seats' : CARGOS[t.cargoes?.[0] ?? 'goods'].unit}, {t.maxSpeed} km/h
+                    {t.name} — {t.capacity} {capacityUnit(t, climate)}, {t.maxSpeed} km/h
                     {t.heavy ? ' (large airports)' : ''}
                   </option>
                 ))}
               </select>
             </label>
-            {v.cargoes && v.cargoes.length > 1 && (
+            {vCargoes.length > 1 && (
               <label className="field" style={{ width: 110 }}>
                 <span>Carrying</span>
                 <select value={cargo} onChange={(e) => setCargo(e.target.value as CargoId)}>
-                  {v.cargoes.map((c) => (
+                  {vCargoes.map((c) => (
                     <option key={c} value={c}>
                       {CARGOS[c].name}
                     </option>
@@ -814,8 +827,9 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const global = useApp((st) => st.global);
   const timeline = useApp((st) => st.room?.settings.timeline ?? 'era');
+  const climate = useApp((st) => st.room?.settings.climate ?? 'temperate');
   const year = global ? ymdFromDays(global.date).year : 1900;
-  const available = RAIL_VEHICLES.filter((v) => isAvailable(v, year, timeline));
+  const available = RAIL_VEHICLES.filter((v) => isAvailable(v, year, timeline, climate));
   const [toAdd, setToAdd] = useState(available.find((v) => v.kind === 'wagon')?.id ?? available[0]?.id ?? '');
   useEffect(() => setDraft(JSON.parse(currentKey) as TrainUnit[]), [currentKey]);
 
@@ -841,7 +855,8 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
       <ol className="consist">
         {draft.map((u, i) => {
           const v = railVehicle(u.type);
-          const cargo = unitCargo(u);
+          const cargo = unitCargoIn(u, climate);
+          const refits = v ? cargoesIn(v, climate) : [];
           return (
             <li
               key={i + u.type}
@@ -864,9 +879,9 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
                 {v?.mode === 'air' ? 'Aircraft' : v?.mode === 'water' ? 'Ship' : v?.mode === 'road' ? (cargo === 'passengers' ? 'Bus' : 'Truck') : v?.kind === 'loco' ? 'Engine' : cargo ? CARGOS[cargo].name : 'Wagon'}
               </span>
               <span className="order-name">{v?.name ?? u.type}</span>
-              {editable && v?.cargoes && v.cargoes.length > 1 && (
+              {editable && v && refits.length > 1 && (
                 <select value={cargo} onChange={(e) => refit(i, e.target.value as CargoId)} aria-label={`Refit ${v.name}`} style={{ padding: '2px 4px' }}>
-                  {v.cargoes.map((c) => (
+                  {refits.map((c) => (
                     <option key={c} value={c}>
                       {CARGOS[c].name}
                     </option>
@@ -900,7 +915,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
                 </option>
               ))}
             </select>
-            <button onClick={() => toAdd && setDraft([...draft, { type: toAdd }])}>+ Add</button>
+            <button onClick={() => toAdd && setDraft([...draft, { type: toAdd, cargo: unitCargoIn({ type: toAdd }, climate) }])}>+ Add</button>
             <button className="ghost" title="Reverse the order of all vehicles" onClick={() => setDraft(draft.slice().reverse())}>
               ⇄
             </button>

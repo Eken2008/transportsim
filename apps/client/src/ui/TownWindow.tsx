@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import {
+  CARGOS,
   COMPANY_COLORS,
   REPUTATION_NEW_STATION,
   TOWN_ACTIONS,
   TOWN_ACTION_INFO,
+  TOWN_NEED,
   formatDate,
   reputationLabel,
   reputationOf,
   townActionCost,
+  townNeeds,
   type Town,
   type TownAction,
 } from '@transportsim/shared';
@@ -32,6 +35,10 @@ export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
   }
   const last = town.lastStats;
   const every = town.growthRate ? Math.round(1 / town.growthRate) : null;
+  const map = client.world?.map;
+  const needs = map ? townNeeds(map, town) : [];
+  const lacking = needs.filter((c) => (last?.[c] ?? 0) < TOWN_NEED);
+  const tropical = map?.climate.id === 'tropical';
   const served = town.served ?? 0;
   const date = client.world?.state.date ?? 0;
   const nameOf = (id: number) => companies.find((c) => c.id === id)?.name ?? 'A former company';
@@ -53,6 +60,15 @@ export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
         <span className="mono">{town.houses}</span>
         <span>Growth</span>
         <span>{every ? `about every ${every} days` : '—'}</span>
+        {needs.length > 0 && (
+          <>
+            <span>Needs</span>
+            <span className={lacking.length ? 'err' : undefined}>
+              {needs.join(' and ')} ({map?.climate.id === 'arctic' ? 'above the snow line' : 'in the desert'})
+              {lacking.length ? ` — short of ${lacking.join(' and ')}, not growing` : ''}
+            </span>
+          </>
+        )}
         <span>Served by</span>
         <span>
           {served === 0 ? 'no busy stations' : `${served} busy station${served === 1 ? '' : 's'}`}
@@ -68,6 +84,12 @@ export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
         <span className="mono">{last?.goods ?? 0} delivered</span>
         <span>Food</span>
         <span className="mono">{last?.food ?? 0} delivered</span>
+        {tropical && (
+          <>
+            <span>Water</span>
+            <span className="mono">{last?.water ?? 0} delivered</span>
+          </>
+        )}
       </div>
       {companies.length > 0 && (
         <>
@@ -108,6 +130,8 @@ export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
       <p className="muted small">
         Towns grow faster with stations that trains call at often and that are well rated, and with at least 30 crates of
         goods and 30 tonnes of food delivered a month.
+        {needs.length > 0 &&
+          ` This town only grows with at least ${needs.map((c) => `${TOWN_NEED} ${CARGOS[c].unit} of ${c}`).join(' and ')} delivered each month, or with funded buildings.`}
       </p>
       <button className="ghost" style={{ width: '100%' }} onClick={() => focusOn(town.x, town.y)}>
         ⌖ Locate

@@ -11,12 +11,28 @@ export interface TownStats {
   /** Passengers and mail picked up at stations in the town. */
   passengers: number;
   mail: number;
-  /** Goods and food delivered to stations in the town. */
+  /** Goods, food and water delivered to stations in the town. */
   goods: number;
   food: number;
+  /** Sub-tropical climate only (missing in older saves). */
+  water?: number;
 }
 
-export const emptyTownStats = (): TownStats => ({ passengers: 0, mail: 0, goods: 0, food: 0 });
+export const emptyTownStats = (): TownStats => ({ passengers: 0, mail: 0, goods: 0, food: 0, water: 0 });
+
+/** Units of each needed cargo a town must have delivered in a month to grow (see townNeeds). */
+export const TOWN_NEED = 30;
+
+/**
+ * What a town must have delivered every month to grow at all: food above the sub-arctic snow
+ * line, and food and water in the desert.
+ */
+export function townNeeds(map: GameMap, town: Town): ('food' | 'water')[] {
+  const zone = map.zone(town.x, town.y);
+  if (map.climate.id === 'arctic' && zone === 'snow') return ['food'];
+  if (map.climate.id === 'tropical' && zone === 'desert') return ['food', 'water'];
+  return [];
+}
 
 export interface Town {
   id: number;

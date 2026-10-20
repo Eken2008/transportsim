@@ -137,6 +137,7 @@ export class Room {
       year: ymdFromDays(this.state.date).year,
       timeline: this.state.settings.timeline,
       economy: this.state.settings.economy,
+      climate: this.state.settings.climate,
     };
   }
 

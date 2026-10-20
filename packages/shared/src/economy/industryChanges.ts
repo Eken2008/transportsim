@@ -10,6 +10,7 @@ import {
   placeIndustry,
   plantFarmFields,
   transportedShare,
+  zoneFits,
   type Industry,
 } from './industries.ts';
 
@@ -67,13 +68,13 @@ export function industryMonthly(state: GameState, rng: Random, year: number): vo
   // New industries: about one a year per TILES_PER_NEW_INDUSTRY tiles of map.
   const perMonth = (state.map.width * state.map.height) / TILES_PER_NEW_INDUSTRY / 12;
   if (rng.chance(Math.min(0.9, perMonth))) {
-    const type = pickIndustryType(rng, year);
+    const type = pickIndustryType(rng, year, state.map.climate.id);
     const towns = [...state.towns.values()];
     const others = [...state.industries.values()];
     for (let attempt = 0; attempt < 200; attempt++) {
       const x = rng.int(2, state.map.width - type.w - 2);
       const y = rng.int(2, state.map.height - type.h - 2);
-      if (!industryFits(state.map, x, y, type.w, type.h, towns, others)) continue;
+      if (!industryFits(state.map, x, y, type.w, type.h, towns, others) || !zoneFits(state.map, type, x, y)) continue;
       const ind = newIndustry(state.nextIndustryId++, type, x, y, industryName(type, x, y, towns, others));
       placeIndustry(state.map, ind);
       if (type.model === 'farm') plantFarmFields(state.map, ind, rng);

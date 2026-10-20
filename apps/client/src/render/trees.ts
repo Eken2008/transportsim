@@ -31,15 +31,49 @@ function makeDeciduous(): THREE.BufferGeometry {
   return g;
 }
 
+function makePalm(): THREE.BufferGeometry {
+  // A leaning trunk with a crown of drooping fronds.
+  const trunk = new THREE.CylinderGeometry(0.025, 0.04, 0.5, 5).translate(0, 0.25, 0).rotateZ(0.12);
+  const top = new THREE.Vector3(-0.06, 0.5, 0);
+  const fronds: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < 6; k++) {
+    // Base at the crown, tip out and down.
+    const frond = new THREE.ConeGeometry(0.05, 0.3, 3).rotateZ(-Math.PI / 2 - 0.45).translate(0.13, -0.06, 0);
+    frond.rotateY((k / 6) * Math.PI * 2).translate(top.x, top.y, top.z);
+    fronds.push(colored(frond, '#ffffff'));
+  }
+  const g = mergeGeometries([colored(trunk, '#8a6a45'), ...fronds])!;
+  g.computeVertexNormals();
+  return g;
+}
+
+function makeCactus(): THREE.BufferGeometry {
+  const stem = new THREE.CylinderGeometry(0.04, 0.045, 0.34, 6).translate(0, 0.17, 0);
+  const armL = new THREE.CylinderGeometry(0.025, 0.025, 0.12, 5).translate(-0.08, 0.2, 0);
+  const elbowL = new THREE.CylinderGeometry(0.025, 0.025, 0.06, 5).rotateZ(Math.PI / 2).translate(-0.05, 0.14, 0);
+  const armR = new THREE.CylinderGeometry(0.022, 0.022, 0.1, 5).translate(0.075, 0.25, 0);
+  const elbowR = new THREE.CylinderGeometry(0.022, 0.022, 0.05, 5).rotateZ(Math.PI / 2).translate(0.05, 0.2, 0);
+  const g = mergeGeometries([stem, armL, elbowL, armR, elbowR].map((p) => colored(p, '#ffffff')))!;
+  g.computeVertexNormals();
+  return g;
+}
+
 /** Shared geometry/material for all chunks. Foliage is white × instance color. */
 export const treeAssets = {
   conifer: makeConifer(),
   deciduous: makeDeciduous(),
+  palm: makePalm(),
+  cactus: makeCactus(),
   material: new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }),
 };
 
 const CONIFER_COLORS = ['#2f5d34', '#36673a', '#2a5530', '#3d6e3c'].map((c) => new THREE.Color(c));
 const DECIDUOUS_COLORS = ['#4f8a3a', '#5e963f', '#467d35', '#6e9c44', '#7a9a3a'].map((c) => new THREE.Color(c));
+/** Sub-arctic conifers in the snow, and the dark, lush rainforest. */
+const SNOWY_COLORS = ['#dfe8e4', '#cfdcd4', '#e8eeec', '#c3d3c8'].map((c) => new THREE.Color(c));
+const JUNGLE_COLORS = ['#2f7a2c', '#3b8a32', '#256b28', '#4a9636'].map((c) => new THREE.Color(c));
+const PALM_COLORS = ['#5f9a3a', '#6ea842', '#548c35'].map((c) => new THREE.Color(c));
+const CACTUS_COLORS = ['#5f8a4a', '#6b9452', '#577f45'].map((c) => new THREE.Color(c));
 // Trunk vertices are colored brown in the geometry; instance color tints everything, so
 // keep foliage colors bright enough that trunks stay readable.
 
@@ -51,17 +85,28 @@ export function buildTrees(map: GameMap, cx: number, cy: number, sparse: boolean
   const y0 = cy * CHUNK_SIZE;
   const conifers: number[] = [];
   const deciduous: number[] = [];
+  const snowy: number[] = [];
+  const jungle: number[] = [];
+  const palms: number[] = [];
+  const cacti: number[] = [];
+  const climate = map.climate.id;
   for (let y = y0; y < y0 + CHUNK_SIZE; y++) {
     for (let x = x0; x < x0 + CHUNK_SIZE; x++) {
       let n = map.treeCount(x, y);
       if (n === 0) continue;
       if (sparse) n = 1;
-      const high = map.tileMaxHeight(x, y) > SNOW_LINE * 0.45;
+      const zone = map.zone(x, y);
+      // Conifers on high ground; in the sub-arctic, nearly everywhere.
+      const coniferChance = climate === 'arctic' ? 0.9 : map.tileMaxHeight(x, y) > SNOW_LINE * 0.45 ? 0.85 : 0.3;
       for (let k = 0; k < n; k++) {
         const ox = 0.18 + tileHash(x, y, k * 2 + 1) * 0.64;
         const oz = 0.18 + tileHash(x, y, k * 2 + 2) * 0.64;
-        const coniferChance = high ? 0.85 : 0.3;
-        (tileHash(x, y, 50 + k) < coniferChance ? conifers : deciduous).push(x + ox, y + oz, k);
+        const r = tileHash(x, y, 50 + k);
+        let list: number[];
+        if (climate === 'tropical') list = zone === 'desert' ? cacti : zone === 'rainforest' ? (r < 0.15 ? palms : jungle) : r < 0.45 ? palms : deciduous;
+        else if (zone === 'snow' && climate === 'arctic') list = snowy;
+        else list = r < coniferChance ? conifers : deciduous;
+        list.push(x + ox, y + oz, k);
       }
     }
   }
@@ -90,5 +135,9 @@ export function buildTrees(map: GameMap, cx: number, cy: number, sparse: boolean
   };
   build(conifers, treeAssets.conifer, CONIFER_COLORS);
   build(deciduous, treeAssets.deciduous, DECIDUOUS_COLORS);
+  build(snowy, treeAssets.conifer, SNOWY_COLORS);
+  build(jungle, treeAssets.deciduous, JUNGLE_COLORS);
+  build(palms, treeAssets.palm, PALM_COLORS);
+  build(cacti, treeAssets.cactus, CACTUS_COLORS);
   return out;
 }

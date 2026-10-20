@@ -1,4 +1,4 @@
-import { COMPANY_COLORS, ECONOMY, formatDate } from '@transportsim/shared';
+import { CLIMATE_NAMES, COMPANY_COLORS, ECONOMY, formatDate } from '@transportsim/shared';
 import { useState } from 'react';
 import { client } from '../net/client.ts';
 import { useApp, type GameWindow } from '../store.ts';
@@ -12,6 +12,11 @@ const ACCIDENTS = {
   realistic: 'Realistic: shorter sight, brake failures and derailments',
 };
 const ROUGHNESS = { flat: 'Flat', hilly: 'Hilly', mountainous: 'Mountainous' };
+const CLIMATE_INFO = {
+  temperate: 'green land, snow only on the highest peaks',
+  arctic: 'snow above the snow line, where towns need food to grow',
+  tropical: 'desert and rainforest; desert towns need food and water to grow',
+};
 
 /** Game settings and players; the host can rename the game, change slots and visibility, and remove players. */
 export function GameInfoWindow({ w }: { w: GameWindow & { kind: 'game' } }) {
@@ -41,6 +46,10 @@ export function GameInfoWindow({ w }: { w: GameWindow & { kind: 'game' } }) {
         <span>Map</span>
         <span className="mono">
           {s.mapWidth} × {s.mapHeight} · seed {s.seed}
+        </span>
+        <span>Climate</span>
+        <span>
+          {CLIMATE_NAMES[s.climate ?? 'temperate']}: {CLIMATE_INFO[s.climate ?? 'temperate']}
         </span>
         <span>Terrain</span>
         <span>
