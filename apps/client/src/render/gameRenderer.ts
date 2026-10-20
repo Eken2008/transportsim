@@ -63,6 +63,8 @@ export class GameRenderer {
   /** Tiles blocked by accident wreckage. */
   private readonly wrecks: AreaGhost;
   private wrecksKey = '';
+  /** When the followed vehicle was last drawn. */
+  private followSeen = 0;
   /** Path reservations overlay (toggled from the signal options). */
   private readonly reservations: TrackGhost;
   private reservationsRev = '';
@@ -103,6 +105,9 @@ export class GameRenderer {
     this.scene.add(this.sun, this.sun.target);
 
     this.controller = new CameraController(this.camera, canvas, world.map);
+    this.controller.onPan = () => {
+      if (useApp.getState().follow !== null) useApp.setState({ follow: null });
+    };
     this.chunks = new ChunkManager(world, (ids) => client.subscribe(ids));
     this.cursor = new Cursor(world.map);
     this.ghost = new TrackGhost(world.map);
@@ -172,7 +177,7 @@ export class GameRenderer {
       this.tool?.onUp(this.pick(e.clientX, e.clientY), this.mods);
     }) as EventListener);
     this.listen(window, 'keydown', ((e: KeyboardEvent) => {
-      if (e.code === 'Escape') useApp.setState({ tool: null, ordersFor: null });
+      if (e.code === 'Escape') useApp.setState({ tool: null, ordersFor: null, follow: null });
       this.setMods(e);
     }) as EventListener);
     this.listen(window, 'keyup', ((e: KeyboardEvent) => this.setMods(e)) as EventListener);
@@ -184,6 +189,7 @@ export class GameRenderer {
       useApp.subscribe((s, prev) => {
         if (s.treeView !== prev.treeView || s.buildingView !== prev.buildingView) this.applyViewModes();
         if (s.focus && s.focus !== prev.focus) this.lookAt(s.focus.x + 0.5, s.focus.y + 0.5);
+        if (s.follow !== prev.follow) this.followSeen = performance.now();
         if (s.tool !== prev.tool) this.setTool(s.tool);
         if (s.catchmentFor !== prev.catchmentFor || s.tool !== prev.tool) this.showStationCatchment();
         else if (
@@ -204,6 +210,23 @@ export class GameRenderer {
     this.setTool(useApp.getState().tool);
     this.resize();
     this.loop();
+  }
+
+  /** Hold the camera on the followed vehicle; stop once it has been gone a moment (e.g. into a depot). */
+  private followVehicle(now: number): void {
+    const id = useApp.getState().follow;
+    this.controller.following = id !== null;
+    if (id === null) return;
+    // The first pick of a vehicle is its lead unit.
+    const p = this.trains.picks.find((q) => q.trainId === id);
+    if (p) {
+      this.followSeen = now;
+      this.controller.target.x = p.pos.x;
+      this.controller.target.z = p.pos.z;
+      this.controller.apply();
+    } else if (now - this.followSeen > 1000) {
+      useApp.setState({ follow: null });
+    }
   }
 
   /** Trees, houses and industries share materials, so one change covers every chunk. */
@@ -388,6 +411,7 @@ export class GameRenderer {
 
     this.controller.update(dt);
     this.trains.update(now, useApp.getState().global?.speed ?? 1, this.controller.target, this.controller.distance);
+    this.followVehicle(now);
     // Ambient rumble: louder with more vehicles near the focus, and when zoomed in.
     const t = this.controller.target;
     let near = 0;

@@ -93,6 +93,8 @@ export interface AppState {
   ordersFor: number | null;
   /** Camera focus request (renderer watches `seq`). */
   focus: { x: number; y: number; seq: number } | null;
+  /** Vehicle the camera is following (cleared when the player moves the camera). */
+  follow: number | null;
   windows: GameWindow[];
   /** The getting-started guide is showing. */
   tutorial: boolean;
@@ -171,6 +173,7 @@ export const useApp = create<AppState>(() => ({
   linesRev: 0,
   ordersFor: null,
   focus: null,
+  follow: null,
   windows: [],
   tutorial: false,
   doneCommands: [],

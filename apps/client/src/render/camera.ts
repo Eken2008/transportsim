@@ -26,6 +26,10 @@ export class CameraController {
   yaw = Math.PI / 4;
   pitch = 0.95;
   distance = 70;
+  /** The target is held on a vehicle: zoom stays centred on it. */
+  following = false;
+  /** Called when the player pans the camera by hand. */
+  onPan: (() => void) | null = null;
 
   private readonly map: GameMap;
   private readonly dom: HTMLElement;
@@ -85,6 +89,7 @@ export class CameraController {
       const hit = pickTerrain(this.map, ray);
       const planeY = hit ? hit.point.y : this.target.y;
       this.drag = { mode: 'pan', x: e.clientX, y: e.clientY, anchor: hit?.point ?? rayPlane(ray, planeY), planeY };
+      this.onPan?.();
     }
   };
 
@@ -117,7 +122,7 @@ export class CameraController {
     const factor = Math.exp(Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 120) * 0.0018);
     const next = clamp(this.distance * factor, MIN_DIST, MAX_DIST);
     // Zoom toward the point under the cursor.
-    if (next < this.distance) {
+    if (next < this.distance && !this.following) {
       const hit = pickTerrain(this.map, this.rayAt(e.clientX, e.clientY));
       if (hit) {
         const k = 1 - next / this.distance;
@@ -149,6 +154,7 @@ export class CameraController {
     if (k.has('KeyA') || k.has('ArrowLeft')) mx -= 1;
     if (k.has('KeyD') || k.has('ArrowRight')) mx += 1;
     if (mx || mf) {
+      this.onPan?.();
       const speed = this.distance * 1.2 * dt;
       const sin = Math.sin(this.yaw);
       const cos = Math.cos(this.yaw);

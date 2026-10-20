@@ -79,7 +79,12 @@ export function act(cmd: Parameters<typeof client.command>[0]): void {
 }
 
 export function focusOn(x: number, y: number): void {
-  useApp.setState((s) => ({ focus: { x, y, seq: (s.focus?.seq ?? 0) + 1 } }));
+  useApp.setState((s) => ({ focus: { x, y, seq: (s.focus?.seq ?? 0) + 1 }, follow: null }));
+}
+
+/** Keep the camera on a vehicle until the player moves the camera. */
+export function follow(id: number): void {
+  useApp.setState({ follow: id });
 }
 
 // ---- window shell ------------------------------------------------------------
@@ -248,6 +253,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   const my = useMyRole();
   const mine = my.companyId === t?.owner && roleAllows(my.role, 'operate');
   const canBuild = mine && roleAllows(my.role, 'build');
+  const following = useApp((s) => s.follow === w.id);
   if (!t) {
     return (
       <Win w={w} title="Train">
@@ -313,7 +319,9 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
           )}
           {motion && (motion.path.length > 0 || motion.air || motion.ship) && (
             <button
-              className="ghost"
+              className={following ? 'active-text ghost' : 'ghost'}
+              title={following ? 'Following — click to stop' : 'Click to locate, double-click to follow'}
+              onDoubleClick={() => follow(t.id)}
               onClick={() => {
                 if (motion.air) return focusOn(Math.floor(motion.air[0]), Math.floor(motion.air[1]));
                 if (motion.ship) return focusOn(Math.floor(motion.ship[0]), Math.floor(motion.ship[1]));
@@ -322,7 +330,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
                 focusOn(tile % width, Math.floor(tile / width));
               }}
             >
-              ⌖ Locate
+              {following ? '⌖ Following' : '⌖ Locate'}
             </button>
           )}
         </div>
