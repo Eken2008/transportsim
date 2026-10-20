@@ -612,11 +612,21 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
       <CatchmentToggle id={st.id} />
       {waiting.length > 0 && (
         <ul className="plain small">
-          {waiting.slice(0, 8).map((x) => (
-            <li key={`${x.cargo}-${x.dest}`}>
-              <span className="cargo-dot" style={{ background: CARGOS[x.cargo].color }} /> {cargoAmount(x.cargo, x.n)} → {stationName(x.dest)}
-            </li>
-          ))}
+          {waiting.slice(0, 8).map((x) => {
+            const dest = client.world?.state.stations.get(x.dest);
+            return (
+              <li key={`${x.cargo}-${x.dest}`}>
+                <span className="cargo-dot" style={{ background: CARGOS[x.cargo].color }} /> {cargoAmount(x.cargo, x.n)} →{' '}
+                {dest ? (
+                  <button className="link" title="Locate this station" onClick={() => focusOn(dest.x, dest.y)}>
+                    {dest.name}
+                  </button>
+                ) : (
+                  stationName(x.dest)
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
       <h4>Lines calling here</h4>
