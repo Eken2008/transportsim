@@ -571,6 +571,27 @@ input[type='range'] {
   flex-direction: column;
   overflow: hidden;
 }
+.window-flash {
+  animation: window-flash 0.25s ease-in-out 4 alternate;
+}
+@keyframes window-flash {
+  to {
+    border-color: var(--accent);
+    box-shadow: var(--shadow), 0 0 0 2px var(--accent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .window-flash {
+    animation: window-highlight 1s;
+  }
+}
+@keyframes window-highlight {
+  from,
+  to {
+    border-color: var(--accent);
+    box-shadow: var(--shadow), 0 0 0 2px var(--accent);
+  }
+}
 .window-title {
   display: flex;
   align-items: center;

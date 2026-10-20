@@ -96,6 +96,8 @@ export interface AppState {
   /** Vehicle the camera is following (cleared when the player moves the camera). */
   follow: number | null;
   windows: GameWindow[];
+  /** Open window asked to come to the front and flash (its window key; `seq` makes repeats count). */
+  raise: { key: string; seq: number } | null;
   /** The getting-started guide is showing. */
   tutorial: boolean;
   /** Kinds of command this player has carried out (the guide ticks steps off with them). */
@@ -131,10 +133,14 @@ export type GameWindow =
 
 export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
 
+/** Opens a window, or brings an already open one to the front and flashes it. */
 export function openWindow(w: GameWindow): void {
-  useApp.setState((s) => ({
-    windows: [...s.windows.filter((o) => windowKey(o) !== windowKey(w)), w],
-  }));
+  const key = windowKey(w);
+  useApp.setState((s) =>
+    s.windows.some((o) => windowKey(o) === key)
+      ? { windows: s.windows.map((o) => (windowKey(o) === key ? w : o)), raise: { key, seq: (s.raise?.seq ?? 0) + 1 } }
+      : { windows: [...s.windows, w] },
+  );
 }
 
 export function closeWindow(w: GameWindow): void {
@@ -176,6 +182,7 @@ export const useApp = create<AppState>(() => ({
   focus: null,
   follow: null,
   windows: [],
+  raise: null,
   tutorial: false,
   doneCommands: [],
 }));

@@ -121,6 +121,17 @@ export function Win({ w, title, children, width = 340 }: { w: GameWindow; title:
   const [size, setSize] = useState<{ w: number | null; h: number | null }>({ w: null, h: null });
   const resize = useRef<{ x: number; y: number; w: number; h: number; horiz: boolean; vert: boolean } | null>(null);
 
+  // Opening a window that is already open brings it to the front and flashes its border.
+  const raise = useApp((s) => (s.raise?.key === windowKey(w) ? s.raise.seq : null));
+  useEffect(() => {
+    if (raise === null) return;
+    setZ(++zTop);
+    const el = ref.current!;
+    el.classList.remove('window-flash');
+    void el.offsetWidth; // restart the animation when clicked again mid-flash
+    el.classList.add('window-flash');
+  }, [raise]);
+
   /** An edge or corner to drag; double-click it to go back to the default size. */
   const grip = (horiz: boolean, vert: boolean, cls: string) => (
     <div
@@ -158,6 +169,7 @@ export function Win({ w, title, children, width = 340 }: { w: GameWindow; title:
         zIndex: z,
       }}
       onPointerDown={() => setZ(++zTop)}
+      onAnimationEnd={(e) => e.target === e.currentTarget && e.currentTarget.classList.remove('window-flash')}
       role="dialog"
       aria-label={typeof title === 'string' ? title : undefined}
     >
