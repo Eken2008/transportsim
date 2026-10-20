@@ -86,6 +86,9 @@ export function focusOn(x: number, y: number): void {
 
 let zTop = 10;
 
+const MIN_WIN_W = 240;
+const MIN_WIN_H = 120;
+
 export function Win({ w, title, children, width = 340 }: { w: GameWindow; title: ReactNode; children: ReactNode; width?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(() => {
@@ -94,12 +97,46 @@ export function Win({ w, title, children, width = 340 }: { w: GameWindow; title:
   });
   const [z, setZ] = useState(() => ++zTop);
   const drag = useRef<{ dx: number; dy: number } | null>(null);
+  /** Size set by the player; null keeps the default width / fits the height to the content. */
+  const [size, setSize] = useState<{ w: number | null; h: number | null }>({ w: null, h: null });
+  const resize = useRef<{ x: number; y: number; w: number; h: number; horiz: boolean; vert: boolean } | null>(null);
+
+  /** An edge or corner to drag; double-click it to go back to the default size. */
+  const grip = (horiz: boolean, vert: boolean, cls: string) => (
+    <div
+      className={`window-resize ${cls}`}
+      aria-hidden
+      onPointerDown={(e) => {
+        e.preventDefault();
+        const r = ref.current!.getBoundingClientRect();
+        resize.current = { x: e.clientX, y: e.clientY, w: r.width, h: r.height, horiz, vert };
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }}
+      onPointerMove={(e) => {
+        const r = resize.current;
+        if (!r) return;
+        const box = ref.current!.getBoundingClientRect();
+        setSize((s) => ({
+          w: r.horiz ? Math.round(Math.max(MIN_WIN_W, Math.min(window.innerWidth - box.left, r.w + e.clientX - r.x))) : s.w,
+          h: r.vert ? Math.round(Math.max(MIN_WIN_H, Math.min(window.innerHeight - box.top, r.h + e.clientY - r.y))) : s.h,
+        }));
+      }}
+      onPointerUp={() => (resize.current = null)}
+      onDoubleClick={() => setSize({ w: horiz ? null : size.w, h: vert ? null : size.h })}
+    />
+  );
 
   return (
     <div
       ref={ref}
       className="panel window"
-      style={{ left: pos.x, top: pos.y, width, zIndex: z }}
+      style={{
+        left: pos.x,
+        top: pos.y,
+        width: size.w ?? width,
+        ...(size.h !== null && { height: size.h, maxHeight: 'none' }),
+        zIndex: z,
+      }}
       onPointerDown={() => setZ(++zTop)}
       role="dialog"
       aria-label={typeof title === 'string' ? title : undefined}
@@ -124,6 +161,9 @@ export function Win({ w, title, children, width = 340 }: { w: GameWindow; title:
         </button>
       </div>
       <div className="window-body">{children}</div>
+      {grip(true, false, 'e')}
+      {grip(false, true, 's')}
+      {grip(true, true, 'se')}
     </div>
   );
 }

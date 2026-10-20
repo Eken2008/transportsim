@@ -595,8 +595,37 @@ input[type='range'] {
   padding: 2px 8px;
 }
 .window-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 12px;
   overflow: auto;
+}
+.window-resize {
+  position: absolute;
+  z-index: 1;
+  touch-action: none;
+}
+.window-resize.e {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: ew-resize;
+}
+.window-resize.s {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  cursor: ns-resize;
+}
+.window-resize.se {
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--line-strong) 50%, var(--line-strong) 60%, transparent 60%, transparent 72%, var(--line-strong) 72%, var(--line-strong) 82%, transparent 82%);
 }
 .window h4 {
   margin: 14px 0 6px;
