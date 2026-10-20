@@ -81,6 +81,11 @@ export function act(cmd: Parameters<typeof client.command>[0]): void {
   });
 }
 
+/** A catalog price as the game charges it: scaled by economy difficulty and inflation. */
+function gameCost(base: number): number {
+  return client.world?.state.cost(base) ?? base;
+}
+
 export function focusOn(x: number, y: number): void {
   useApp.setState((s) => ({ focus: { x, y, seq: (s.focus?.seq ?? 0) + 1 }, follow: null }));
 }
@@ -447,7 +452,7 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
     [engine, wagon, count, cargo],
   );
   const stats = trainStats(units);
-  const price = units.reduce((s, u) => s + (railVehicle(u.type)?.cost ?? 0), 0);
+  const price = gameCost(units.reduce((s, u) => s + (railVehicle(u.type)?.cost ?? 0), 0));
   const inDepot = [...(client.world?.trains.values() ?? [])].filter((t) => t.status === 'depot' && t.depot === w.id);
   const x = map ? w.id % map.width : 0;
   const y = map ? Math.floor(w.id / map.width) : 0;
@@ -480,7 +485,7 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
             <select value={engine} onChange={(e) => setEngine(e.target.value)}>
               {engines.map((v) => (
                 <option key={v.id} value={v.id} disabled={v.traction === 'electric' && !powered}>
-                  {v.name} — {v.maxSpeed} km/h, {v.power} kW, {formatMoney(v.cost)}
+                  {v.name} — {v.maxSpeed} km/h, {v.power} kW, {formatMoney(gameCost(v.cost))}
                   {v.traction === 'electric' && !powered ? ' (needs an electrified depot)' : ''}
                 </option>
               ))}
@@ -516,7 +521,7 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
           </div>
           <p className="muted small" style={{ margin: '0 0 10px' }}>
             {capacityText(stats.capacities)} · max {stats.maxSpeed} km/h · {stats.length.toFixed(1)} tiles long
-            {stats.length > MAX_TRAIN_LENGTH ? ' (too long!)' : ''} · running cost {formatMoney(stats.runningCost)}/yr
+            {stats.length > MAX_TRAIN_LENGTH ? ' (too long!)' : ''} · running cost {formatMoney(gameCost(stats.runningCost))}/yr
           </p>
           <button className="primary" style={{ width: '100%' }} disabled={!engine} onClick={() => act({ type: 'buyTrain', depot: w.id, units })}>
             Buy for {formatMoney(price)}
@@ -610,10 +615,10 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
                 : cargo === 'passengers'
                 ? 'A bus: uses bus stops.'
                 : 'A truck: uses truck stops.'}{' '}
-            Running cost {formatMoney(v.runningCost)}/yr.
+            Running cost {formatMoney(gameCost(v.runningCost))}/yr.
           </p>
           <button className="primary" style={{ width: '100%' }} disabled={tooBig(v)} onClick={() => act({ type: 'buyTrain', depot: w.id, units: [{ type: v.id, cargo }] })}>
-            Buy for {formatMoney(v.cost)}
+            Buy for {formatMoney(gameCost(v.cost))}
           </button>
         </>
       )}
@@ -911,7 +916,7 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
             <select value={toAdd} onChange={(e) => setToAdd(e.target.value)} style={{ flex: 1, minWidth: 0 }} aria-label="Vehicle to add">
               {available.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.name} — {formatMoney(v.cost)}
+                  {v.name} — {formatMoney(gameCost(v.cost))}
                 </option>
               ))}
             </select>
