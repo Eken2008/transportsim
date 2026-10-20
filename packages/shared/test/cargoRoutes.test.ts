@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { FREIGHT_CARGOS, GOODS_RESIDENTS, cargoChain, cargoDestinations, cargoSources, industryType, newIndustry, type Town } from '../src/index.ts';
+import { FREIGHT_CARGOS, GOODS_RESIDENTS, cargoChain, chainTiers, cargoDestinations, cargoSources, industryType, newIndustry, type Town } from '../src/index.ts';
 
 const at = (id: number, type: string, x: number, y: number) => newIndustry(id, industryType(type)!, x, y, `${type} ${id}`);
 const town = (id: number, x: number, y: number, population: number) => ({ id, name: `Town ${id}`, x, y, population, houses: 0 }) as Town;
@@ -18,6 +18,16 @@ describe('cargo routes', () => {
     expect(coal.acceptors.map((t) => t.id).sort()).toEqual(['power_station', 'steel_mill']);
     expect(coal.towns).toBe(false);
     expect(cargoChain('goods').towns).toBe(true);
+  });
+
+  test('tiers count the steps from raw material', () => {
+    const tiers = chainTiers();
+    expect(tiers.get('coal_mine')).toBe(0);
+    expect(tiers.get('farm')).toBe(0);
+    expect(tiers.get('steel_mill')).toBe(1);
+    expect(tiers.get('power_station')).toBe(1);
+    expect(tiers.get('sawmill')).toBe(1);
+    expect(tiers.get('factory')).toBe(2);
   });
 
   test('sources and destinations are the matching industries, nearest first', () => {

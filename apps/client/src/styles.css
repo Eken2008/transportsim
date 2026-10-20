@@ -1152,3 +1152,68 @@ button.link {
   border-top: 2px solid currentColor;
   transform: rotate(-35deg);
 }
+
+/* Cargo chain diagram */
+.chain-scroll {
+  overflow-x: auto;
+  margin: 0 0 8px;
+  padding: 8px 6px 2px;
+}
+.chain {
+  position: relative;
+  margin: 0 auto;
+}
+.chain svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.chain-node {
+  position: absolute;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  align-content: center;
+  gap: 0 4px;
+  padding: 2px 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  background: var(--panel-solid);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  transition: opacity 0.15s;
+}
+.chain-node.cargo {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  border-radius: 11px;
+  background: var(--panel-2);
+}
+.chain-node.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.chain-node.dim {
+  opacity: 0.35;
+}
+.chain-node.absent {
+  border-style: dashed;
+}
+.chain-node .cargo-dot {
+  flex: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+.chain-count {
+  position: absolute;
+  top: -7px;
+  right: -5px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--muted);
+  background: var(--panel-solid);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+}

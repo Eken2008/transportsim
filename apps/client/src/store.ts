@@ -123,7 +123,8 @@ export type GameWindow =
   | { kind: 'hangar'; id: number }
   | { kind: 'shipDepot'; id: number }
   | { kind: 'stats'; id: 0 }
-  | { kind: 'cargo'; id: 0 };
+  /** `select`: the chain node to show (an industry type `t:<id>`, a cargo `c:<id>` or `towns`). */
+  | { kind: 'cargo'; id: 0; select?: string };
 
 export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
 

@@ -67,8 +67,8 @@ export function IndustryWindow({ w }: { w: GameWindow & { kind: 'industry' } }) 
           ))}
         </>
       )}
-      <button className="ghost" style={{ marginTop: 10, width: '100%' }} onClick={() => openWindow({ kind: 'cargo', id: 0 })}>
-        ⛓ All cargo routes
+      <button className="ghost" style={{ marginTop: 10, width: '100%' }} onClick={() => openWindow({ kind: 'cargo', id: 0, select: `t:${type.id}` })}>
+        ⛓ Cargo chain
       </button>
       <button className="ghost" style={{ marginTop: 6, width: '100%' }} onClick={() => focusOn(ind.x + Math.floor(ind.w / 2), ind.y + Math.floor(ind.h / 2))}>
         ⌖ Locate

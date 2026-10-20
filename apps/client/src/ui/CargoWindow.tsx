@@ -1,7 +1,21 @@
-import { useState } from 'react';
-import { CARGOS, FREIGHT_CARGOS, cargoAmount, cargoChain, cargoDestinations, industryType, townAcceptsAt, transportedShare, type CargoId, type RouteEnd } from '@transportsim/shared';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  CARGOS,
+  cargoAmount,
+  cargoDestinations,
+  cargoSources,
+  industryType,
+  townAcceptsAt,
+  transportedShare,
+  typesFor,
+  ymdFromDays,
+  type CargoId,
+  type Industry,
+  type RouteEnd,
+} from '@transportsim/shared';
 import { client } from '../net/client.ts';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
+import { ChainDiagram, chainGraph, type ChainGraph } from './ChainDiagram.tsx';
 import { Win, focusOn, useTick } from './windows.tsx';
 
 /** Open an industry's or town's window and look at it. */
@@ -23,70 +37,116 @@ export function RouteEndRow({ end }: { end: RouteEnd }) {
   );
 }
 
-/** How many alternatives to list after the nearest destination. */
+const asEnd = (ind: Industry): RouteEnd => ({ kind: 'industry', id: ind.id, name: ind.name, x: ind.x + Math.floor(ind.w / 2), y: ind.y + Math.floor(ind.h / 2), dist: 0 });
+
+/** How many alternatives to list after the nearest one. */
 const OTHERS = 2;
 
-/** Every freight cargo: which industries make it, where it can go, and the nearest destination for each producer. */
+/** One suggested route: an industry and the nearest places to send its cargo to (or, for one that makes nothing, to bring it from). */
+interface RouteRow {
+  ind: Industry;
+  cargo: CargoId;
+  send: boolean;
+  ends: RouteEnd[];
+}
+
+const names = (list: readonly string[]) => (list.length ? list.join(', ') : 'nothing on the map');
+
+/** What the selected node takes and gives, in words. */
+function describe(g: ChainGraph, key: string): string {
+  const node = g.nodes.get(key);
+  if (!node) return '';
+  const nameOf = (k: string) => {
+    const n = g.nodes.get(k)!;
+    return n.kind === 'type' ? n.type.name : n.kind === 'cargo' ? CARGOS[n.cargo].name : 'towns';
+  };
+  const into = (k: string) => g.edges.filter((e) => e.to === k).map((e) => e.from);
+  const outOf = (k: string) => g.edges.filter((e) => e.from === k).map((e) => e.to);
+  if (node.kind === 'cargo') return `${CARGOS[node.cargo].name} is made by ${names(into(key).map(nameOf))} and taken by ${names(outOf(key).map(nameOf))}.`;
+  const takes = into(key).map((c) => `${nameOf(c).toLowerCase()} from ${names(into(c).map(nameOf))}`);
+  const sends = outOf(key).map((c) => `${nameOf(c).toLowerCase()} to ${names(outOf(c).map(nameOf))}`);
+  const who = node.kind === 'towns' ? 'Towns' : node.type.name;
+  const parts = [takes.length ? `takes ${takes.join('; ')}` : '', sends.length ? `sends ${sends.join('; ')}` : ''].filter(Boolean);
+  const extra = node.kind === 'towns' ? ` A station needs ${townAcceptsAt('goods')} residents in reach for goods, ${townAcceptsAt('food')} for food.` : '';
+  return `${who} ${parts.join(', and ')}.${extra}`;
+}
+
+/** The production chain as a diagram, and for the selected part of it, the nearest places to carry cargo between. */
 export function CargoWindow({ w }: { w: GameWindow & { kind: 'cargo' } }) {
   useTick(2000);
-  useApp((s) => s.global?.date);
-  const [cargo, setCargo] = useState<CargoId>('coal');
+  const date = useApp((s) => s.global?.date ?? 0);
+  const [sel, setSel] = useState<string>(w.select ?? 'c:coal');
+  useEffect(() => {
+    if (w.select) setSel(w.select);
+  }, [w.select]);
   const state = client.world?.state;
   const industries = [...(state?.industries.values() ?? [])];
   const towns = [...(state?.towns.values() ?? [])];
-  const chain = cargoChain(cargo);
-  const count = (id: string) => industries.filter((i) => i.type === id).length;
-  const need = townAcceptsAt(cargo);
+  const year = ymdFromDays(date).year;
+  // Types that exist this year, or on the map from a save.
+  const typeKey = [...new Set([...typesFor(year).map((t) => t.id), ...industries.map((i) => i.type)])].sort().join();
+  const graph = useMemo(() => chainGraph(typeKey.split(',').flatMap((id) => industryType(id) ?? [])), [typeKey]);
+  const counts = new Map<string, number>([['towns', towns.length]]);
+  for (const i of industries) counts.set(`t:${i.type}`, (counts.get(`t:${i.type}`) ?? 0) + 1);
 
-  const routes = industries
-    .filter((i) => industryType(i.type)?.produces.includes(cargo))
-    .map((ind) => ({ ind, to: cargoDestinations(ind, cargo, industries, towns, 1 + OTHERS) }))
-    .sort((a, b) => (a.to[0]?.dist ?? Infinity) - (b.to[0]?.dist ?? Infinity));
+  const node = graph.nodes.get(sel);
+  const rows: RouteRow[] = [];
+  const sendFrom = (ind: Industry, cargo: CargoId) => rows.push({ ind, cargo, send: true, ends: cargoDestinations(ind, cargo, industries, towns, 1 + OTHERS) });
+  if (node?.kind === 'cargo') {
+    for (const ind of industries) if (industryType(ind.type)?.produces.includes(node.cargo)) sendFrom(ind, node.cargo);
+  } else if (node?.kind === 'towns') {
+    for (const ind of industries) for (const c of industryType(ind.type)?.produces ?? []) if (townAcceptsAt(c) !== undefined) sendFrom(ind, c);
+  } else if (node?.kind === 'type') {
+    for (const ind of industries) {
+      if (ind.type !== node.type.id) continue;
+      for (const c of node.type.produces) sendFrom(ind, c);
+      // An industry that makes nothing (a power station): where to bring its input from instead.
+      if (!node.type.produces.length) for (const c of node.type.accepts) rows.push({ ind, cargo: c, send: false, ends: cargoSources(ind, c, industries, 1 + OTHERS) });
+    }
+  }
+  rows.sort((a, b) => (a.ends[0]?.dist ?? Infinity) - (b.ends[0]?.dist ?? Infinity));
+  const mixed = new Set(rows.map((r) => r.cargo)).size > 1;
 
   return (
-    <Win w={w} title="Cargo routes" width={430}>
-      <div className="row" style={{ flexWrap: 'wrap', gap: 4 }}>
-        {FREIGHT_CARGOS.map((c) => (
-          <button key={c} className={c === cargo ? 'primary small' : 'small'} aria-pressed={c === cargo} onClick={() => setCargo(c)}>
-            <span className="cargo-dot" style={{ background: CARGOS[c].color }} /> {CARGOS[c].name}
+    <Win w={w} title="Cargo routes" width={510}>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Cargo flows down the chain. Click an industry, cargo or the towns to see what it takes and where it goes.
+      </p>
+      <ChainDiagram graph={graph} counts={counts} selected={sel} onSelect={setSel} />
+      <p className="small">{describe(graph, sel)}</p>
+      <h4>Nearest routes, shortest first</h4>
+      {rows.length === 0 && <p className="muted small">None of these on the map yet.</p>}
+      {rows.map(({ ind, cargo, send, ends }) => {
+        const [best, ...others] = ends;
+        const made = send ? (ind.lastProduced[cargo] ?? 0) : 0;
+        const here = (
+          <button className="link" style={{ textAlign: 'left' }} onClick={() => show(asEnd(ind))}>
+            {ind.name}
           </button>
-        ))}
-      </div>
-      <p className="small" style={{ marginBottom: 0 }}>
-        <b>Made by</b> {chain.producers.map((t) => `${t.name} (${count(t.id)})`).join(', ') || 'nothing'}
-      </p>
-      <p className="small" style={{ marginTop: 4 }}>
-        <b>Taken by</b>{' '}
-        {[...chain.acceptors.map((t) => `${t.name} (${count(t.id)})`), ...(need !== undefined ? [`towns with ${need}+ residents near a station`] : [])].join(', ') || 'nothing'}
-      </p>
-      <h4>Routes from each producer, shortest first</h4>
-      {routes.length === 0 && <p className="muted small">Nothing on the map makes {CARGOS[cargo].name.toLowerCase()}.</p>}
-      {routes.map(({ ind, to }) => {
-        const made = ind.lastProduced[cargo] ?? 0;
-        const [best, ...others] = to;
-        const from = { kind: 'industry' as const, id: ind.id, x: ind.x + Math.floor(ind.w / 2), y: ind.y + Math.floor(ind.h / 2) };
+        );
+        const there = best ? (
+          <button className="link" style={{ textAlign: 'left' }} onClick={() => show(best)}>
+            {best.name}
+          </button>
+        ) : (
+          <span className="muted">{send ? 'nowhere takes it yet' : 'nothing makes it yet'}</span>
+        );
         return (
-          <div key={ind.id} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+          <div key={`${ind.id}:${cargo}`} className="list-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
             <div className="row" style={{ gap: 6 }}>
-              <button className="link" style={{ textAlign: 'left' }} onClick={() => show(from)}>
-                {ind.name}
-              </button>
+              {mixed && <span className="cargo-dot" title={CARGOS[cargo].name} style={{ background: CARGOS[cargo].color }} />}
+              {send ? here : there}
               <span>→</span>
-              {best ? (
-                <button className="link" style={{ textAlign: 'left', flex: 1 }} onClick={() => show(best)}>
-                  {best.name}
-                </button>
-              ) : (
-                <span className="muted" style={{ flex: 1 }}>
-                  nowhere takes it yet
-                </span>
-              )}
+              {send ? there : here}
+              <span className="spacer" />
               {best && <span className="muted small">{best.dist} tiles</span>}
             </div>
-            <div className="muted small">
-              {made > 0 && `${cargoAmount(cargo, made)} last month, ${Math.round(transportedShare(ind, cargo) * 100)}% transported. `}
-              {others.length > 0 && `Also: ${others.map((o) => `${o.name} (${o.dist})`).join(', ')}`}
-            </div>
+            {(made > 0 || others.length > 0) && (
+              <div className="muted small">
+                {made > 0 && `${cargoAmount(cargo, made)} last month, ${Math.round(transportedShare(ind, cargo) * 100)}% transported. `}
+                {others.length > 0 && `Also ${send ? 'to' : 'from'} ${others.map((o) => `${o.name} (${o.dist})`).join(', ')}`}
+              </div>
+            )}
           </div>
         );
       })}

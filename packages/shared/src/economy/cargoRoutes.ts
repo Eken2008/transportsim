@@ -28,6 +28,27 @@ export function cargoChain(cargo: CargoId, types: readonly IndustryType[] = INDU
   };
 }
 
+/**
+ * How far along the production chain each industry type is: 0 for primary industries, and one
+ * more than the deepest industry making any of its inputs for the rest (a factory, fed by steel
+ * mills fed by mines, is 2).
+ */
+export function chainTiers(types: readonly IndustryType[] = INDUSTRY_TYPES): Map<string, number> {
+  const tiers = new Map<string, number>();
+  const tierOf = (t: IndustryType, seen: Set<string>): number => {
+    const known = tiers.get(t.id);
+    if (known !== undefined) return known;
+    if (seen.has(t.id)) return 0; // A loop in the chain: stop here.
+    seen.add(t.id);
+    let tier = 0;
+    for (const c of t.accepts) for (const p of types) if (p.produces.includes(c)) tier = Math.max(tier, tierOf(p, seen) + 1);
+    tiers.set(t.id, tier);
+    return tier;
+  };
+  for (const t of types) tierOf(t, new Set());
+  return tiers;
+}
+
 /** One end of a cargo route: an industry or a town, and how far it is. */
 export interface RouteEnd {
   kind: 'industry' | 'town';
