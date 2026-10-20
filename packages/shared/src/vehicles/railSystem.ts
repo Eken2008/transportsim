@@ -24,6 +24,8 @@ import {
   hasPiece,
   isSpanTd,
   pieceLength,
+  tdEntry,
+  tdExit,
   tdPiece,
   turnSteps,
 } from '../rail/track.ts';
@@ -50,6 +52,8 @@ export const DWELL_TICKS = Math.round(TICKS_PER_DAY * 1.2);
 /** Stop this far (tiles) behind an obstacle. */
 const SAFETY_MARGIN = 0.3;
 const REPLAN_DELAY = 45;
+/** Ticks between attempts to find another way past a signal whose way ahead is taken. */
+const REROUTE_DELAY = TICKS_PER_DAY;
 /** Minimum approach speed for the final metres to a stop point. */
 const CREEP_KMH = 4;
 
@@ -257,6 +261,7 @@ export class RailSystem {
 
   forget(t: Train): void {
     this.limitCache.delete(t.id);
+    this.reroutes.delete(t.id);
     this.releaseAll(t);
     this.dropClaims(t);
     this.dropReservations(t);
@@ -641,26 +646,91 @@ export class RailSystem {
     if (kind !== 'entry' && kind !== 'combo') return true;
     const exits = this.blockExits.get(b);
     if (!exits?.length || depth > 8) return true;
-    return exits.some((e) => this.exitGreen(e, depth + 1));
+    return exits.some((e) => this.exitGreen(e, except, depth + 1));
   }
 
-  /** Is the exit (or combo) signal at the end of segment `e` green for an unknown train? */
-  private exitGreen(e: number, depth: number): boolean {
-    const kind = this.signalKind(e);
-    return nextSegments(this.state.map, e, this.state.blockAccess).every((n) =>
-      this.blockGreen(this.blockOf.get(pieceKey(n)), -1, kind === 'combo' ? 'combo' : 'block', depth),
-    );
+  /** Is the exit (or combo) signal at the end of segment `e` green (ignoring train `except`)? */
+  private exitGreen(e: number, except: number, depth: number): boolean {
+    return this.wayClear(e, this.signalKind(e) === 'combo' ? 'combo' : 'block', except, depth);
   }
 
-  /** Red if the block beyond the signal on this tile/trackdir is occupied or claimed. */
+  /**
+   * A signal protects the track up to the next signal facing the same way: one facing the
+   * other way splits blocks, but doesn't stop a train. Is there a way on from the non-path
+   * signal at the end of `s` through blocks free of trains (but `except`) to such a signal
+   * (or a dead end)?
+   */
+  private wayClear(s: number, kind: SignalKind, except = -1, depth = 0): boolean {
+    const map = this.state.map;
+    const access = this.state.blockAccess;
+    const free = new Map<number, boolean>();
+    const isFree = (n: number, first: boolean) => {
+      const b = this.blockOf.get(pieceKey(n));
+      if (b === undefined) return true;
+      let f = free.get(b);
+      if (f === undefined) free.set(b, (f = first ? this.blockGreen(b, except, kind, depth) : !this.blockBusy(b, except)));
+      return f;
+    };
+    const stack = nextSegments(map, s, access).filter((n) => isFree(n, true));
+    const seen = new Set<number>();
+    while (stack.length) {
+      const c = stack.pop()!;
+      if (seen.has(c)) continue;
+      seen.add(c);
+      if (this.signalFacing(c) || seen.size > 512) return true;
+      const next = nextSegments(map, c, access);
+      if (next.length === 0) return true;
+      for (const n of next) if (isFree(n, false)) stack.push(n);
+    }
+    return false;
+  }
+
+  /** Signal blocks on a train's route from index `i` up to the next signal facing it. */
+  private blocksFrom(t: Train, i: number): number[] {
+    const out: number[] = [];
+    for (const s of this.runFrom(t, i)) {
+      const b = this.blockOf.get(pieceKey(s));
+      if (b !== undefined && !out.includes(b)) out.push(b);
+    }
+    return out;
+  }
+
+  /** Would the non-path signal before route index `i` let this train on along its route? */
+  private signalClear(t: Train, i: number, kind: SignalKind): boolean {
+    let last = -1;
+    for (let k = i; k < t.route.length; k++) {
+      const s = t.route[k]!;
+      const b = this.blockOf.get(pieceKey(s));
+      if (b !== undefined && b !== last) {
+        if (this.claims.get(b) !== t.id && !this.blockGreen(b, t.id, last < 0 ? kind : 'block')) return false;
+        last = b;
+      }
+      if (this.signalFacing(s)) break;
+    }
+    return true;
+  }
+
+  /** Claim the blocks up to the next signal so nobody else enters them. */
+  private claimFrom(t: Train, i: number): void {
+    for (const b of this.blocksFrom(t, i)) this.claims.set(b, t.id);
+  }
+
+  /** Drop claims on blocks the train's route no longer leads through (after it changed). */
+  private pruneClaims(t: Train): void {
+    const keep = new Set<number>();
+    for (const s of t.path) keep.add(this.blockOf.get(pieceKey(s))!);
+    for (const s of t.route) keep.add(this.blockOf.get(pieceKey(s))!);
+    for (const [b, id] of [...this.claims]) if (id === t.id && !keep.has(b)) this.claims.delete(b);
+  }
+
+  /** Red if no way beyond the signal on this tile/trackdir is free up to the next signal. */
   signalRed(tile: number, td: number): boolean {
     this.ensureBlocks();
     const s = seg(tile, td);
-    const next = nextSegments(this.state.map, s, this.state.blockAccess);
     const kind = this.signalKind(s);
     // Path signals show red until a train reserves a path through them.
-    if (kind === 'path') return !next.some((n) => this.reserved.has(pieceKey(n)));
-    return !next.every((n) => this.blockGreen(this.blockOf.get(pieceKey(n)), -1, kind));
+    if (kind === 'path') return !nextSegments(this.state.map, s, this.state.blockAccess).some((n) => this.reserved.has(pieceKey(n)));
+    return !this.wayClear(s, kind);
   }
 
   depotHasVehicles(tile: number): boolean {
@@ -905,22 +975,24 @@ export class RailSystem {
     const access = this.accessOf(t);
     let pbs = t.pbs === true;
     for (let i = 0; i < t.route.length; i++) {
-      const s = t.route[i]!;
+      let s = t.route[i]!;
       if (d > horizon) return d;
       if (!segmentsConnect(map, prev, s, access)) return d; // route went stale
       if (this.signalFacing(prev)) {
         const kind = this.signalKind(prev);
         pbs = kind === 'path';
-        if (pbs) {
+        const held = pbs ? this.reservedBy(s) === t.id : this.claims.get(this.blockOf.get(pieceKey(s)) ?? -1) === t.id;
+        // Close enough that we will pass: if the way beyond is taken, look for another.
+        if (!held && d <= commit && running && this.rerouteAtSignal(t, i, prev)) s = t.route[i]!;
+        if (held) {
+          // Already reserved or claimed the way past this signal.
+        } else if (pbs) {
           // Close enough that we will pass: reserve the path to the next signal.
-          if (this.reservedBy(s) !== t.id && !this.tryReserve(t, i, d <= commit && running)) return d - SAFETY_MARGIN;
+          if (!this.tryReserve(t, i, d <= commit && running)) return d - SAFETY_MARGIN;
         } else {
-          const b = this.blockOf.get(pieceKey(s));
-          if (b !== undefined && this.claims.get(b) !== t.id) {
-            if (!this.blockGreen(b, t.id, kind)) return d - SAFETY_MARGIN;
-            // Close enough that we will pass: claim the block so nobody else enters.
-            if (d <= commit && running) this.claims.set(b, t.id);
-          }
+          if (!this.signalClear(t, i, kind)) return d - SAFETY_MARGIN;
+          // Close enough that we will pass: claim the way to the next signal.
+          if (d <= commit && running) this.claimFrom(t, i);
         }
       } else if (pbs && this.reservedBy(s) !== t.id) {
         // Inside a path-signalled area: keep the way ahead reserved.
@@ -986,8 +1058,9 @@ export class RailSystem {
     if (this.signalFacing(head)) {
       const kind = this.signalKind(head);
       if (kind === 'path') return this.reservedBy(next) === t.id || this.tryReserve(t, 0, true);
-      const b = this.blockOf.get(pieceKey(next));
-      return b === undefined || this.claims.get(b) === t.id || this.blockGreen(b, t.id, kind);
+      if (!this.signalClear(t, 0, kind)) return false;
+      this.claimFrom(t, 0);
+      return true;
     }
     if (t.pbs && this.reservedBy(next) !== t.id) return this.tryReserve(t, 0, true);
     return true;
@@ -1132,6 +1205,11 @@ export class RailSystem {
 
   /** Plan a route to the current target; reverse if only the way back leads there. */
   plan(t: Train): void {
+    this.planRoute(t);
+    this.pruneClaims(t);
+  }
+
+  private planRoute(t: Train): void {
     const key = this.targetKey(t);
     const goal = this.goalFor(t);
     t.routeFor = routeKey(this.state.trackVersion, key);
@@ -1140,19 +1218,12 @@ export class RailSystem {
       t.replanAt = this.state.tick + REPLAN_DELAY;
       return;
     }
-    const map = this.state.map;
     this.dropReservations(t, true);
-    const penalty = (s: number) => {
-      if (this.occupiedByOther(s, t.id)) return 6;
-      const r = this.reserved.get(pieceKey(s));
-      return r !== undefined && r !== t.id ? 4 : 0;
-    };
-    const access = this.accessOf(t);
-    let path = findPath(map, t.path[0]!, goal, { access, penalty });
+    let path = this.findRoute(t, t.path[0]!, goal);
     if (!path && t.speed < 0.5) {
       // Try the other way round: plan from the tail segment, reversed.
       const tail = segReverse(t.path[t.path.length - 1]!);
-      const back = findPath(map, tail, goal, { access, penalty });
+      const back = this.findRoute(t, tail, goal);
       if (back && this.reverse(t)) {
         path = back;
         t.routeFor = routeKey(this.state.trackVersion, key);
@@ -1169,6 +1240,43 @@ export class RailSystem {
       }
       return;
     }
+    t.route = this.continueRoute(t, path);
+  }
+
+  /** A* from `start` to `goal` for this train, avoiding occupied and reserved track if it can. */
+  private findRoute(t: Train, start: number, goal: PathGoal): number[] | null {
+    const penalty = (s: number) => this.routePenalty(s, t.id);
+    return findPath(this.state.map, start, goal, { access: this.accessOf(t), penalty });
+  }
+
+  /**
+   * Extra path cost of a segment taken by another train. A platform is costed as a whole where
+   * the route enters it: the search ends there, but the train will run on to its far end.
+   */
+  private routePenalty(s: number, id: number): number {
+    const { type, data, track } = this.state.map.layers;
+    const tile = segTile(s);
+    if (type[tile] !== TileType.Station) return this.takenPenalty(s, id);
+    const w = this.state.map.width;
+    const td = segTd(s);
+    const platform = (n: number) => type[n] === TileType.Station && data[n] === data[tile] && track[n] === track[tile];
+    const back = tdEntry(td);
+    if (platform(tile + EDGE_DX[back] + EDGE_DY[back] * w)) return 0; // costed on entry
+    const ahead = tdExit(td);
+    const step = EDGE_DX[ahead] + EDGE_DY[ahead] * w;
+    let sum = 0;
+    for (let n = tile, k = 0; k < 64 && platform(n); n += step, k++) sum += this.takenPenalty(seg(n, td), id);
+    return sum;
+  }
+
+  private takenPenalty(s: number, id: number): number {
+    if (this.occupiedByOther(s, id)) return 6;
+    const r = this.reserved.get(pieceKey(s));
+    return r !== undefined && r !== id ? 4 : 0;
+  }
+
+  /** Finish a path to the current order: run on through waypoints and to the platform's end. */
+  private continueRoute(t: Train, path: number[]): number[] {
     // Run on through waypoints to the order after them, so trains don't brake for waypoints.
     let o = t.toDepot ? undefined : t.orders[t.orderIndex];
     const saved = t.orderIndex;
@@ -1176,14 +1284,46 @@ export class RailSystem {
       t.orderIndex = peekNextOrder(this.state, t);
       const next = t.orders[t.orderIndex];
       const g = next ? this.goalForOrder(t, next) : null;
-      const more = g ? findPath(map, path[path.length - 1]!, g, { access, penalty }) : null;
+      const more = g ? this.findRoute(t, path[path.length - 1]!, g) : null;
       if (!more) break;
       path.push(...more);
       o = next;
     }
     t.orderIndex = saved;
-    extendThroughPlatform(map, path, access);
-    t.route = path;
+    extendThroughPlatform(this.state.map, path, this.accessOf(t));
+    return path;
+  }
+
+  /** Signal each train last re-routed at, and the tick it may try again there. */
+  private reroutes = new Map<number, { signal: number; until: number }>();
+
+  /**
+   * The train is about to pass the signal at the end of `prev` (route index `i` lies beyond
+   * it). Routes are planned at departure, so if the way to the next signal is now occupied or
+   * reserved, plan again from here with the current traffic: another platform or a parallel
+   * track may be free. Returns true if the route changed.
+   */
+  private rerouteAtSignal(t: Train, i: number, prev: number): boolean {
+    const last = this.reroutes.get(t.id);
+    if (last?.signal === prev && this.state.tick < last.until) return false;
+    const kind = this.signalKind(prev);
+    if (kind === 'path' ? this.canReserve(this.runFrom(t, i), t.id) : this.signalClear(t, i, kind)) return false;
+    this.reroutes.set(t.id, { signal: prev, until: this.state.tick + REROUTE_DELAY });
+    const goal = this.goalFor(t);
+    // Already at (or committed to) the goal: nothing to choose.
+    if (!goal || goal.isGoal(t.path[0]!) || t.route.slice(0, i).some((s) => goal.isGoal(s))) return false;
+    const found = this.findRoute(t, prev, goal);
+    if (!found) return false;
+    const path = this.continueRoute(t, found);
+    const old = t.route.slice(i);
+    if (path.length === old.length && path.every((s, k) => s === old[k])) return false;
+    t.route = t.route.slice(0, i).concat(path);
+    this.limitCache.delete(t.id);
+    this.pruneClaims(t);
+    // Reservations only reach the next signal, but drop any left on the old way just in case.
+    const keep = new Set([...t.path, ...t.route.slice(0, i)].map(pieceKey));
+    for (const [k, id] of [...this.reserved]) if (id === t.id && !keep.has(k)) this.unreserve(k);
+    return true;
   }
 
   motion(t: Train): TrainMotion {

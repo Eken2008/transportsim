@@ -8,6 +8,7 @@ import {
   TICKS_PER_DAY,
   executeCommand,
   pieceKey,
+  segTile,
   type Command,
 } from '../src/index.ts';
 
@@ -92,6 +93,73 @@ describe('block signals', () => {
     }
     expect(visits.get(a.id)).toBeGreaterThanOrEqual(4);
     expect(visits.get(b.id)).toBeGreaterThanOrEqual(4);
+  });
+
+  /**
+   * The bottom station gets a second platform below it, joined by switches at both ends. A
+   * westbound signal stands before the east switch; the platforms have westbound exit signals
+   * and, at their east ends, one-way eastbound signals that split them off the switch.
+   */
+  function twoPlatforms() {
+    const l = loop();
+    const { run, buy } = l;
+    run({ type: 'buildTrack', pieces: [36, 25, Piece.SE, 36, 26, Piece.NW, 28, 26, Piece.NE, 28, 25, Piece.SW] });
+    const p2: number[] = [];
+    for (let x = 29; x <= 35; x++) p2.push(x, 26, Piece.X);
+    run({ type: 'buildTrack', pieces: p2 });
+    run({ type: 'buildStation', x: 30, y: 26, axis: 0, platforms: 1, length: 5 });
+    run({ type: 'setSignal', x: 22, y: 10, piece: Piece.X, dirs: 1 }); // eastbound on top
+    run({ type: 'setSignal', x: 40, y: 18, piece: Piece.Y, dirs: 1 }); // southbound on the right
+    run({ type: 'setSignal', x: 37, y: 25, piece: Piece.X, dirs: 2 }); // westbound, before the switch
+    for (const y of [25, 26]) {
+      run({ type: 'setSignal', x: 29, y, piece: Piece.X, dirs: 2 });
+      run({ type: 'setSignal', x: 35, y, piece: Piece.X, dirs: 1 });
+    }
+    const bottom = 1;
+    /** A started train bound for the bottom station, staying there `wait` days. */
+    const send = (wait?: number) => {
+      const t = buy();
+      run({ type: 'setOrders', id: t.id, orders: [{ kind: 'station', station: bottom, wait }] });
+      run({ type: 'trainAction', id: t.id, action: 'start' });
+      return t;
+    };
+    const row = (s: number) => Math.floor(segTile(s) / l.map.width);
+    return { ...l, send, row };
+  }
+
+  test('a train passing a signal takes a free platform if the one it planned for is now taken', () => {
+    const { state, send, row } = twoPlatforms();
+    const a = send(30);
+    const b = send();
+    // B leaves the depot (and plans its route) while A is still on its way: both head for the
+    // straight platform, which A then occupies for a month.
+    for (let i = 0; i < TICKS_PER_DAY * 15 && b.status !== 'loading'; i++) state.step();
+    expect(state.trains.size).toBe(2);
+    expect(a.status).toBe('loading');
+    expect(row(a.path[0]!)).toBe(25);
+    expect(b.status).toBe('loading');
+    expect(row(b.path[0]!)).toBe(26);
+  });
+
+  test('a signal protects the way up to the next signal facing the train, not just the next block', () => {
+    const { state, map, send } = twoPlatforms();
+    const sig = map.tileIndex(37, 25);
+    const parked = [send(30), send(30)];
+    const b = send();
+    let greenWithOneFree = false;
+    for (let i = 0; i < TICKS_PER_DAY * 20; i++) {
+      state.step();
+      const loading = parked.filter((t) => t.status === 'loading').length;
+      if (loading === 1 && parked.every((t) => t.path.every((s) => segTile(s) !== sig))) greenWithOneFree ||= !state.rail.signalRed(sig, Piece.X * 2 + 1);
+    }
+    // Both platforms taken: the switch beyond the signal is free, but the signal stays red and
+    // the third train waits in front of it rather than running onto an occupied platform.
+    expect(state.trains.size).toBe(3);
+    for (const t of parked) expect(t.status).toBe('loading');
+    expect(greenWithOneFree).toBe(true);
+    expect(state.rail.signalRed(sig, Piece.X * 2 + 1)).toBe(true);
+    expect(b.speed).toBe(0);
+    expect(segTile(b.path[0]!)).toBe(sig);
   });
 
   test('signal aspect reflects the block beyond it', () => {
