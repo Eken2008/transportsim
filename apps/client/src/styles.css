@@ -1132,3 +1132,23 @@ button.link {
   width: 80px;
   opacity: 1;
 }
+
+/* Tree and building view toggles: faded when see-through, struck out when hidden */
+.view-mode {
+  position: relative;
+}
+.view-mode.transparent {
+  opacity: 0.5;
+}
+.view-mode.hidden {
+  opacity: 0.3;
+}
+.view-mode.hidden::after {
+  content: '';
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: 50%;
+  border-top: 2px solid currentColor;
+  transform: rotate(-35deg);
+}

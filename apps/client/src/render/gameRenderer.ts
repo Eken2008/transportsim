@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
-import { useApp, type ToolId } from '../store.ts';
+import { useApp, type ToolId, type ViewMode } from '../store.ts';
 import { sound } from '../audio/sound.ts';
 import { BulldozeTool, CanalTool, ConvertTool, DepotTool, StationTool, WaypointTool } from '../tools/placeTools.ts';
 import { RoadPlaceTool, RoadTool } from '../tools/roadTools.ts';
@@ -21,6 +21,8 @@ import { IndustryRenderer } from './industryMesh.ts';
 import { FloatingText } from './floatingText.ts';
 import { CrossingBooms } from './crossings.ts';
 import { LineOverlay } from './lineOverlay.ts';
+import { buildingMaterial } from './buildings.ts';
+import { treeAssets } from './trees.ts';
 import { SignalTool } from '../tools/signalTool.ts';
 import { BridgeTool, TunnelTool } from '../tools/structureTools.ts';
 import { AirportRole, TileType, type Piece } from '@transportsim/shared';
@@ -29,6 +31,18 @@ import { OrdersTool } from '../tools/ordersTool.ts';
 import { catchmentRect, rectTiles } from '../game/catchment.ts';
 
 const SKY = new THREE.Color('#a8c8e6');
+
+/** Draw a shared material normally, see-through or not at all. */
+function applyViewMode(mat: THREE.Material, mode: ViewMode, opacity: number): void {
+  const transparent = mode === 'transparent';
+  mat.visible = mode !== 'hidden';
+  if (mat.transparent !== transparent) {
+    mat.transparent = transparent;
+    mat.depthWrite = !transparent;
+    mat.needsUpdate = true;
+  }
+  mat.opacity = transparent ? opacity : 1;
+}
 
 /** Owns the Three.js scene for one game session. */
 export class GameRenderer {
@@ -161,6 +175,7 @@ export class GameRenderer {
     this.disposers.push(() => ro.disconnect());
     this.disposers.push(
       useApp.subscribe((s, prev) => {
+        if (s.treeView !== prev.treeView || s.buildingView !== prev.buildingView) this.applyViewModes();
         if (s.focus && s.focus !== prev.focus) this.lookAt(s.focus.x + 0.5, s.focus.y + 0.5);
         if (s.tool !== prev.tool) this.setTool(s.tool);
         if (s.catchmentFor !== prev.catchmentFor || s.tool !== prev.tool) this.showStationCatchment();
@@ -178,9 +193,17 @@ export class GameRenderer {
         }
       }),
     );
+    this.applyViewModes();
     this.setTool(useApp.getState().tool);
     this.resize();
     this.loop();
+  }
+
+  /** Trees, houses and industries share materials, so one change covers every chunk. */
+  private applyViewModes(): void {
+    const { treeView, buildingView } = useApp.getState();
+    applyViewMode(treeAssets.material, treeView, 0.3);
+    applyViewMode(buildingMaterial, buildingView, 0.35);
   }
 
   private updateWrecks(): void {

@@ -22,7 +22,7 @@ import { Tutorial } from './Tutorial.tsx';
 import { sound } from '../audio/sound.ts';
 import { NewsTicker } from './NewsWindow.tsx';
 import { GameRenderer } from '../render/gameRenderer.ts';
-import { openWindow, useApp, type ToolId } from '../store.ts';
+import { nextViewMode, openWindow, useApp, type ToolId, type ViewMode } from '../store.ts';
 import { formatMoney } from './format.ts';
 
 export function GameScreen() {
@@ -49,7 +49,11 @@ export function GameScreen() {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       const tools: Record<string, ToolId> = Object.fromEntries(TOOLS.map((t) => [/\d/.test(t.key) ? 'Digit' + t.key : 'Key' + t.key, t.id]));
-      if (tools[e.code]) {
+      if (e.shiftKey && e.code === 'KeyT') {
+        useApp.setState((s) => ({ treeView: nextViewMode(s.treeView) }));
+      } else if (e.shiftKey && e.code === 'KeyB') {
+        useApp.setState((s) => ({ buildingView: nextViewMode(s.buildingView) }));
+      } else if (tools[e.code]) {
         const t = tools[e.code]!;
         useApp.setState((s) => ({ tool: s.tool === t ? null : t }));
       } else if (e.code === 'KeyR' && useApp.getState().tool === 'station') {
@@ -189,6 +193,8 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         <button title="Statistics: graphs of every company's history" aria-label="📈 Graphs" onClick={() => openWindow({ kind: 'stats', id: 0 })}>
           📈<span className="lbl"> Graphs</span>
         </button>
+        <ViewModeButton field="treeView" icon="🌳" what="Trees" shortcut="Shift+T" />
+        <ViewModeButton field="buildingView" icon="🏠" what="Houses and industries" shortcut="Shift+B" />
         <VolumeButton />
         <button className="ghost" title="Controls (?)" onClick={onHelp}>
           ?
@@ -492,6 +498,24 @@ function StatusBar({ fps, chunks }: { fps: number; chunks: number }) {
 }
 
 /** Sound on/off, with a volume slider on hover or focus. */
+const VIEW_MODE_NAMES: Record<ViewMode, string> = { normal: 'shown', transparent: 'see-through', hidden: 'hidden' };
+
+/** Cycles trees or buildings between shown, see-through and hidden. */
+function ViewModeButton({ field, icon, what, shortcut }: { field: 'treeView' | 'buildingView'; icon: string; what: string; shortcut: string }) {
+  const mode = useApp((s) => s[field]);
+  const next = nextViewMode(mode);
+  return (
+    <button
+      className={`ghost view-mode ${mode}`}
+      title={`${what}: ${VIEW_MODE_NAMES[mode]} (click or ${shortcut}: ${VIEW_MODE_NAMES[next]})`}
+      aria-label={`${what}: ${VIEW_MODE_NAMES[mode]}`}
+      onClick={() => useApp.setState({ [field]: next })}
+    >
+      {icon}
+    </button>
+  );
+}
+
 function VolumeButton() {
   const [, rerender] = useState(0);
   useEffect(() => sound.onChange(() => rerender((n) => n + 1)), []);
@@ -548,6 +572,9 @@ function Help({ onClose }: { onClose: () => void }) {
       <div>
         Roads: <kbd>G</kbd> build · <kbd>Z</kbd> remove · <kbd>H</kbd> stop · <kbd>J</kbd> depot · <kbd>K</kbd> one-way · Air: <kbd>Y</kbd> airport · Water: <kbd>U</kbd> canal ·{' '}
         <kbd>I</kbd> lock · <kbd>O</kbd> dock · <kbd>M</kbd> ship depot · <kbd>X</kbd> buoy
+      </div>
+      <div>
+        <kbd>Shift</kbd>+<kbd>T</kbd> trees · <kbd>Shift</kbd>+<kbd>B</kbd> houses and industries: shown, see-through, hidden
       </div>
       <div>
         Click a depot, station or vehicle to open it · <kbd>T</kbd> vehicle list · <kbd>C</kbd> company · <kbd>F</kbd> finances · <kbd>L</kbd> league · 📈 graphs ·{' '}

@@ -79,6 +79,10 @@ export interface AppState {
   signalKind: SignalKind;
   /** Draw path reservations on the track. */
   showReservations: boolean;
+  /** How trees are drawn. */
+  treeView: ViewMode;
+  /** How houses and industries are drawn. */
+  buildingView: ViewMode;
   /** Station whose catchment area is shown (toggled from its window). */
   catchmentFor: number | null;
   /** Bumped when train details change, so windows re-render. */
@@ -95,6 +99,11 @@ export interface AppState {
   /** Kinds of command this player has carried out (the guide ticks steps off with them). */
   doneCommands: string[];
 }
+
+/** Trees and buildings can be drawn see-through or hidden to see what is behind them. */
+export type ViewMode = 'normal' | 'transparent' | 'hidden';
+
+export const nextViewMode = (m: ViewMode): ViewMode => (m === 'normal' ? 'transparent' : m === 'transparent' ? 'hidden' : 'normal');
 
 export type GameWindow =
   | { kind: 'train'; id: number }
@@ -153,6 +162,8 @@ export const useApp = create<AppState>(() => ({
   roadStopKind: 'bus',
   airportKind: 'small',
   showReservations: false,
+  treeView: 'normal',
+  buildingView: 'normal',
   catchmentFor: null,
   trainsRev: 0,
   linesRev: 0,

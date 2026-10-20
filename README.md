@@ -97,6 +97,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `T`                                              | Vehicle list                                                 |
 | `C`                                              | Company: found or join one, members, roles, invitations      |
 | `F` / `L`                                        | Finances (books, loans, infrastructure) / company league     |
+| `Shift`+`T` / `Shift`+`B`, 🌳 / 🏠              | Trees / houses and industries: shown, see-through or hidden |
 | `Esc`                                            | Deselect tool        |
 | `Space`                                          | Pause (host only)    |
 | `?`                                              | Help                 |
