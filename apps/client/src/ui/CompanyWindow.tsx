@@ -151,6 +151,8 @@ function MyCompany({ c, role }: { c: Company; role: CompanyRole }) {
 
       <SharingSection c={c} canAct={roleAllows(role, 'build')} />
 
+      {roleAllows(role, 'build') && <GiftForm c={c} />}
+
       <VehiclePolicy c={c} canAct={roleAllows(role, 'build')} />
 
       <button
@@ -259,6 +261,51 @@ function VehiclePolicy({ c, canAct }: { c: Company; canAct: boolean }) {
           </button>
         </div>
       )}
+    </>
+  );
+}
+
+/** Give some of the company's money to another company. */
+function GiftForm({ c }: { c: Company }) {
+  const companies = useApp((s) => s.global?.companies ?? []);
+  const others = companies.filter((x) => x.id !== c.id).sort((a, b) => a.id - b.id);
+  const [to, setTo] = useState<number | null>(null);
+  const [amount, setAmount] = useState(10_000);
+  const target = others.find((x) => x.id === to) ?? others[0];
+  if (!target) return null;
+  const valid = Number.isInteger(amount) && amount > 0;
+  return (
+    <>
+      <h4>Give money</h4>
+      <form
+        className="row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid && confirm(`Give ${target.name} ${formatMoney(amount)}? It can't be taken back.`)) act({ type: 'giftMoney', company: target.id, amount });
+        }}
+      >
+        <select value={target.id} onChange={(e) => setTo(+e.target.value)} style={{ flex: 1, minWidth: 0 }} aria-label="Company to give money to">
+          {others.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+        £
+        <input
+          type="number"
+          className="mono"
+          min={1}
+          step={1000}
+          value={amount}
+          style={{ width: '7em' }}
+          aria-label="Amount"
+          onChange={(e) => setAmount(Math.max(0, Math.round(+e.target.value)))}
+        />
+        <button disabled={!valid || amount > c.money} title={amount > c.money ? 'Not enough money' : undefined}>
+          Give
+        </button>
+      </form>
     </>
   );
 }

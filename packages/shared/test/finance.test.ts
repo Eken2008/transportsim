@@ -108,6 +108,26 @@ describe('finances', () => {
     expect(executeCommand(state, { playerId: op.id, companyId: c.id }, { type: 'loan', action: 'borrow', amount: LOAN_STEP }).ok).toBe(false);
   });
 
+  test('gifts move money to another company and are booked on both sides', () => {
+    const { state, c, run, must, ledger } = world();
+    const b = state.foundCompany(state.addPlayer('B', false), 'B Rail')!;
+    const [ma, mb] = [c.money, b.money];
+    must({ type: 'giftMoney', company: b.id, amount: 25_000 });
+    expect(c.money).toBe(ma - 25_000);
+    expect(b.money).toBe(mb + 25_000);
+    expect(ledger().gifts).toBe(-25_000);
+    expect(b.finances.at(-1)!.ledger.gifts).toBe(25_000);
+    expect(run({ type: 'giftMoney', company: c.id, amount: 1000 }).ok).toBe(false);
+    expect(run({ type: 'giftMoney', company: 999, amount: 1000 }).ok).toBe(false);
+    expect(run({ type: 'giftMoney', company: b.id, amount: 0 }).ok).toBe(false);
+    expect(run({ type: 'giftMoney', company: b.id, amount: 1.5 }).ok).toBe(false);
+    expect(run({ type: 'giftMoney', company: b.id, amount: c.money + 1 }).ok).toBe(false);
+    // Operators cannot give money away
+    const op = state.addPlayer('Op', false);
+    state.addMember(c, 'Op', 'operator');
+    expect(executeCommand(state, { playerId: op.id, companyId: c.id }, { type: 'giftMoney', company: b.id, amount: 1000 }).ok).toBe(false);
+  });
+
   test('monthly interest and property maintenance; quarters roll over', () => {
     const { state, c, map, must, days, ledger } = world();
     buildLine(must, map);

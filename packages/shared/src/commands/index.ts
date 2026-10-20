@@ -58,7 +58,7 @@ import {
   type RemoveMemberCommand,
   type SetMemberRoleCommand,
 } from './company.ts';
-import { loanHandler, type LoanCommand } from './finance.ts';
+import { giftMoneyHandler, loanHandler, type GiftMoneyCommand, type LoanCommand } from './finance.ts';
 import { convertRailHandler, type ConvertRailCommand } from './convert.ts';
 import { buildWaypointHandler, removeWaypointHandler, type BuildWaypointCommand, type RemoveWaypointCommand } from './waypoint.ts';
 import { buildAirportHandler, type BuildAirportCommand } from './airport.ts';
@@ -150,6 +150,7 @@ export type Command =
   | RemoveMemberCommand
   | CompanySettingsCommand
   | LoanCommand
+  | GiftMoneyCommand
   | ProposeSharingCommand
   | AnswerSharingCommand
   | EndSharingCommand
@@ -203,6 +204,7 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   removeMember: removeMemberHandler,
   companySettings: companySettingsHandler,
   loan: loanHandler,
+  giftMoney: giftMoneyHandler,
   proposeSharing: proposeSharingHandler,
   answerSharing: answerSharingHandler,
   endSharing: endSharingHandler,

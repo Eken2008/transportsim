@@ -51,7 +51,7 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
   const maintenance = Math.round((yearlyMaintenance(infra) * econ.costFactor * (client.world?.state.inflation.costs ?? 1)) / 12);
   const yearTotal = ledgerTotal(sumLedgers(quarters, mode));
   // Categories that can't happen for a transport type are left out of its books.
-  const categories = LEDGER_CATEGORIES.filter((cat) => !mode || (cat !== 'interest' && cat !== 'councils' && (cat !== 'sharing' || mode === 'rail')));
+  const categories = LEDGER_CATEGORIES.filter((cat) => !mode || (cat !== 'interest' && cat !== 'councils' && cat !== 'gifts' && (cat !== 'sharing' || mode === 'rail')));
   const repayAll = Math.min(c.loan, Math.floor(Math.max(0, c.money) / LOAN_STEP) * LOAN_STEP);
 
   return (
@@ -127,7 +127,7 @@ export function FinancesWindow({ w }: { w: GameWindow & { kind: 'finances' } }) 
               ))}
             {!mode && (
               <tr className="by-mode">
-                <td title="Not tied to a transport type: terraforming, clearing land, loan interest and town councils">Other</td>
+                <td title="Not tied to a transport type: terraforming, clearing land, loan interest, town councils and gifts">Other</td>
                 {quarters.map((q) => (
                   <td key={`${q.year}-${q.quarter}`}>
                     <Money v={ledgerTotal(q.ledger) - VEHICLE_MODES.reduce((sum, m) => sum + ledgerTotal(ledgerOf(q, m)), 0)} />

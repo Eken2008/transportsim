@@ -28,3 +28,32 @@ export const loanHandler: CommandHandler<LoanCommand> = {
     return fail('Unknown action');
   },
 };
+
+/** Give `amount` of the company's money to another company. */
+export interface GiftMoneyCommand {
+  type: 'giftMoney';
+  company: number;
+  amount: number;
+}
+
+export const giftMoneyHandler: CommandHandler<GiftMoneyCommand> = {
+  needsCompany: true,
+  category: 'gifts',
+  plan(state, ctx, cmd) {
+    const c = state.companies.get(ctx.companyId!)!;
+    const to = isInt(cmd.company) ? state.companies.get(cmd.company) : undefined;
+    if (!to) return fail('No such company');
+    if (to === c) return fail('Pick another company');
+    const { amount } = cmd;
+    if (!isInt(amount) || amount <= 0) return fail('Invalid amount');
+    return {
+      ok: true,
+      cost: amount,
+      commit: () => {
+        state.addMoney(to.id, amount, 'gifts');
+        state.addNews('finance', `${c.name} gives ${to.name} £${amount.toLocaleString('en-GB')}`, { company: c.id });
+        return { dirtyChunks: new Set<number>() };
+      },
+    };
+  },
+};
