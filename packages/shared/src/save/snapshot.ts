@@ -476,6 +476,7 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState, v
     serviceInterval: typeof t.serviceInterval === 'number' ? Math.max(30, Math.min(800, Math.round(t.serviceInterval))) : undefined,
     oldWarned: t.oldWarned === true || undefined,
     brakeFail: Math.max(0, Math.floor(num(t.brakeFail, 0))) || undefined,
+    ranRedAt: typeof t.ranRedAt === 'number' ? t.ranRedAt : undefined,
   };
 }
 

@@ -706,7 +706,7 @@ export class GameState {
     this.removedStations.add(id);
   }
 
-  addNews(kind: NewsKind, text: string, extra: { company?: number; tile?: number } = {}): NewsItem {
+  addNews(kind: NewsKind, text: string, extra: { company?: number; tile?: number; detail?: string } = {}): NewsItem {
     const item: NewsItem = { id: this.nextNewsId++, date: this.date, kind, text, ...extra };
     this.news.push(item);
     if (this.news.length > NEWS_HISTORY) this.news.splice(0, this.news.length - NEWS_HISTORY);

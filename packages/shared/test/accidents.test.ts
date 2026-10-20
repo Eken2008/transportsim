@@ -68,6 +68,8 @@ describe('rail accidents', () => {
       if (severity === 'realistic') {
         expect(state.trains.size).toBe(0);
         expect(state.rail.wreckTiles().length).toBeGreaterThan(0);
+        // The report says why: the signal faces one way only.
+        expect(state.news.find((n) => n.kind === 'accident')?.detail).toMatch(/met head-on: no signal kept them apart\. .* Signal both directions/);
         expect(company.money).toBeLessThan(money - ACCIDENT_RULES.realistic.base);
         expect(company.finances.at(-1)!.ledger.incidents).toBeLessThan(0);
         // Wreckage is cleared after the cleanup period
@@ -102,6 +104,7 @@ describe('rail accidents', () => {
     expect(failed).toBe(true);
     expect(state.trains.has(t.id)).toBe(false);
     expect(state.news.at(-1)?.text).toContain('collide');
+    expect(state.news.at(-1)?.detail).toBe(`${t.name}'s brakes had failed, so it could not stop and ran past a red signal.`);
   });
 
   test('realistic: a train coasting into a tight corner far too fast derails', () => {
@@ -123,6 +126,7 @@ describe('rail accidents', () => {
       expect(pushed).toBe(true);
       const derailed = s.state.news.some((n) => n.kind === 'accident' && n.text.includes('derails'));
       expect(derailed).toBe(accidents === 'realistic');
+      if (derailed) expect(s.state.news.at(-1)?.detail).toMatch(/^It took a curve for \d+ km\/h at \d+ km\/h: its brakes had failed\.$/);
     }
   });
 });

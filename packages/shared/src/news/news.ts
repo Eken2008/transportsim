@@ -10,6 +10,8 @@ export interface NewsItem {
   company?: number;
   /** A tile to look at, if any. */
   tile?: number;
+  /** More on what happened (an accident's cause), shown under the text. */
+  detail?: string;
 }
 
 /** News items kept in the game state (and saves). */
@@ -28,6 +30,7 @@ export function sanitizeNews(input: unknown): NewsItem[] {
       text: String(n.text ?? '').slice(0, 200),
       company: typeof n.company === 'number' ? n.company : undefined,
       tile: typeof n.tile === 'number' ? n.tile : undefined,
+      detail: typeof n.detail === 'string' ? n.detail.slice(0, 400) : undefined,
     });
   }
   return out;

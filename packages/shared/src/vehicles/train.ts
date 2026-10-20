@@ -178,6 +178,8 @@ export interface Train {
   oldWarned?: boolean;
   /** Ticks left coasting without brakes (a brake failure: signals are passed at danger). */
   brakeFail?: number;
+  /** Tick it last ran past a red signal (during a brake failure), for accident reports. */
+  ranRedAt?: number;
 }
 
 export interface TrainStats {

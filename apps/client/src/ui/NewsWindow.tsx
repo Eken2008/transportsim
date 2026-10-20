@@ -19,6 +19,7 @@ function NewsLine({ n }: { n: NewsItem }) {
       <span aria-hidden>{ICONS[n.kind]}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div>{n.text}</div>
+        {n.detail && <div className="small">Why: {n.detail}</div>}
         <div className="muted small">
           {formatDate(n.date)}
           {company && (
@@ -79,7 +80,7 @@ export function NewsTicker() {
   }, [item]);
   if (!visible) return null;
   return (
-    <button className="panel news-ticker" onClick={() => (visible.tile !== undefined ? look(visible) : openWindow({ kind: 'news', id: 0 }))} title="Click to see where; all news in 📰 News">
+    <button className="panel news-ticker" onClick={() => (visible.tile !== undefined ? look(visible) : openWindow({ kind: 'news', id: 0 }))} title={`${visible.detail ? `Why: ${visible.detail}\n` : ''}Click to see where; all news in 📰 News`}>
       <span aria-hidden>{ICONS[visible.kind]}</span> {visible.text}
     </button>
   );

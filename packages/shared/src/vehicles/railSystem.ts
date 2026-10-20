@@ -935,7 +935,10 @@ export class RailSystem {
   /** Realistic accidents: a train far over the curve limit under it derails. */
   private checkDerail(t: Train): void {
     if (!this.state.incidents.rules?.derail || t.speed < 40) return;
-    if (t.speed > this.curveLimitUnder(t) * DERAIL_OVERSPEED) this.state.incidents.derail(t);
+    const curve = this.curveLimitUnder(t);
+    if (t.speed <= curve * DERAIL_OVERSPEED) return;
+    const why = t.brakeFail ? ': its brakes had failed' : '';
+    this.state.incidents.derail(t, `It took a curve for ${Math.round(curve)} km/h at ${Math.round(t.speed)} km/h${why}.`);
   }
 
   /** Acceleration in km/h per second from tractive effort, resistance and gradient. */
@@ -1024,7 +1027,7 @@ export class RailSystem {
         this.occupiedByOther(next, t.id) &&
         segmentsConnect(map, head, next, this.accessOf(t))
       ) {
-        this.state.incidents.collide(t, next);
+        this.state.incidents.collide(t, next, this.collisionCause(t, next));
         return;
       }
       if (
@@ -1054,7 +1057,14 @@ export class RailSystem {
 
   /** May the head move from `head` onto `next` (route[0])? Signals and reservations decide. */
   private mayEnter(t: Train, head: number, next: number): boolean {
-    if (t.brakeFail) return true; // no brakes: past the signal regardless
+    if (this.signalsLetIn(t, head, next)) return true;
+    if (!t.brakeFail) return false;
+    // No brakes: past the signal regardless.
+    if (this.signalFacing(head)) t.ranRedAt = this.state.tick;
+    return true;
+  }
+
+  private signalsLetIn(t: Train, head: number, next: number): boolean {
     if (this.signalFacing(head)) {
       const kind = this.signalKind(head);
       if (kind === 'path') return this.reservedBy(next) === t.id || this.tryReserve(t, 0, true);
@@ -1064,6 +1074,44 @@ export class RailSystem {
     }
     if (t.pbs && this.reservedBy(next) !== t.id) return this.tryReserve(t, 0, true);
     return true;
+  }
+
+  /** Why `t`, about to move onto `next`, runs into what is there (for the accident report). */
+  collisionCause(t: Train, next: number): string {
+    const head = t.path[0]!;
+    const recent = (x: Train) => x.ranRedAt !== undefined && this.state.tick - x.ranRedAt < 2 * TICKS_PER_DAY;
+    if (t.brakeFail) {
+      const red = this.signalFacing(head) || recent(t);
+      return `${t.name}'s brakes had failed, so it could not stop${red ? ' and ran past a red signal' : ''}.`;
+    }
+    const others = this.trainsOn(next, t.id).map((id) => this.state.trains.get(id)!);
+    const red = others.find(recent);
+    if (red) return `${red.name} had run past a red signal after its brakes failed, into ${t.name}'s way.`;
+    const sight = this.state.incidents.rules?.sight ?? 0;
+    const need = brakingDistance(t.speed);
+    const tooFast = `At ${Math.round(t.speed)} km/h it needed ${Math.max(1, Math.round(need))} tiles to stop, but drivers only see ${sight} tiles ahead.`;
+    const other = others[0];
+    if (!other) return `${t.name} came upon the wreckage of an earlier accident with no signal before it. ${tooFast}`;
+    const stop = need > sight ? tooFast : `${other.name} got in its way too close for it to stop.`;
+    const theirs = other.path.find((s) => pieceKey(s) === pieceKey(next));
+    const way = theirs === next ? 'same' : theirs === segReverse(next) ? 'opposite' : 'across';
+    // A signal (or path reservation) gave `t` this stretch: the other train got in where no signal faces it.
+    const block = this.blockOf.get(pieceKey(next));
+    const cleared = (block !== undefined && this.claims.get(block) === t.id) || this.reservedBy(next) === t.id;
+    if (cleared && way === 'opposite')
+      return `A signal let ${t.name} onto the line, but ${other.name} came the other way with no signal facing it. Signal both directions, or make the line one-way.`;
+    if (cleared) return `A signal let ${t.name} onto the line, but ${other.name} joined it at a junction with no signal facing it.`;
+    if (way === 'same') return `${t.name} ran into the back of ${other.name}: no signal stood between them. ${stop}`;
+    if (way === 'opposite') {
+      // Head-on, both trains' stopping distances count.
+      const both = need + brakingDistance(other.speed);
+      const closing =
+        both > sight
+          ? `At ${Math.round(t.speed)} and ${Math.round(other.speed)} km/h they needed ${Math.max(1, Math.round(both))} tiles to stop, but drivers only see ${sight} tiles ahead.`
+          : `${other.name} got in its way too close for it to stop.`;
+      return `${t.name} and ${other.name} met head-on: no signal kept them apart. ${closing} Signal both directions, or make the line one-way.`;
+    }
+    return `${t.name} hit ${other.name} where their tracks cross or join, with no signal before it. ${stop}`;
   }
 
   private trimTail(t: Train): void {
