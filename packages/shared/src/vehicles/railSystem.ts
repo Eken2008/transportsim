@@ -12,7 +12,7 @@ import {
   segmentExists,
   segmentsConnect,
 } from '../rail/network.ts';
-import { depotGoal, extendThroughPlatform, findPath, stationGoal, type PathGoal } from '../rail/pathfinder.ts';
+import { depotGoal, extendThroughPlatform, findPath, findTurnaround, stationGoal, type PathGoal } from '../rail/pathfinder.ts';
 import { BRIDGE_TYPES, headInfo, otherHead, segHeights, spanOver } from '../rail/structures.ts';
 import { EDGE_PIECES, isLinked } from '../rail/links.ts';
 import {
@@ -132,6 +132,8 @@ export class RailSystem {
   private blockRes = new Map<number, Map<number, number>>();
   /** block → segments leaving it through an exit or combo signal (for entry signals). */
   private blockExits = new Map<number, number[]>();
+  /** Blocks with a path signal at their edge: trains leaving a depot into them reserve a path. */
+  private pathBlocks = new Set<number>();
   /** Called when a train arrives at a platform (cargo handling hooks in here). */
   onArrive: ((t: Train, station: number) => void) | null = null;
   /** Called every tick while loading; return true to keep waiting (e.g. full load). */
@@ -612,6 +614,19 @@ export class RailSystem {
         else this.blockExits.set(b, [seg(tile, td)]);
       }
     }
+    this.pathBlocks.clear();
+    for (const tile of this.state.signalTiles) {
+      if (signalKindOf(sigs[tile]!) !== 'path') continue;
+      for (let td = 0; td < 12; td++) {
+        if (!((sigs[tile]! >> td) & 1)) continue;
+        // Both the block before the signal and the block beyond it.
+        const s = seg(tile, td);
+        for (const n of [s, ...nextSegments(map, s, this.state.blockAccess)]) {
+          const b = this.blockOf.get(pieceKey(n));
+          if (b !== undefined) this.pathBlocks.add(b);
+        }
+      }
+    }
     this.blocksFor = this.state.trackVersion;
     this.rebuildOccupancy();
   }
@@ -769,18 +784,37 @@ export class RailSystem {
     }
   }
 
-  /** Move a train waiting inside its depot onto the line if the block beyond the door is free. */
+  /**
+   * Move a train waiting inside its depot onto the line if the block beyond the door is free.
+   * Into a path-signalled block the door acts as a path signal instead: it opens once the train
+   * has reserved its way to the next signal, wherever else in the block other trains are.
+   */
   private tryLeaveDepot(t: Train): void {
     const map = this.state.map;
     const s = depotExitSegment(map, t.depot);
     if (this.occupiedByOther(s, t.id)) return;
     const beyond = nextSegments(map, s, this.accessOf(t)).map((n) => this.blockOf.get(pieceKey(n)));
-    if (beyond.some((b) => b !== undefined && this.blockBusy(b, t.id))) return;
-    for (const b of beyond) if (b !== undefined) this.claims.set(b, t.id);
+    const pbs = beyond.some((b) => b !== undefined && this.pathBlocks.has(b));
+    if (pbs) {
+      const target = this.targetKey(t);
+      if (target >= 0 && t.routeFor !== routeKey(this.state.trackVersion, target) && this.state.tick >= t.replanAt) this.plan(t);
+      if (!t.route.length || !segmentsConnect(map, s, t.route[0]!, this.accessOf(t))) return;
+      if (!this.tryReserve(t, 0, true)) {
+        // The way is taken: wait, and look for another way with the traffic in a while.
+        if (this.state.tick >= t.replanAt) {
+          t.routeFor = -1;
+          t.replanAt = this.state.tick + REPLAN_DELAY;
+        }
+        return;
+      }
+    } else {
+      if (beyond.some((b) => b !== undefined && this.blockBusy(b, t.id))) return;
+      for (const b of beyond) if (b !== undefined) this.claims.set(b, t.id);
+    }
     t.path = [s];
     t.pos = 0;
     t.depot = -1;
-    t.pbs = false;
+    t.pbs = pbs;
     t.departedAt = this.state.tick;
     this.occupy(t, s);
     this.state.dirtyTrains.add(t.id);
@@ -1269,14 +1303,27 @@ export class RailSystem {
       return;
     }
     this.dropReservations(t, true);
-    let path = this.findRoute(t, t.path[0]!, goal);
-    if (!path && t.speed < 0.5) {
+    // A train still waiting inside its depot plans from the door.
+    const head = t.path[0] ?? depotExitSegment(this.state.map, t.depot);
+    let path = this.findRoute(t, head, goal);
+    if (!path && t.speed < 0.5 && t.path.length) {
       // Try the other way round: plan from the tail segment, reversed.
       const tail = segReverse(t.path[t.path.length - 1]!);
       const back = this.findRoute(t, tail, goal);
       if (back && this.reverse(t)) {
         path = back;
         t.routeFor = routeKey(this.state.trackVersion, key);
+      }
+    }
+    if (!path && t.speed < 0.5) {
+      // Neither way leads there from here (say, the train is coming out of a depot facing away
+      // from it): drive on until the whole train is clear, stop, and reverse there.
+      const penalty = (s: number) => this.routePenalty(s, t.id);
+      const out = findTurnaround(this.state.map, head, goal, this.statsOf(t).length, { access: this.accessOf(t), penalty });
+      if (out) {
+        foundRoute(this.state, t);
+        t.route = out;
+        return;
       }
     }
     if (!path) {

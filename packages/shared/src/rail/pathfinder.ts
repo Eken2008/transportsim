@@ -1,6 +1,6 @@
 import type { GameMap } from '../world/map.ts';
 import { TileType } from '../world/constants.ts';
-import { nextSegments, segLength, segTd, segTile, type Access } from './network.ts';
+import { nextSegments, segLength, segReverse, segTd, segTile, type Access } from './network.ts';
 import { TD_HEADING } from './track.ts';
 import { MinHeap } from '../util/heap.ts';
 
@@ -59,6 +59,71 @@ export function findPath(map: GameMap, start: number, goal: PathGoal, opts: Path
       g.set(n, cost);
       parent.set(n, cur);
       open.push(cost + h0(n), n);
+    }
+  }
+  return null;
+}
+
+/** Extra cost (tiles) of stopping to reverse on the way. */
+const REVERSE_PENALTY = 4;
+
+/**
+ * A* for a train of `length` tiles that can only reach `goal` by turning round: drive on from
+ * `start` until the whole train is past where it began (clear of a depot, say), stop and
+ * reverse. Returns the segments to drive up to the reversal point, or null.
+ */
+export function findTurnaround(map: GameMap, start: number, goal: PathGoal, length: number, opts: PathOptions): number[] | null {
+  const maxNodes = opts.maxNodes ?? 60_000;
+  // Nodes are segment * 2 + phase: 0 while driving out, 1 after reversing.
+  const g = new Map<number, number>();
+  const driven = new Map<number, number>();
+  const parent = new Map<number, number>();
+  const open = new MinHeap();
+  const w = map.width;
+  const h = (node: number) => {
+    const t = segTile(Math.floor(node / 2));
+    const x = t % w;
+    return goal.estimate(x, (t - x) / w);
+  };
+  const root = start * 2;
+  const push = (node: number, from: number, cost: number) => {
+    const old = g.get(node);
+    if (old !== undefined && old <= cost) return false;
+    g.set(node, cost);
+    parent.set(node, from);
+    open.push(cost + h(node), node);
+    return true;
+  };
+  g.set(root, 0);
+  driven.set(root, 0);
+  open.push(h(root), root);
+  const next: number[] = [];
+  let expanded = 0;
+  while (open.size > 0) {
+    const cur = open.pop();
+    const s = Math.floor(cur / 2);
+    const phase = cur % 2;
+    if (phase === 1 && goal.isGoal(s)) {
+      const path: number[] = [];
+      for (let n = cur; n !== root; n = parent.get(n)!) if (n % 2 === 0) path.push(n / 2);
+      return path.reverse();
+    }
+    if (++expanded > maxNodes) return null;
+    const gc = g.get(cur)!;
+    if (phase === 0 && driven.get(cur)! >= length + 1e-6) {
+      // The whole train is out: reverse here. The new head is the tail's segment, turned round.
+      let n = cur;
+      for (let covered = segLength(s); covered < length; covered += segLength(Math.floor(n / 2))) n = parent.get(n)!;
+      push(segReverse(Math.floor(n / 2)) * 2 + 1, cur, gc + REVERSE_PENALTY);
+    }
+    const heading = TD_HEADING[segTd(s)]!;
+    for (const n of nextSegments(map, s, opts.access, next)) {
+      // Turning round inside a depot would be parking there.
+      if (phase === 0 && map.layers.type[segTile(n)] === TileType.Depot) continue;
+      let cost = gc + segLength(n);
+      if (TD_HEADING[segTd(n)] !== heading) cost += CURVE_PENALTY;
+      if (opts.penalty) cost += opts.penalty(n);
+      if (push(n * 2 + phase, cur, cost) && phase === 0) driven.set(n * 2, driven.get(cur)! + segLength(n));
     }
   }
   return null;
