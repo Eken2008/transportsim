@@ -4,6 +4,7 @@ import { structuresAt } from '../rail/structures.ts';
 import { EDGE_DX, EDGE_DY, Edge, OPPOSITE_EDGE, Piece, edgeHeight } from '../rail/track.ts';
 import { WAYPOINT_FLAG } from '../rail/waypoint.ts';
 import type { GameState } from '../sim/state.ts';
+import { REPUTATION_ROAD_LOSS, applyDemolition, demolitionVerdict, stationRefusal } from '../town/reputation.ts';
 import { ROADSTOP_TRUCK, ROAD_EDGE_BITS, ROAD_ONE_WAY, ROAD_ONE_WAY_REVERSED, isStraightRoad } from '../town/road.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
@@ -19,7 +20,7 @@ export interface BuildRoadCommand {
   y1: number;
 }
 
-/** Remove the road between consecutive tiles of a straight line (own roads only). */
+/** Remove the road between consecutive tiles of a straight line (own roads, and towns' streets with the council's leave). */
 export interface RemoveRoadCommand {
   type: 'removeRoad';
   x0: number;
@@ -170,6 +171,7 @@ export const removeRoadHandler: CommandHandler<RemoveRoadCommand> = {
     if (typeof l === 'string') return fail(l);
     const { tiles, edge } = l;
     const remove = new Map<number, number>();
+    const losses = new Map<number, number>();
     let cost = 0;
     for (let k = 0; k < tiles.length; k++) {
       const i = tiles[k]!;
@@ -179,18 +181,25 @@ export const removeRoadHandler: CommandHandler<RemoveRoadCommand> = {
       if (type !== TileType.Road && !crossing) continue;
       const have = map.layers.data[i]! & 0xf & bits;
       if (!have) continue;
-      if (type === TileType.Road && map.layers.owner[i] !== ctx.companyId) return fail(`Town and other companies' roads can't be removed ${at(map, i)}`);
+      const owner = map.layers.owner[i];
+      if (type === TileType.Road && owner !== ctx.companyId && owner !== OWNER_NONE) return fail(`Other companies' roads can't be removed ${at(map, i)}`);
       if (crossing && map.layers.owner[i] !== ctx.companyId) return fail(`That crossing belongs to another company ${at(map, i)}`);
       if (state.roadBusy(i)) return fail(`A road vehicle is in the way ${at(map, i)}`);
       remove.set(i, have);
       cost += COSTS.roadRemove;
+      const town = map.layers.town[i]! - 1;
+      if (type === TileType.Road && owner === OWNER_NONE && state.towns.has(town)) losses.set(town, (losses.get(town) ?? 0) + REPUTATION_ROAD_LOSS);
     }
-    if (remove.size === 0) return fail('No road of yours there');
+    if (remove.size === 0) return fail('No road to remove there');
+    const verdict = demolitionVerdict(state, ctx.companyId!, losses);
+    if ('error' in verdict) return fail(verdict.error);
     return {
       ok: true,
       cost: state.cost(cost),
+      note: verdict.note,
       commit() {
         const dirtyChunks = new Set<number>();
+        applyDemolition(state, ctx.companyId!, losses);
         let crossings = false;
         for (const [i, bits] of remove) {
           const data = map.layers.data[i]! & ~bits;
@@ -204,6 +213,7 @@ export const removeRoadHandler: CommandHandler<RemoveRoadCommand> = {
           map.touchTile(x, (i - x) / map.width, dirtyChunks);
         }
         if (crossings) state.onTrackChanged();
+        state.onRoadsChanged();
         return { dirtyChunks };
       },
     };
@@ -290,6 +300,8 @@ export const buildRoadStopHandler: CommandHandler<BuildRoadStopCommand> = {
     if (state.roadBusy(i)) return fail('A road vehicle is in the way');
     const company = ctx.companyId!;
     const join = findJoinStation(map, state.stations, company, x, y, x, y);
+    const refusal = join ? null : stationRefusal(state, company, x, y);
+    if (refusal) return fail(refusal);
     return {
       ok: true,
       cost: state.cost(COSTS.roadStop),

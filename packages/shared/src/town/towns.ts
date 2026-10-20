@@ -34,6 +34,8 @@ export interface Town {
   served?: number;
   stats?: TownStats;
   lastStats?: TownStats;
+  /** Each company's reputation with the town council (company id → -1000..1000); missing means the starting value. */
+  ratings?: Record<number, number>;
 }
 
 export type TownSize = 'small' | 'medium' | 'large';

@@ -4,6 +4,7 @@ import { structuresAt } from '../rail/structures.ts';
 import { EDGE_DX, EDGE_DY } from '../rail/track.ts';
 import { waypointName } from '../rail/waypoint.ts';
 import type { GameState } from '../sim/state.ts';
+import { stationRefusal } from '../town/reputation.ts';
 import { hasBuoy, isCanal, isRapids, isRiver, lockAxisFor, navigable } from '../water/waterways.ts';
 import { reclassifyTile } from '../world/terrain.ts';
 import { Ground, TileType, WATER_BUOY, WATER_CANAL, WATER_RAPIDS, WATER_RIVER } from '../world/constants.ts';
@@ -167,6 +168,8 @@ export const buildDockHandler: CommandHandler<BuildDockCommand> = {
     const edge = isInt(cmd.edge) ? cmd.edge : edges[0]!;
     if (!edges.includes(edge)) return fail('There is no open water on that side');
     const join = findJoinStation(map, state.stations, company, x, y, x, y);
+    const refusal = join ? null : stationRefusal(state, company, x, y);
+    if (refusal) return fail(refusal);
     return {
       ok: true,
       cost: state.cost(WATER_COSTS.dock + clearCost(map, x, y)),

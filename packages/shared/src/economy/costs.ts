@@ -21,6 +21,9 @@ export const COSTS = {
   roadRemove: 40,
   roadStop: 900,
   roadDepot: 1_500,
+  /** Demolishing a town's house: a base and so much per resident. */
+  houseRemove: 400,
+  houseRemovePerResident: 20,
 } as const;
 
 /** What it costs to clear a tile of open land for building: its trees, or its field. */

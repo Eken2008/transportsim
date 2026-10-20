@@ -2,6 +2,7 @@ import { COMPANY_COLORS, COMPANY_ROLES, MAX_COMPANIES, memberOf, type Company, t
 import type { Station } from '../rail/station.ts';
 import { emptyTownStats, generateTowns, type Town } from '../town/towns.ts';
 import { growTown } from '../town/growth.ts';
+import { monthlyReputation } from '../town/reputation.ts';
 import { industryMonthly } from '../economy/industryChanges.ts';
 import { Random } from '../util/random.ts';
 import { CargoSystem } from '../economy/cargoSystem.ts';
@@ -273,6 +274,7 @@ export class GameState {
       this.historyChanged.add(c.id);
     }
     industryMonthly(this, this.industryRng, ymdFromDays(this.date).year);
+    monthlyReputation(this);
     if (ymdFromDays(this.date).month % 3 === 0) this.onNewQuarter();
   }
 
@@ -431,6 +433,11 @@ export class GameState {
     refreshStations(this, stations);
     this.onTrackChanged();
     this.companies.delete(id);
+    for (const t of this.towns.values()) {
+      if (t.ratings?.[id] === undefined) continue;
+      delete t.ratings[id];
+      this.dirtyTowns.add(t.id);
+    }
     for (const p of this.players.values()) if (p.companyId === id) p.companyId = null;
   }
 

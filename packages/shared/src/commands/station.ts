@@ -15,6 +15,8 @@ import type { GameState } from '../sim/state.ts';
 import { removeRoadStop, roadTileClearCost } from './road.ts';
 import { airportClearCost, removeAirport } from './airport.ts';
 import { removeWaterTile, waterClearCost } from './water.ts';
+import { houseType } from '../town/houses.ts';
+import { REPUTATION_ROAD_LOSS, applyDemolition, demolitionVerdict, houseRemovalLoss, stationRefusal } from '../town/reputation.ts';
 import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
@@ -40,7 +42,7 @@ export interface BuildDepotCommand {
   railType?: number;
 }
 
-/** Bulldoze own track, stations and depots, and trees, in a rectangle. */
+/** Bulldoze own track, stations and depots, trees, and towns' houses and streets, in a rectangle. */
 export interface ClearAreaCommand {
   type: 'clearArea';
   x0: number;
@@ -99,6 +101,8 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
 
     // Join an adjacent station of ours, if any.
     const join = findJoinStation(map, state.stations, company, x, y, x + w - 1, y + h - 1);
+    const refusal = join ? null : stationRefusal(state, company, x, y);
+    if (refusal) return fail(refusal);
 
     return {
       ok: true,
@@ -264,7 +268,13 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
     if (!map.inBounds(ax, ay) || !map.inBounds(bx, by)) return fail('Out of bounds');
     if (bx - ax >= MAX_CLEAR || by - ay >= MAX_CLEAR) return fail('Area too large');
     const company = ctx.companyId!;
-    const jobs: { i: number; kind: 'trees' | 'rail' | 'station' | 'depot' | 'structure' | 'airport' | 'water' }[] = [];
+    const jobs: { i: number; kind: 'trees' | 'rail' | 'station' | 'depot' | 'structure' | 'airport' | 'water' | 'house' | 'street' }[] = [];
+    /** Reputation each town's council takes off for its houses and streets. */
+    const losses = new Map<number, number>();
+    const lose = (i: number, loss: number) => {
+      const town = map.layers.town[i]! - 1;
+      if (state.towns.has(town)) losses.set(town, (losses.get(town) ?? 0) + loss);
+    };
     const queued = new Set<number>();
     let cost = 0;
     let blocked: string | null = null;
@@ -352,18 +362,47 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
           }
           jobs.push({ i, kind: 'depot' });
           cost += COSTS.depotRemove;
+        } else if (type === TileType.House) {
+          const data = map.layers.data[i]!;
+          jobs.push({ i, kind: 'house' });
+          cost += COSTS.houseRemove + COSTS.houseRemovePerResident * houseType(data).population;
+          lose(i, houseRemovalLoss(data));
+        } else if (type === TileType.Road && map.layers.owner[i] === OWNER_NONE) {
+          if (state.roadBusy(i)) {
+            blocked = `A road vehicle is in the way (${x},${y})`;
+            continue;
+          }
+          jobs.push({ i, kind: 'street' });
+          cost += COSTS.roadRemove * 2;
+          lose(i, REPUTATION_ROAD_LOSS);
         }
       }
     }
     if (jobs.length === 0) return fail(blocked ?? 'Nothing here to clear');
+    const verdict = demolitionVerdict(state, company, losses);
+    if ('error' in verdict) return fail(verdict.error);
 
     return {
       ok: true,
       cost: state.cost(cost),
+      note: verdict.note,
       commit() {
         const dirtyChunks = new Set<number>();
         const stations = new Set<number>();
+        applyDemolition(state, company, losses);
         for (const { i, kind } of jobs) {
+          if (kind === 'house') {
+            const town = state.towns.get(map.layers.town[i]! - 1);
+            if (town) {
+              town.houses--;
+              town.population -= houseType(map.layers.data[i]!).population;
+              state.dirtyTowns.add(town.id);
+            }
+            map.setClear(i, Ground.Rough, 0);
+            const x = i % map.width;
+            map.touchTile(x, (i - x) / map.width, dirtyChunks);
+            continue;
+          }
           if (kind === 'airport') {
             const st = map.layers.data[i]!;
             removeAirport(state, st);
@@ -386,7 +425,7 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
           }
         }
         refreshStations(state, stations);
-        if (jobs.some((j) => j.kind !== 'trees')) state.onTrackChanged();
+        if (jobs.some((j) => j.kind !== 'trees' && j.kind !== 'house')) state.onTrackChanged();
         return { dirtyChunks };
       },
     };

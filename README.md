@@ -5,6 +5,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > Status: all milestones of the [plan](docs/PLAN.md) (M0–M8) are in.
 >
 > - **World:** procedural terrain with rivers running from the hills to the sea, towns, roads and houses that grow with good service; terraforming.
+> - **Towns:** each town council keeps a reputation for every company. Bulldozing the town's houses and streets costs it, and busy, well-rated stations win it back. With a poor reputation the council refuses new stations, and it refuses demolition that would leave the company very poor.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
 > - **Stations and depots:** multi-platform stations and depots.
 > - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.

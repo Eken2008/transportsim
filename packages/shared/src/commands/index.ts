@@ -225,7 +225,7 @@ const PERMISSION_ERRORS = {
 } as const;
 
 export type CommandResult =
-  | { ok: true; cost: number; effects: CommandEffects | null }
+  | { ok: true; cost: number; effects: CommandEffects | null; note?: string }
   | { ok: false; error: string };
 
 /**
@@ -253,7 +253,7 @@ export function executeCommand(
   if (company && plan.cost > 0 && company.money < plan.cost) {
     return { ok: false, error: `Not enough money (need £${plan.cost.toLocaleString('en-GB')})` };
   }
-  if (dryRun) return { ok: true, cost: plan.cost, effects: null };
+  if (dryRun) return { ok: true, cost: plan.cost, effects: null, note: plan.note };
   const mode = typeof handler.mode === 'function' ? handler.mode(cmd, state) : handler.mode;
   const effects = plan.commit();
   if (company && plan.cost !== 0) {

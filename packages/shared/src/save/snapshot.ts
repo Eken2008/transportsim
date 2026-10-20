@@ -5,6 +5,7 @@ import { linkAllByGeometry } from '../rail/links.ts';
 import type { Train } from '../vehicles/train.ts';
 import { HEIGHT_SCALE, TileType, WATER_BUOY } from '../world/constants.ts';
 import { recountTowns, type Town, type TownStats } from '../town/towns.ts';
+import { REPUTATION_MAX, REPUTATION_MIN } from '../town/reputation.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
@@ -158,6 +159,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       growth: typeof t.growth === 'number' ? Math.max(0, Math.min(1, t.growth)) : undefined,
       stats: townStats(t.stats),
       lastStats: townStats(t.lastStats),
+      ratings: townRatings(t.ratings),
     });
   }
   recountTowns(map, state.towns.values());
@@ -318,6 +320,15 @@ function townStats(v: unknown): TownStats | undefined {
   if (!v || typeof v !== 'object') return undefined;
   const s = v as Partial<TownStats>;
   return { passengers: num(s.passengers, 0), mail: num(s.mail, 0), goods: num(s.goods, 0), food: num(s.food, 0) };
+}
+
+function townRatings(v: unknown): Record<number, number> | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const out: Record<number, number> = {};
+  for (const [k, r] of Object.entries(v)) {
+    if (/^\d+$/.test(k) && typeof r === 'number' && Number.isFinite(r)) out[Number(k)] = Math.round(Math.max(REPUTATION_MIN, Math.min(REPUTATION_MAX, r)));
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 const PHASES: AirPhase[] = ['taxi', 'gate', 'hold', 'takeoff', 'flying', 'holding', 'landing'];

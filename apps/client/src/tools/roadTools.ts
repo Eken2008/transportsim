@@ -56,7 +56,7 @@ export class RoadTool implements Tool {
         height: client.world?.map.cornerHeight(hit.cornerX, hit.cornerY) ?? 0,
         cost: r?.ok ? r.cost : undefined,
         error: r && !r.ok ? r.error : undefined,
-        info: this.start ? undefined : remove ? 'Drag along a road to remove it' : 'Drag to build a straight road',
+        info: this.start ? (r?.ok ? r.note : undefined) : remove ? 'Drag along a road to remove it' : 'Drag to build a straight road',
       },
     });
   }

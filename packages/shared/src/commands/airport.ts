@@ -3,6 +3,7 @@ import { COSTS, clearCost } from '../economy/costs.ts';
 import { findJoinStation, recomputeStationExtent, stationName } from '../rail/station.ts';
 import { structuresAt } from '../rail/structures.ts';
 import type { GameState } from '../sim/state.ts';
+import { stationRefusal } from '../town/reputation.ts';
 import { Ground, TileType } from '../world/constants.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
@@ -39,6 +40,8 @@ export const buildAirportHandler: CommandHandler<BuildAirportCommand> = {
     const company = ctx.companyId!;
     const join = findJoinStation(map, state.stations, company, x, y, x + t.w - 1, y + t.h - 1);
     if (join?.airport) return fail(`${join.name} already has an airport`);
+    const refusal = join ? null : stationRefusal(state, company, x, y);
+    if (refusal) return fail(refusal);
     return {
       ok: true,
       cost: state.cost(cost),

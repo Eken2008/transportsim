@@ -37,6 +37,7 @@ export * from './town/road.ts';
 export * from './town/houses.ts';
 export * from './town/towns.ts';
 export * from './town/growth.ts';
+export * from './town/reputation.ts';
 export * from './economy/costs.ts';
 export * from './economy/finance.ts';
 export * from './economy/rating.ts';

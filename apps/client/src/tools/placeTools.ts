@@ -51,7 +51,7 @@ abstract class PreviewTool implements Tool {
     this.ghost.show(d.tiles, r?.ok ? (d.color ?? OK) : BAD, d.arrow);
     const height = client.world?.map.cornerHeight(hit.cornerX, hit.cornerY) ?? 0;
     useApp.setState({
-      hover: { x: hit.tileX, y: hit.tileY, height, cost: r?.ok ? r.cost : undefined, error: r && !r.ok ? r.error : undefined },
+      hover: { x: hit.tileX, y: hit.tileY, height, cost: r?.ok ? r.cost : undefined, error: r && !r.ok ? r.error : undefined, info: r?.ok ? r.note : undefined },
     });
   }
 
@@ -172,7 +172,7 @@ export class WaypointTool extends PreviewTool {
   }
 }
 
-/** Drag a rectangle to bulldoze your own track, stations, depots and trees. */
+/** Drag a rectangle to bulldoze your own track, stations, depots, trees, and towns' houses and streets. */
 export class BulldozeTool extends PreviewTool {
   protected start: { x: number; y: number } | null = null;
 

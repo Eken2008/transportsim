@@ -14,7 +14,7 @@ export interface CommandEffects {
 }
 
 export type PlanResult =
-  | { ok: true; cost: number; commit: () => CommandEffects }
+  | { ok: true; cost: number; commit: () => CommandEffects; /** Shown with the preview, e.g. what it does to a town's reputation. */ note?: string }
   | { ok: false; error: string };
 
 export interface CommandHandler<C> {
