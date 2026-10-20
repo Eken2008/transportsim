@@ -638,7 +638,7 @@ input[type='range'] {
 .vehicle-view {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 2 / 1;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
   background: var(--bg);
@@ -649,6 +649,14 @@ input[type='range'] {
   padding: 5px 8px;
   border-radius: 6px;
   background: var(--panel-2);
+}
+.vehicle-actions {
+  margin-top: 8px;
+  gap: 4px;
+}
+.vehicle-actions button {
+  padding: 3px 8px;
+  font-size: 12px;
 }
 .kv {
   display: grid;

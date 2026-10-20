@@ -296,7 +296,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
         <b style={{ flex: 1 }}>{trainStatus(t)}</b>
         <span className="mono muted">{Math.round(motion?.speed ?? 0)} km/h</span>
       </div>
-      <div className="row wrap" style={{ marginTop: 8 }}>
+      <div className="row wrap vehicle-actions">
         {mine &&
           (t.status === 'depot' || t.status === 'stopped' ? (
             <button className="primary" onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>

@@ -33,7 +33,7 @@ import { catchmentRect, rectTiles } from '../game/catchment.ts';
 
 const SKY = new THREE.Color('#a8c8e6');
 /** Camera distance and tilt of the vehicle views in vehicle windows. */
-const VIEW_DISTANCE = 10;
+const VIEW_DISTANCE = 6;
 const VIEW_PITCH = 0.75;
 
 /** Draw a shared material normally, see-through or not at all. */
