@@ -1,4 +1,4 @@
-import { COSTS } from '../economy/costs.ts';
+import { COSTS, clearCost } from '../economy/costs.ts';
 import { findJoinStation, recomputeStationExtent, stationName } from '../rail/station.ts';
 import { structuresAt } from '../rail/structures.ts';
 import { EDGE_DX, EDGE_DY } from '../rail/track.ts';
@@ -84,7 +84,7 @@ export const buildCanalHandler: CommandHandler<BuildCanalCommand> = {
         if (!map.isFlat(x, y)) return fail(`Canals need flat land (${x},${y})`);
         if (structuresAt(map, i).some((s) => s.kind === 'tunnel' && s.level <= map.cornerHeight(x, y))) return fail(`A tunnel is in the way (${x},${y})`);
         tiles.push(i);
-        cost += WATER_COSTS.canal + map.treeCount(x, y) * COSTS.clearTree;
+        cost += WATER_COSTS.canal + clearCost(map, x, y);
       }
     }
     if (tiles.length === 0) return fail('Already water');
@@ -120,7 +120,7 @@ export const buildLockHandler: CommandHandler<BuildLockCommand> = {
     if (axis < 0) return fail('Locks go on a straight slope, one level high');
     return {
       ok: true,
-      cost: state.cost(WATER_COSTS.lock + map.treeCount(x, y) * COSTS.clearTree),
+      cost: state.cost(WATER_COSTS.lock + clearCost(map, x, y)),
       commit() {
         map.setClear(i, Ground.Grass, 0);
         map.layers.type[i] = TileType.Lock;
@@ -166,7 +166,7 @@ export const buildDockHandler: CommandHandler<BuildDockCommand> = {
     const join = findJoinStation(map, state.stations, company, x, y, x, y);
     return {
       ok: true,
-      cost: state.cost(WATER_COSTS.dock + map.treeCount(x, y) * COSTS.clearTree),
+      cost: state.cost(WATER_COSTS.dock + clearCost(map, x, y)),
       commit() {
         let st = join;
         if (!st) {

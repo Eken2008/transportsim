@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  COSTS,
   DEFAULT_SETTINGS,
   Edge,
   GameMap,
   GameState,
+  Ground,
   Piece,
   ROAD_E,
   ROAD_W,
@@ -101,6 +103,16 @@ describe('track commands', () => {
     // Re-building everything is "Already built"
     const again = executeCommand(state, A, { type: 'buildTrack', pieces: flat(autorailPath(1, 1, Piece.X, 10, 1)) });
     expect(again).toEqual({ ok: false, error: 'Already built' });
+  });
+
+  test('building through a field costs more than open land', () => {
+    const { state, map, A } = setup();
+    const line = (y: number) => ({ type: 'buildTrack' as const, pieces: flat([0, 1, 2, 3].map((x) => ({ x: 10 + x, y, piece: Piece.X }))) });
+    const open = executeCommand(state, A, line(10), true);
+    for (let x = 10; x < 14; x++) map.setClear(map.tileIndex(x, 20), Ground.Field, 0);
+    const field = executeCommand(state, A, line(20), true);
+    expect(open.ok && field.ok).toBe(true);
+    if (open.ok && field.ok) expect(field.cost - open.cost).toBe(state.cost(4 * COSTS.clearField));
   });
 
   test("can't build on others' track, water, or wrong slopes", () => {

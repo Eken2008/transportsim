@@ -1,4 +1,4 @@
-import { COSTS } from '../economy/costs.ts';
+import { COSTS, clearCost } from '../economy/costs.ts';
 import { findJoinStation, recomputeStationExtent, stationName } from '../rail/station.ts';
 import { structuresAt } from '../rail/structures.ts';
 import { EDGE_DX, EDGE_DY, Edge, OPPOSITE_EDGE, Piece, edgeHeight } from '../rail/track.ts';
@@ -99,7 +99,7 @@ export const buildRoadHandler: CommandHandler<BuildRoadCommand> = {
       const where = at(map, i);
       if (type === TileType.Clear) {
         if (map.tileMinHeight(x, y) < 1 || !roadFitsTile(map, x, y, axis)) return fail(`Roads can't go on that slope ${where}`);
-        cost += COSTS.road + map.treeCount(x, y) * COSTS.clearTree;
+        cost += COSTS.road + clearCost(map, x, y);
         jobs.push({ i, bits, kind: 'new' });
       } else if (type === TileType.Road) {
         if ((map.layers.data[i]! & bits) === bits) jobs.push({ i, bits, kind: 'none' });
@@ -248,7 +248,7 @@ export const buildRoadDepotHandler: CommandHandler<BuildRoadDepotCommand> = {
     const connect = n >= 0 && map.layers.type[n] === TileType.Road;
     return {
       ok: true,
-      cost: state.cost(COSTS.roadDepot + map.treeCount(x, y) * COSTS.clearTree),
+      cost: state.cost(COSTS.roadDepot + clearCost(map, x, y)),
       commit() {
         map.layers.type[i] = TileType.RoadDepot;
         map.layers.owner[i] = ctx.companyId!;

@@ -1,7 +1,12 @@
+import { Ground, TileType } from '../world/constants.ts';
+import type { GameMap } from '../world/map.ts';
+
 /** Base construction costs (before economy difficulty scaling). */
 export const COSTS = {
   terraformCorner: 400,
   clearTree: 60,
+  /** Buying up a piece of a farm's field to build on it. */
+  clearField: 700,
   railPiece: 250,
   railRemove: 40,
   levelCrossing: 600,
@@ -17,3 +22,11 @@ export const COSTS = {
   roadStop: 900,
   roadDepot: 1_500,
 } as const;
+
+/** What it costs to clear a tile of open land for building: its trees, or its field. */
+export function clearCost(map: GameMap, x: number, y: number): number {
+  const i = map.tileIndex(x, y);
+  if (map.layers.type[i] !== TileType.Clear) return 0;
+  const field = ((map.layers.data[i]! >> 3) & 0x7) === Ground.Field;
+  return map.treeCount(x, y) * COSTS.clearTree + (field ? COSTS.clearField : 0);
+}

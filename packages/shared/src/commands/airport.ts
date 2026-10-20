@@ -1,5 +1,5 @@
 import { AIRPORT_TYPES, airportKindError, airportRole, hangarTile, type AirportKind } from '../air/airports.ts';
-import { COSTS } from '../economy/costs.ts';
+import { COSTS, clearCost } from '../economy/costs.ts';
 import { findJoinStation, recomputeStationExtent, stationName } from '../rail/station.ts';
 import { structuresAt } from '../rail/structures.ts';
 import type { GameState } from '../sim/state.ts';
@@ -32,7 +32,7 @@ export const buildAirportHandler: CommandHandler<BuildAirportCommand> = {
         if (map.layers.type[i] !== TileType.Clear) return fail(`Object in the way (${tx},${ty})`);
         if (!map.isFlat(tx, ty) || map.cornerHeight(tx, ty) !== level || level < 1) return fail(`Airports need flat, level land (${tx},${ty})`);
         if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail(`A bridge is in the way (${tx},${ty})`);
-        cost += map.treeCount(tx, ty) * COSTS.clearTree;
+        cost += clearCost(map, tx, ty);
       }
     }
     const company = ctx.companyId!;

@@ -1,4 +1,4 @@
-import { COSTS } from '../economy/costs.ts';
+import { COSTS, clearCost } from '../economy/costs.ts';
 import { PIECE_COUNT, Piece, hasPiece, isDiagonal, pieceFitsSlope } from '../rail/track.ts';
 import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
 import { WAYPOINT_FLAG } from '../rail/waypoint.ts';
@@ -77,7 +77,7 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
       if (hasPiece(existing | pending, p)) continue; // already built: skip silently
 
       if (type === TileType.Clear) {
-        if (pending === 0) cost += map.treeCount(x, y) * COSTS.clearTree;
+        if (pending === 0) cost += clearCost(map, x, y);
       } else if (type === TileType.Rail) {
         if (map.layers.owner[i] !== company) return fail(`Track belongs to another company ${at(x, y)}`);
         if (map.layers.data[i]! & CROSSING_FLAG) return fail(`Can't add track to a level crossing ${at(x, y)}`);

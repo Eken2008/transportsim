@@ -1,4 +1,4 @@
-import { COSTS } from '../economy/costs.ts';
+import { COSTS, clearCost } from '../economy/costs.ts';
 import {
   MAX_PLATFORMS,
   MAX_PLATFORM_LENGTH,
@@ -78,7 +78,7 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
         if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail(`Stations can't go under a bridge (${tx},${ty})`);
         if (type === TileType.Rail && map.layers.data[i]! & 0x600) return fail(`Object in the way (${tx},${ty})`);
         if (type === TileType.Clear) {
-          cost += map.treeCount(tx, ty) * COSTS.clearTree;
+          cost += clearCost(map, tx, ty);
         } else if (type === TileType.Rail) {
           if (map.layers.owner[i] !== company) return fail(`Track belongs to another company (${tx},${ty})`);
           if (map.layers.track[i] !== 1 << piece || map.layers.data[i]! & CROSSING_FLAG) {
@@ -162,7 +162,7 @@ export const buildDepotHandler: CommandHandler<BuildDepotCommand> = {
     const railType = cmd.railType ?? 0;
     const typeErr = railTypeError(state, railType);
     if (typeErr) return fail(typeErr);
-    const cost = Math.round(COSTS.depot * RAIL_TYPES[railType]!.costFactor) + map.treeCount(x, y) * COSTS.clearTree;
+    const cost = Math.round(COSTS.depot * RAIL_TYPES[railType]!.costFactor) + clearCost(map, x, y);
     return {
       ok: true,
       cost: state.cost(cost),

@@ -1,4 +1,4 @@
-import { COSTS } from '../economy/costs.ts';
+import { COSTS, clearCost } from '../economy/costs.ts';
 import {
   BRIDGE_TYPES,
   MAX_TUNNEL_LENGTH,
@@ -43,7 +43,7 @@ function headTileCost(state: GameState, company: number, i: number, piece: numbe
   const type = map.layers.type[i];
   const x = i % map.width;
   const y = (i - x) / map.width;
-  if (type === TileType.Clear) return map.treeCount(x, y) * COSTS.clearTree;
+  if (type === TileType.Clear) return clearCost(map, x, y);
   if (type === TileType.Rail) {
     if (map.layers.owner[i] !== company) return `Track belongs to another company (${x},${y})`;
     if (map.layers.track[i] !== 1 << piece || map.layers.data[i] !== 0 || map.layers.signals[i] !== 0) {
