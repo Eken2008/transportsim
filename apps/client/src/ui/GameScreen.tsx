@@ -5,6 +5,7 @@ import {
   GAME_SPEEDS,
   MAX_PLATFORMS,
   MAX_PLATFORM_LENGTH,
+  MAX_SIGNAL_INTERVAL,
   SIGNAL_KINDS,
   RAIL_TYPES,
   availableRailTypes,
@@ -392,6 +393,7 @@ function SignalOptions() {
   const tool = useApp((s) => s.tool);
   const oneWay = useApp((s) => s.signalOneWay);
   const kind = useApp((s) => s.signalKind);
+  const interval = useApp((s) => s.signalInterval);
   const showRes = useApp((s) => s.showReservations);
   if (tool !== 'signal') return null;
   return (
@@ -406,6 +408,18 @@ function SignalOptions() {
       <label className="row" title="Trains may not pass it from behind">
         <input type="checkbox" checked={oneWay} onChange={(e) => useApp.setState({ signalOneWay: e.target.checked })} />
         One-way
+      </label>
+      <label className="row" title="Drag along track to place signals this many tiles apart, up to the next junction. Ctrl-drag removes the signals there.">
+        Drag spacing
+        <input
+          type="number"
+          min={1}
+          max={MAX_SIGNAL_INTERVAL}
+          value={interval}
+          style={{ width: '3.5em' }}
+          onChange={(e) => useApp.setState({ signalInterval: Math.max(1, Math.min(MAX_SIGNAL_INTERVAL, Math.round(+e.target.value) || 1)) })}
+        />
+        tiles
       </label>
       <label className="row" title="Draw the paths trains have reserved through path signals">
         <input type="checkbox" checked={showRes} onChange={(e) => useApp.setState({ showReservations: e.target.checked })} />

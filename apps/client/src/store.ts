@@ -77,6 +77,8 @@ export interface AppState {
   railType: number;
   /** Kind of signal the signal tool places. */
   signalKind: SignalKind;
+  /** Tiles of track between the signals a drag with the signal tool places. */
+  signalInterval: number;
   /** Draw path reservations on the track. */
   showReservations: boolean;
   /** How trees are drawn. */
@@ -169,6 +171,7 @@ export const useApp = create<AppState>(() => ({
   bridgeType: null,
   signalOneWay: false,
   signalKind: 'block',
+  signalInterval: 4,
   railType: 0,
   roadStopKind: 'bus',
   airportKind: 'small',

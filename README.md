@@ -87,7 +87,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | 🚆 menu                                          | Railway tools: track, signals, stations, depots, bridges, tunnels |
 | `4` / `5`                                        | Build / remove railway (drag a route from A to B; it joins existing track; Ctrl removes) |
 | `6` / `7`                                        | Station (`R` rotates) / depot                                 |
-| `9`                                              | Signals: click places, turns round, removes; kinds block, entry, exit, combo (pre-signals) and path; one-way; reservation overlay |
+| `9`                                              | Signals: click places, turns round, removes; drag along track places them at the set spacing up to the next junction (Ctrl-drag removes); kinds block, entry, exit, combo (pre-signals) and path; one-way; reservation overlay |
 | `B` / `N`                                        | Bridge (drag end to end) / tunnel (click a slope into a hill) |
 | `P`                                              | Waypoint: click straight track (click again to remove); trains pass through without stopping |
 | `G` `Z` `H` `J` `K`                              | Roads: build (drag; Ctrl removes), remove, bus/truck stop, road depot, one-way |

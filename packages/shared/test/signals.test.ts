@@ -175,3 +175,36 @@ describe('block signals', () => {
     expect(state.rail.signalRed(tile, Piece.X * 2)).toBe(true);
   });
 });
+
+describe('signal runs', () => {
+  test('a drag places signals the set spacing apart up to the next junction, round curves', () => {
+    const { state, map, run } = loop();
+    const sig = (x: number, y: number) => map.layers.signals[map.tileIndex(x, y)]!;
+    // East from just past the depot branch: along the top, down the right, to the bottom station.
+    run({ type: 'setSignalRun', x: 26, y: 10, piece: Piece.X, reverse: 0, interval: 4 });
+    for (const x of [26, 30, 34, 38]) expect(sig(x, 10)).toBe(1);
+    for (const x of [27, 28, 29, 31, 35, 37]) expect(sig(x, 10)).toBe(0);
+    // Three 45° pieces (√½ each) and two straights past (38,10) make four tiles of track.
+    expect(sig(40, 12)).toBe(0);
+    expect(sig(40, 13)).toBe(1 << (Piece.Y * 2));
+    expect(sig(40, 17)).toBe(1 << (Piece.Y * 2));
+    expect(state.signalTiles.size).toBe(8);
+    for (let x = 35; x <= 38; x++) expect(sig(x, 25)).toBe(0); // the run ends before the station
+    expect(executeCommand(state, { playerId: 1, companyId: 0 }, { type: 'setSignalRun', x: 26, y: 10, piece: Piece.X, reverse: 0, interval: 4 }))
+      .toEqual({ ok: false, error: 'Already there' });
+
+    // West, facing west, stops at the junction with the depot branch... and at the station.
+    run({ type: 'setSignalRun', x: 24, y: 10, piece: Piece.X, reverse: 1, interval: 3, kind: 'path' });
+    for (const x of [24, 21]) expect(sig(x, 10) & 0xfff).toBe(2);
+    expect(sig(19, 10)).toBe(0);
+    expect(executeCommand(state, { playerId: 1, companyId: 0 }, { type: 'setSignalRun', x: 25, y: 10, piece: Piece.X, reverse: 1, interval: 3 }).ok).toBe(false);
+
+    // Ctrl-drag clears every signal on the stretch, whichever way it faces.
+    run({ type: 'setSignal', x: 27, y: 10, piece: Piece.X, dirs: 2 });
+    run({ type: 'setSignalRun', x: 26, y: 10, piece: Piece.X, reverse: 0, interval: 4, remove: true });
+    expect([...state.signalTiles].map((i) => [i % map.width, Math.floor(i / map.width)])).toEqual([
+      [24, 10],
+      [21, 10],
+    ]);
+  });
+});

@@ -36,7 +36,7 @@ import {
   type EditLineCommand,
   type SetOrdersCommand,
 } from './lines.ts';
-import { setSignalHandler, type SetSignalCommand } from './signals.ts';
+import { setSignalHandler, setSignalRunHandler, type SetSignalCommand, type SetSignalRunCommand } from './signals.ts';
 import { buildBridgeHandler, buildTunnelHandler, type BuildBridgeCommand, type BuildTunnelCommand } from './structures.ts';
 import {
   answerJoinHandler,
@@ -137,6 +137,7 @@ export type Command =
   | CloneVehicleCommand
   | EditConsistCommand
   | SetSignalCommand
+  | SetSignalRunCommand
   | BuildBridgeCommand
   | BuildTunnelCommand
   | FoundCompanyCommand
@@ -189,6 +190,7 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   cloneVehicle: cloneVehicleHandler,
   editConsist: editConsistHandler,
   setSignal: setSignalHandler,
+  setSignalRun: setSignalRunHandler,
   buildBridge: buildBridgeHandler,
   buildTunnel: buildTunnelHandler,
   foundCompany: foundCompanyHandler,

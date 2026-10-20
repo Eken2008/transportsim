@@ -29,11 +29,14 @@ export class TrackGhost {
   /**
    * `foundations` (tile → Foundation) are those the build would lay, so the preview sits on the
    * surface the track will have. Elsewhere, an edge that isn't level is shown at its higher corner.
+   * `thin` pieces are drawn as a narrow line, e.g. the stretch a signal drag covers.
    */
-  show(pieces: PlacedPiece[], color: string, foundations?: ReadonlyMap<number, number>): void {
+  show(pieces: PlacedPiece[], color: string, foundations?: ReadonlyMap<number, number>, thin: PlacedPiece[] = []): void {
     const map = this.map;
     const g = new GeoBuilder().color(WHITE);
-    for (const p of pieces) {
+    const all = [...pieces, ...thin];
+    for (let k = 0; k < all.length; k++) {
+      const p = all[k]!;
       if (!map.inBounds(p.x, p.y)) continue;
       const kind = foundations?.get(map.tileIndex(p.x, p.y));
       const [e1, e2] = PIECE_EDGES[p.piece]!;
@@ -45,7 +48,7 @@ export class TrackGhost {
         _a.set(p.x + EDGE_MID_X[e1], h(e1), p.y + EDGE_MID_Y[e1]);
         _b.set(p.x + EDGE_MID_X[e2], h(e2), p.y + EDGE_MID_Y[e2]);
       }
-      g.box(_a.setY(_a.y + 0.02), _b.setY(_b.y + 0.02), 0.34, 0.07, false);
+      g.box(_a.setY(_a.y + 0.02), _b.setY(_b.y + 0.02), k < pieces.length ? 0.34 : 0.14, 0.07, false);
     }
     const geo = g.build();
     this.mesh.geometry.dispose();

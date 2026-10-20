@@ -205,6 +205,7 @@ export class GameRenderer {
           s.bridgeType !== prev.bridgeType ||
           s.signalOneWay !== prev.signalOneWay ||
           s.signalKind !== prev.signalKind ||
+          s.signalInterval !== prev.signalInterval ||
           s.railType !== prev.railType ||
           s.roadStopKind !== prev.roadStopKind ||
           s.airportKind !== prev.airportKind
