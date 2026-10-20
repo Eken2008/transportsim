@@ -40,6 +40,7 @@ export const OWNER_NONE = 0xff;
  * Layout of `data` for Clear tiles:
  *  bits 0-2: tree count (0-4)
  *  bits 3-5: ground variant
+ *  bits 6-8: farm fields only: crop (bits 6-7) and rows running north-south (bit 8)
  */
 export const Ground = {
   Grass: 0,
@@ -47,8 +48,14 @@ export const Ground = {
   Rocks: 2,
   Sand: 3,
   Snow: 4,
+  /** A farm's field: open land anyone may build on. */
+  Field: 5,
 } as const;
 export type Ground = (typeof Ground)[keyof typeof Ground];
+
+export const FIELD_CROP_SHIFT = 6;
+export const FIELD_CROPS = 4;
+export const FIELD_ROWS_Y = 0x100;
 
 export const MAX_TREES = 4;
 

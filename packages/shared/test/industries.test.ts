@@ -4,6 +4,7 @@ import {
   Edge,
   GameMap,
   GameState,
+  Ground,
   INDUSTRY_TYPES,
   Piece,
   TICKS_PER_DAY,
@@ -112,5 +113,27 @@ describe('industries', () => {
     mine.lastProduced = { iron_ore: 123 };
     const restored = restoreSnapshot(encodeSnapshot(state), { maxPlayers: 15, maxMapSize: 256 });
     expect(restored.industries.get(mine.id)).toEqual(mine);
+  });
+});
+
+describe('farm fields', () => {
+  test('generated farms lie among large fields of open land', () => {
+    const state = GameState.create({ ...DEFAULT_SETTINGS, mapWidth: 256, mapHeight: 256, seed: 7 });
+    const map = state.map;
+    const farms = [...state.industries.values()].filter((i) => i.type === 'farm');
+    expect(farms.length).toBeGreaterThan(0);
+    for (const farm of farms) {
+      let fields = 0;
+      for (let y = farm.y - 16; y < farm.y + farm.h + 16; y++) {
+        for (let x = farm.x - 16; x < farm.x + farm.w + 16; x++) {
+          if (!map.inBounds(x, y)) continue;
+          const i = map.tileIndex(x, y);
+          if (map.layers.type[i] !== TileType.Clear || ((map.layers.data[i]! >> 3) & 7) !== Ground.Field) continue;
+          fields++;
+          expect(map.treeCount(x, y)).toBe(0);
+        }
+      }
+      expect(fields).toBeGreaterThanOrEqual(40);
+    }
   });
 });

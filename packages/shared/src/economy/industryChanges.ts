@@ -8,6 +8,7 @@ import {
   newIndustry,
   pickIndustryType,
   placeIndustry,
+  plantFarmFields,
   transportedShare,
   type Industry,
 } from './industries.ts';
@@ -75,6 +76,7 @@ export function industryMonthly(state: GameState, rng: Random, year: number): vo
       if (!industryFits(state.map, x, y, type.w, type.h, towns, others)) continue;
       const ind = newIndustry(state.nextIndustryId++, type, x, y, industryName(type, x, y, towns, others));
       placeIndustry(state.map, ind);
+      if (type.model === 'farm') plantFarmFields(state.map, ind, rng);
       state.industries.set(ind.id, ind);
       state.dirtyIndustries.add(ind.id);
       state.addNews('company', `New ${type.name.toLowerCase()} opens: ${ind.name}`, { tile: centre(state, ind) });

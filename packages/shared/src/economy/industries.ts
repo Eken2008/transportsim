@@ -1,5 +1,5 @@
 import type { GameMap } from '../world/map.ts';
-import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
+import { FIELD_CROP_SHIFT, FIELD_CROPS, FIELD_ROWS_Y, Ground, OWNER_NONE, TileType } from '../world/constants.ts';
 import { Random } from '../util/random.ts';
 import type { Town } from '../town/towns.ts';
 import type { CargoId } from './cargo.ts';
@@ -147,6 +147,45 @@ export function placeIndustry(map: GameMap, ind: Industry): void {
   }
 }
 
+/**
+ * Lay out a farm's fields: a few large rectangles of one crop each on open land around the
+ * farmstead. Fields stay ordinary clear land, so building over them is free.
+ */
+export function plantFarmFields(map: GameMap, ind: Industry, rng: Random): void {
+  const count = rng.int(4, 6);
+  for (let f = 0; f < count; f++) {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const fw = rng.int(5, 10);
+      const fh = rng.int(4, 8);
+      const fx = ind.x + rng.int(-fw - 5, ind.w + 5);
+      const fy = ind.y + rng.int(-fh - 5, ind.h + 5);
+      const tiles: number[] = [];
+      for (let ty = fy; ty < fy + fh; ty++) {
+        for (let tx = fx; tx < fx + fw; tx++) {
+          if (tx < 1 || ty < 1 || tx >= map.width - 1 || ty >= map.height - 1) continue;
+          const i = map.tileIndex(tx, ty);
+          if (map.layers.type[i] !== TileType.Clear) continue;
+          const ground = (map.layers.data[i]! >> 3) & 7;
+          if (ground !== Ground.Grass && ground !== Ground.Rough) continue;
+          if (map.tileMaxHeight(tx, ty) - map.tileMinHeight(tx, ty) > 1) continue;
+          tiles.push(i);
+        }
+      }
+      // Mostly open land, or try somewhere else.
+      if (tiles.length < fw * fh * 0.6) continue;
+      const crop = rng.int(0, FIELD_CROPS - 1);
+      const rows = rng.chance(0.5) ? FIELD_ROWS_Y : 0;
+      for (const i of tiles) {
+        map.setClear(i, Ground.Field, 0);
+        map.layers.data[i] = map.layers.data[i]! | (crop << FIELD_CROP_SHIFT) | rows;
+        const x = i % map.width;
+        map.touchTile(x, (i - x) / map.width);
+      }
+      break;
+    }
+  }
+}
+
 /** Remove an industry's tiles (closure), leaving rough land. */
 export function clearIndustry(map: GameMap, ind: Industry): void {
   for (let ty = ind.y; ty < ind.y + ind.h; ty++) {
@@ -192,6 +231,7 @@ export function generateIndustries(map: GameMap, towns: readonly Town[], seed: n
     if (queue.length) queue.shift();
     const ind = newIndustry(out.length, type, x, y, industryName(type, x, y, towns, out));
     placeIndustry(map, ind);
+    if (type.model === 'farm') plantFarmFields(map, ind, rng);
     out.push(ind);
   }
   return out;

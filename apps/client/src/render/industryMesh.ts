@@ -10,8 +10,6 @@ const C = {
   forestFloor: lin('#3f5a2c'),
   pine: lin('#2f5d34'),
   trunk: lin('#5b4129'),
-  wheat: lin('#d9b84a'),
-  ploughed: lin('#7a5c3a'),
   pasture: lin('#7fae55'),
   barn: lin('#9c3b2e'),
   roofDark: lin('#3d4148'),
@@ -78,13 +76,32 @@ function build(g: GeoBuilder, ind: Industry, model: IndustryModel, y: number): v
       break;
     }
     case 'farm': {
-      // Strips of wheat and ploughed soil, a pasture, barn and silo
-      for (let k = 0; k < w; k++) {
-        g.color(k % 2 ? C.ploughed : C.wheat).aabb(x + k + 0.04, y, z + 0.05, x + k + 0.96, y + 0.03, z + h * 0.55);
+      // Farmstead (the fields lie around it): a yard with barn, silos and farmhouse, and a
+      // fenced paddock with cattle.
+      const px = x + w * 0.55;
+      g.color(C.soil).aabb(x + 0.05, y, z + 0.05, px, y + 0.02, z + h - 0.05);
+      g.color(C.pasture).aabb(px, y, z + 0.05, x + w - 0.05, y + 0.02, z + h - 0.05);
+      shed(g, x + 0.2, z + 0.25, x + 1.5, z + 1.25, top, 0.42, C.barn, C.roofDark);
+      g.color(C.silo);
+      for (const k of [0, 1]) g.cylinderY(x + 0.45 + k * 0.42, z + 1.65, top, top + 0.85, 0.17, 10);
+      g.color(C.roofDark);
+      for (const k of [0, 1]) g.pyramid(x + 0.45 + k * 0.42, z + 1.65, 0.13, top + 0.85, 0.12);
+      shed(g, x + 1.15, z + h - 0.9, x + 2.0, z + h - 0.3, top, 0.32, C.white, C.brick); // farmhouse
+      g.color(C.timber);
+      const fx0 = px + 0.1, fx1 = x + w - 0.15, fz0 = z + 0.15, fz1 = z + h - 0.15;
+      for (const fz of [fz0, fz1]) g.aabb(fx0, top + 0.06, fz - 0.01, fx1, top + 0.08, fz + 0.01);
+      for (const fx of [fx0, fx1]) g.aabb(fx - 0.01, top + 0.06, fz0, fx + 0.01, top + 0.08, fz1);
+      for (let k = 0; k <= 6; k++) {
+        const t = fx0 + ((fx1 - fx0) * k) / 6;
+        for (const fz of [fz0, fz1]) g.aabb(t - 0.012, top, fz - 0.012, t + 0.012, top + 0.1, fz + 0.012);
       }
-      g.color(C.pasture).aabb(x + 0.05, y, z + h * 0.55, x + w - 0.05, y + 0.02, z + h - 0.05);
-      shed(g, x + 0.3, z + h - 1.0, x + 1.3, z + h - 0.3, top, 0.4, C.barn, C.roofDark);
-      g.color(C.silo).cylinderY(x + 1.7, z + h - 0.6, top, top + 0.8, 0.18, 10);
+      for (const [cx2, cz2, white] of [[0.3, 0.6, true], [0.65, 1.3, false], [0.4, 2.1, true], [1.05, 1.9, false], [1.15, 0.8, true]] as const) {
+        const ax = px + cx2, az = z + cz2;
+        g.color(white ? C.white : C.barn).aabb(ax - 0.1, top + 0.05, az - 0.045, ax + 0.1, top + 0.13, az + 0.045);
+        g.color(C.black).aabb(ax + 0.1, top + 0.08, az - 0.03, ax + 0.15, top + 0.14, az + 0.03); // head
+        g.color(C.black);
+        for (const lx of [-0.07, 0.07]) for (const lz of [-0.03, 0.03]) g.aabb(ax + lx - 0.012, top, az + lz - 0.012, ax + lx + 0.012, top + 0.05, az + lz + 0.012);
+      }
       break;
     }
     case 'oilwells': {

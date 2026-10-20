@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { buildTerrainGeometry, buildWaterGeometry, type Lod } from './terrainMesh.ts';
 import { addRoads, buildHouses } from './buildings.ts';
+import { addFields } from './fields.ts';
 import { GeoBuilder } from './geoBuilder.ts';
 import { addTrack } from './trackMesh.ts';
 import { TrackCurves } from './trackCurves.ts';
@@ -157,6 +158,7 @@ export class ChunkManager {
       group.add(water);
     }
     const infra = new GeoBuilder();
+    if (lod <= 1) addFields(infra, map, cx, cy, lod === 0);
     addRoads(infra, map, cx, cy);
     addTrack(infra, map, cx, cy, lod, (owner) => this.companyColor(owner), this.curves);
     const infraGeo = infra.build();

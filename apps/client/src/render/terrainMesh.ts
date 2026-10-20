@@ -1,5 +1,6 @@
 import {
   CHUNK_SIZE,
+  FIELD_CROP_SHIFT,
   waterAxis,
   Ground,
   HEIGHT_SCALE,
@@ -26,6 +27,8 @@ const GROUND_RGB: Record<number, [number, number, number]> = {
   [Ground.Sand]: rgb('#dccb98'),
   [Ground.Snow]: rgb('#eef2f6'),
 };
+/** Field crops: ripe wheat, ploughed soil, young green crop, flowering rapeseed. */
+export const CROP_RGB: [number, number, number][] = [rgb('#d2b35a'), rgb('#7e5f3d'), rgb('#7aa646'), rgb('#dfc93c')];
 const HIGH_GRASS = rgb('#73984f');
 const SEABED = rgb('#b3a274');
 const ROCK = rgb('#9c968c');
@@ -50,6 +53,15 @@ function tileColor(map: GameMap, x: number, y: number, out: [number, number, num
   if (type === TileType.Water) base = SEABED;
   else {
     const ground = (map.layers.data[i]! >> 3) & 0x7;
+    if (ground === Ground.Field) {
+      // A field is one even colour, so its outline reads from afar.
+      const c = CROP_RGB[(map.layers.data[i]! >> FIELD_CROP_SHIFT) & 3]!;
+      const v = 0.98 + tileHash(x, y) * 0.04;
+      out[0] = c[0] * v;
+      out[1] = c[1] * v;
+      out[2] = c[2] * v;
+      return;
+    }
     base = GROUND_RGB[ground] ?? GROUND_RGB[Ground.Grass]!;
     if (ground === Ground.Grass) {
       const t = Math.min(1, maxH / (SNOW_LINE - 4));
