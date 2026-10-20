@@ -23,11 +23,11 @@ export interface IndustryType {
 }
 
 export const INDUSTRY_TYPES: readonly IndustryType[] = [
-  { id: 'coal_mine', name: 'Coal Mine', model: 'mine', w: 3, h: 3, produces: ['coal'], accepts: [], production: 150, weight: 3, intro: 0 },
-  { id: 'iron_mine', name: 'Iron Ore Mine', model: 'mine', w: 3, h: 3, produces: ['iron_ore'], accepts: [], production: 130, weight: 2, intro: 0 },
-  { id: 'forest', name: 'Forest', model: 'forest', w: 4, h: 4, produces: ['wood'], accepts: [], production: 120, weight: 3, intro: 0 },
-  { id: 'farm', name: 'Farm', model: 'farm', w: 4, h: 3, produces: ['grain', 'livestock'], accepts: [], production: 70, weight: 4, intro: 0 },
-  { id: 'oil_wells', name: 'Oil Wells', model: 'oilwells', w: 3, h: 3, produces: ['oil'], accepts: [], production: 110, weight: 2, intro: 1880 },
+  { id: 'coal_mine', name: 'Coal Mine', model: 'mine', w: 3, h: 3, produces: ['coal'], accepts: [], production: 1500, weight: 3, intro: 0 },
+  { id: 'iron_mine', name: 'Iron Ore Mine', model: 'mine', w: 3, h: 3, produces: ['iron_ore'], accepts: [], production: 1300, weight: 2, intro: 0 },
+  { id: 'forest', name: 'Forest', model: 'forest', w: 4, h: 4, produces: ['wood'], accepts: [], production: 1200, weight: 3, intro: 0 },
+  { id: 'farm', name: 'Farm', model: 'farm', w: 4, h: 3, produces: ['grain', 'livestock'], accepts: [], production: 700, weight: 4, intro: 0 },
+  { id: 'oil_wells', name: 'Oil Wells', model: 'oilwells', w: 3, h: 3, produces: ['oil'], accepts: [], production: 1100, weight: 2, intro: 1880 },
   { id: 'steel_mill', name: 'Steel Mill', model: 'mill', w: 4, h: 3, produces: ['steel'], accepts: ['iron_ore', 'coal'], production: 0, weight: 1.5, intro: 0 },
   { id: 'factory', name: 'Factory', model: 'factory', w: 3, h: 3, produces: ['goods'], accepts: ['steel'], production: 0, weight: 1.5, intro: 0 },
   { id: 'sawmill', name: 'Sawmill', model: 'sawmill', w: 3, h: 2, produces: ['goods'], accepts: ['wood'], production: 0, weight: 1.5, intro: 0 },

@@ -63,17 +63,17 @@ describe('cargo', () => {
   });
 
   test('late deliveries pay steadily less, with no cliff, towards a floor', () => {
-    // Passengers over 20 tiles are prompt within 4 days.
-    const pay = Array.from({ length: 61 }, (_, d) => cargoPayment('passengers', 1000, 20, d));
-    for (let d = 1; d <= 60; d++) {
+    // Passengers over 24 tiles are prompt within 6 days.
+    const pay = Array.from({ length: 91 }, (_, d) => cargoPayment('passengers', 1000, 24, d));
+    for (let d = 1; d <= 90; d++) {
       expect(pay[d]!).toBeLessThanOrEqual(pay[d - 1]!);
       // Never more than 10% of the full pay lost in a single day
       expect(pay[d - 1]! - pay[d]!).toBeLessThanOrEqual(pay[0]! * 0.1);
     }
-    // Starts off like 1 − 0.02t², t in prompt-times
-    for (const d of [4, 8, 12]) expect(pay[d]! / pay[0]!).toBeCloseTo(1 - 0.02 * (d / 4) ** 2, 1);
-    expect(pay[24]! / pay[0]!).toBeCloseTo(0.53, 2);
-    expect(pay[60]!).toBeGreaterThan(pay[0]! * 0.2);
+    // Starts off like 1 − 0.009t², t in prompt-times
+    for (const d of [6, 12, 18]) expect(pay[d]! / pay[0]!).toBeCloseTo(1 - 0.009 * (d / 6) ** 2, 1);
+    expect(pay[36]! / pay[0]!).toBeCloseTo(0.74, 2);
+    expect(pay[90]!).toBeGreaterThan(pay[0]! * 0.25);
   });
 
   test('more processed freight pays more', () => {
