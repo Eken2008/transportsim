@@ -16,14 +16,26 @@ import {
 } from './station.ts';
 import {
   buyTrainHandler,
+  cloneVehicleHandler,
   editConsistHandler,
-  setOrdersHandler,
   trainActionHandler,
   type BuyTrainCommand,
+  type CloneVehicleCommand,
   type EditConsistCommand,
-  type SetOrdersCommand,
   type TrainActionCommand,
 } from './trains.ts';
+import {
+  assignLineHandler,
+  createLineHandler,
+  deleteLineHandler,
+  editLineHandler,
+  setOrdersHandler,
+  type AssignLineCommand,
+  type CreateLineCommand,
+  type DeleteLineCommand,
+  type EditLineCommand,
+  type SetOrdersCommand,
+} from './lines.ts';
 import { setSignalHandler, type SetSignalCommand } from './signals.ts';
 import { buildBridgeHandler, buildTunnelHandler, type BuildBridgeCommand, type BuildTunnelCommand } from './structures.ts';
 import {
@@ -91,6 +103,7 @@ export * from './terraform.ts';
 export * from './track.ts';
 export * from './station.ts';
 export * from './trains.ts';
+export * from './lines.ts';
 export * from './signals.ts';
 export * from './structures.ts';
 export * from './company.ts';
@@ -113,6 +126,11 @@ export type Command =
   | BuyTrainCommand
   | TrainActionCommand
   | SetOrdersCommand
+  | CreateLineCommand
+  | EditLineCommand
+  | DeleteLineCommand
+  | AssignLineCommand
+  | CloneVehicleCommand
   | EditConsistCommand
   | SetSignalCommand
   | BuildBridgeCommand
@@ -158,6 +176,11 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   buyTrain: buyTrainHandler,
   trainAction: trainActionHandler,
   setOrders: setOrdersHandler,
+  createLine: createLineHandler,
+  editLine: editLineHandler,
+  deleteLine: deleteLineHandler,
+  assignLine: assignLineHandler,
+  cloneVehicle: cloneVehicleHandler,
   editConsist: editConsistHandler,
   setSignal: setSignalHandler,
   buildBridge: buildBridgeHandler,

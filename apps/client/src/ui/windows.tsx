@@ -37,7 +37,7 @@ import { closeWindow, openWindow, toast, useApp, windowKey, type GameWindow } fr
 import { formatMoney } from './format.ts';
 import { catchmentRect, residentsIn } from '../game/catchment.ts';
 import { CompanyWindow } from './CompanyWindow.tsx';
-import { OrdersEditor } from './OrdersEditor.tsx';
+import { LineSwatch, LineWindow, LinesWindow, VehicleLine } from './LinesWindow.tsx';
 import { capacityText, loadText } from './cargoText.ts';
 import { NewsWindow } from './NewsWindow.tsx';
 import { FinancesWindow, LeagueWindow } from './FinancesWindow.tsx';
@@ -140,6 +140,10 @@ export function WindowLayer() {
             return <StationWindow key={key} w={w} />;
           case 'trains':
             return <TrainListWindow key={key} w={w} />;
+          case 'lines':
+            return <LinesWindow key={key} w={w} />;
+          case 'line':
+            return <LineWindow key={key} w={w} />;
           case 'company':
             return <CompanyWindow key={key} w={w} />;
           case 'news':
@@ -252,6 +256,11 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
             </>
           )}
           {t.orders.length > 1 && <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'skip' })}>Skip order</button>}
+          {canBuild && (
+            <button title="Buy a copy of it, on the same line, in its depot (or the nearest one)" onClick={() => act({ type: 'cloneVehicle', id: t.id })}>
+              ⧉ Duplicate
+            </button>
+          )}
           {t.status === 'depot' && canBuild && (
             <button className="danger" onClick={() => confirm(`Sell ${t.name}?`) && act({ type: 'trainAction', id: t.id, action: 'sell' })}>
               Sell
@@ -274,7 +283,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
         </div>
       )}
       <ConsistEditor t={t} mine={canBuild} />
-      <OrdersEditor
+      <VehicleLine
         t={t}
         mine={mine}
         warn={(o) => (o.kind === 'station' ? <PlatformWarning station={o.station} length={stats.length} /> : null)}
@@ -379,15 +388,15 @@ function DepotWindow({ w }: { w: GameWindow & { kind: 'depot' } }) {
 
   return (
     <Win w={w} title={`Train depot (${x}, ${y})`} width={380}>
-      <h4 style={{ marginTop: 0 }}>Inside</h4>
+      <InsideHeader vehicles={inDepot} canStart={canStart} />
       {inDepot.length === 0 && <p className="muted">No trains in this depot.</p>}
       {inDepot.map((t) => (
         <div className="list-row" key={t.id}>
           <b style={{ flex: 1 }}>{t.name}</b>
-          <span className="muted small">{t.orders.length} orders</span>
+          <LineTag t={t} />
           <button onClick={() => openWindow({ kind: 'train', id: t.id })}>Open</button>
           {canStart && (
-            <button className="primary" disabled={t.orders.length === 0} title={t.orders.length ? '' : 'Give it orders first'} onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>
+            <button className="primary" disabled={t.orders.length === 0} title={t.orders.length ? '' : 'Put it on a line with stops first'} onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>
               ▶
             </button>
           )}
@@ -475,15 +484,15 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
   const y = map ? Math.floor(w.id / map.width) : 0;
   return (
     <Win w={w} title={air ? `${airport?.name ?? 'Airport'} hangar` : sea ? `Ship depot (${x}, ${y})` : `Road depot (${x}, ${y})`} width={360}>
-      <h4 style={{ marginTop: 0 }}>Inside</h4>
+      <InsideHeader vehicles={inDepot} canStart={canStart} />
       {inDepot.length === 0 && <p className="muted">No {air ? 'aircraft in this hangar' : sea ? 'ships in this depot' : 'vehicles in this depot'}.</p>}
       {inDepot.map((t) => (
         <div className="list-row" key={t.id}>
           <b style={{ flex: 1 }}>{t.name}</b>
-          <span className="muted small">{t.orders.length} orders</span>
+          <LineTag t={t} />
           <button onClick={() => openWindow({ kind: 'train', id: t.id })}>Open</button>
           {canStart && (
-            <button className="primary" disabled={t.orders.length === 0} onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>
+            <button className="primary" disabled={t.orders.length === 0} title={t.orders.length ? '' : 'Put it on a line with stops first'} onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>
               ▶
             </button>
           )}
@@ -552,7 +561,8 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
     );
   }
   const company = client.world?.state.companies.get(st.owner);
-  const serving = [...(client.world?.trains.values() ?? [])].filter((t) => t.orders.some((o) => o.kind === 'station' && o.station === st.id));
+  const serving = [...(client.world?.state.lines.values() ?? [])].filter((l) => l.orders.some((o) => o.kind === 'station' && o.station === st.id));
+  const vehicles = [...(client.world?.trains.values() ?? [])];
   const waiting = CARGO_IDS.flatMap((cargo) =>
     Object.entries(st.waiting[cargo] ?? {}).map(([dest, n]) => ({ cargo, dest: Number(dest), n })),
   ).sort((a, b) => b.n - a.n);
@@ -609,15 +619,21 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
           ))}
         </ul>
       )}
-      <h4>Trains calling here</h4>
+      <h4>Lines calling here</h4>
       {serving.length === 0 && <p className="muted">None yet.</p>}
-      {serving.map((t) => (
-        <div className="list-row" key={t.id}>
-          <b style={{ flex: 1 }}>{t.name}</b>
-          <span className="muted small">{trainStatus(t)}</span>
-          <button onClick={() => openWindow({ kind: 'train', id: t.id })}>Open</button>
-        </div>
-      ))}
+      {serving.map((l) => {
+        const n = vehicles.filter((t) => t.line === l.id).length;
+        return (
+          <div className="list-row" key={l.id}>
+            <LineSwatch line={l} />
+            <b style={{ flex: 1 }}>{l.name}</b>
+            <span className="muted small">
+              {n} {n === 1 ? 'vehicle' : 'vehicles'}
+            </span>
+            <button onClick={() => openWindow({ kind: 'line', id: l.id })}>Open</button>
+          </div>
+        );
+      })}
     </Win>
   );
 }
@@ -670,14 +686,18 @@ function TrainListWindow({ w }: { w: GameWindow & { kind: 'trains' } }) {
   const company = useMyCompany();
   const trains = [...(client.world?.trains.values() ?? [])].filter((t) => t.owner === company).sort((a, b) => a.id - b.id);
   return (
-    <Win w={w} title="Your vehicles" width={420}>
+    <Win w={w} title="Your vehicles" width={480}>
+      <button style={{ width: '100%', marginBottom: 8 }} onClick={() => openWindow({ kind: 'lines', id: 0 })}>
+        Lines…
+      </button>
       {trains.length === 0 && <p className="muted">No vehicles yet. Build a depot (7 for trains, J for road vehicles), click it, and buy one.</p>}
       {trains.map((t) => (
         <div className="list-row" key={t.id}>
           <b style={{ width: 70 }}>{t.name}</b>
-          <span className="muted small" style={{ flex: 1 }}>
+          <span className="muted small" style={{ flex: 1, minWidth: 0 }}>
             {trainStatus(t)}
           </span>
+          <LineTag t={t} />
           <span className={`mono small ${t.profitThisYear < 0 ? 'neg' : ''}`}>{formatMoney(t.profitThisYear)}</span>
           <button onClick={() => openWindow({ kind: 'train', id: t.id })}>Open</button>
         </div>
@@ -812,5 +832,43 @@ function ConsistEditor({ t, mine }: { t: TrainInfo; mine: boolean }) {
         </>
       )}
     </>
+  );
+}
+
+/** The line a vehicle runs on, as a small coloured tag. */
+function LineTag({ t }: { t: TrainInfo }) {
+  useApp((s) => s.linesRev);
+  const line = t.line !== undefined ? client.world?.state.lines.get(t.line) : undefined;
+  return (
+    <span className="muted small row" style={{ gap: 4, maxWidth: 120, overflow: 'hidden', whiteSpace: 'nowrap' }} title={line ? line.name : 'Not on a line'}>
+      {line ? (
+        <>
+          <LineSwatch line={line} />
+          {line.name}
+        </>
+      ) : (
+        'no line'
+      )}
+    </span>
+  );
+}
+
+/** "Inside" heading of a depot, with a button to start every vehicle in it that has somewhere to go. */
+function InsideHeader({ vehicles, canStart }: { vehicles: TrainInfo[]; canStart: boolean }) {
+  const ready = vehicles.filter((t) => t.orders.length > 0);
+  return (
+    <div className="row" style={{ marginBottom: 6 }}>
+      <h4 style={{ margin: 0, flex: 1 }}>Inside</h4>
+      {canStart && vehicles.length > 1 && (
+        <button
+          className="primary small"
+          disabled={ready.length === 0}
+          title={ready.length < vehicles.length ? 'Vehicles without a line with stops stay behind' : 'Start every vehicle in here'}
+          onClick={() => ready.forEach((t) => act({ type: 'trainAction', id: t.id, action: 'start' }))}
+        >
+          ▶ Start all ({ready.length})
+        </button>
+      )}
+    </div>
   );
 }

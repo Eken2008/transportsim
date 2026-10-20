@@ -185,6 +185,7 @@ export class Room {
     this.send(session, { t: 'industries', industries: [...this.state.industries.values()], removed: [], full: true });
     this.send(session, { t: 'stations', stations: [...this.state.stations.values()], removed: [], full: true });
     this.send(session, { t: 'trains', trains: [...this.state.trains.values()].map(trainInfo), removed: [], full: true });
+    this.send(session, { t: 'lines', lines: [...this.state.lines.values()], removed: [], full: true });
     this.send(session, { t: 'news', items: this.state.news.slice(-NEWS_ON_JOIN), full: true });
     this.send(session, { t: 'history', companies: [...this.state.companies.values()].map((c) => ({ id: c.id, finances: c.finances, months: c.history })), full: true });
 
@@ -477,6 +478,12 @@ export class Room {
       this.broadcast({ t: 'trains', trains, removed: [...st.removedTrains], full: false });
       st.dirtyTrains.clear();
       st.removedTrains.clear();
+    }
+    if (st.dirtyLines.size > 0 || st.removedLines.size > 0) {
+      const lines = [...st.dirtyLines].map((id) => st.lines.get(id)).filter((l) => l !== undefined);
+      this.broadcast({ t: 'lines', lines, removed: [...st.removedLines], full: false });
+      st.dirtyLines.clear();
+      st.removedLines.clear();
     }
     if (st.pendingNews.length > 0) this.broadcast({ t: 'news', items: st.pendingNews.splice(0), full: false });
     const events = this.state.cargo.events;

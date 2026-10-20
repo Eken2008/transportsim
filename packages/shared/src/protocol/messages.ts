@@ -10,6 +10,7 @@ import type { Town } from '../town/towns.ts';
 import type { Industry } from '../economy/industries.ts';
 import type { Station } from '../rail/station.ts';
 import type { TrainInfo, TrainMotion } from '../vehicles/train.ts';
+import type { Line } from '../vehicles/lines.ts';
 import type { ChunkData } from '../world/chunks.ts';
 
 export const PROTOCOL_VERSION = 2;
@@ -110,6 +111,8 @@ export type ServerMessage =
   | { t: 'stations'; stations: Station[]; removed: number[]; full: boolean }
   /** Train details (all trains; changes only unless `full`). */
   | { t: 'trains'; trains: TrainInfo[]; removed: number[]; full: boolean }
+  /** Lines (all companies'; changes only unless `full`). */
+  | { t: 'lines'; lines: Line[]; removed: number[]; full: boolean }
   /** Positions of trains near the client's subscribed chunks (~10 Hz). */
   | { t: 'trainPos'; trains: TrainMotion[] }
   /**

@@ -91,8 +91,8 @@ export function Tutorial() {
       done: myTrains.length > 0,
     },
     {
-      title: 'Give it orders',
-      how: <>In the train window, press "Add stations" and click both stations, then Done.</>,
+      title: 'Put it on a line',
+      how: <>In the train window, press "+ New line", then "Add stations" and click both stations, then Done.</>,
       done: myTrains.some((t) => t.orders.filter((o) => o.kind === 'station').length >= 2),
     },
     {

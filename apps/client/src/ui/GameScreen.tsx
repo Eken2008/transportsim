@@ -180,6 +180,9 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         <button title="Your trains (T)" aria-label="🚆 Trains" onClick={() => openWindow({ kind: 'trains', id: 0 })}>
           🚆<span className="lbl"> Trains</span>
         </button>
+        <button title="Your lines: the stops your vehicles serve" aria-label="〰 Lines" onClick={() => openWindow({ kind: 'lines', id: 0 })}>
+          〰<span className="lbl"> Lines</span>
+        </button>
         <button title="News" aria-label="📰 News" onClick={() => openWindow({ kind: 'news', id: 0 })}>
           📰<span className="lbl"> News</span>
         </button>

@@ -1085,8 +1085,10 @@ export class RailSystem {
   private recordArrival(t: Train, o: Order): void {
     if (o.kind === 'jump' || t.departedAt === undefined) return;
     const actual = Math.round(((this.state.tick - t.departedAt) / TICKS_PER_DAY) * 10) / 10;
-    if (t.autofill) o.travel = Math.max(0.1, actual);
-    else if (o.travel) t.lateness = Math.round((actual - o.travel) * 10) / 10;
+    if (t.autofill) {
+      o.travel = Math.max(0.1, actual);
+      if (t.line !== undefined) this.state.dirtyLines.add(t.line);
+    } else if (o.travel) t.lateness = Math.round((actual - o.travel) * 10) / 10;
     this.state.dirtyTrains.add(t.id);
   }
 

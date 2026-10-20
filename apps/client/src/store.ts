@@ -83,7 +83,9 @@ export interface AppState {
   catchmentFor: number | null;
   /** Bumped when train details change, so windows re-render. */
   trainsRev: number;
-  /** Train whose orders the orders tool is editing. */
+  /** Bumped when lines change, so windows re-render. */
+  linesRev: number;
+  /** Line whose orders the orders tool is adding to. */
   ordersFor: number | null;
   /** Camera focus request (renderer watches `seq`). */
   focus: { x: number; y: number; seq: number } | null;
@@ -99,6 +101,8 @@ export type GameWindow =
   | { kind: 'depot'; id: number }
   | { kind: 'station'; id: number }
   | { kind: 'trains'; id: 0 }
+  | { kind: 'lines'; id: 0 }
+  | { kind: 'line'; id: number }
   | { kind: 'company'; id: 0 }
   | { kind: 'news'; id: 0 }
   | { kind: 'finances'; id: number }
@@ -151,6 +155,7 @@ export const useApp = create<AppState>(() => ({
   showReservations: false,
   catchmentFor: null,
   trainsRev: 0,
+  linesRev: 0,
   ordersFor: null,
   focus: null,
   windows: [],

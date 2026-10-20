@@ -3,25 +3,16 @@ import { isElectrified } from '../rail/railTypes.ts';
 import { ymdFromDays } from '../sim/date.ts';
 import { TileType } from '../world/constants.ts';
 import { isAvailable, isBus, railVehicle, unitCargo } from '../vehicles/catalog.ts';
-import { roadStationOk } from '../vehicles/roadSystem.ts';
 import { isHeavy } from '../vehicles/airSystem.ts';
 import { AirportRole } from '../air/airports.ts';
-import { stationDocks } from '../water/waterways.ts';
-import { stationHas } from '../rail/station.ts';
-import { JUMP_CONDITIONS, isRailVehicle, trainStats, type Order, type Train, type TrainUnit } from '../vehicles/train.ts';
-import { advanceOrder, settleOrders } from '../vehicles/orders.ts';
+import { isRailVehicle, trainStats, type Train, type TrainUnit } from '../vehicles/train.ts';
+import { advanceOrder } from '../vehicles/orders.ts';
+import { assignVehicle, parseOrders, vehicleMode } from '../vehicles/lines.ts';
 import { MAX_TRAIN_TILES } from '../vehicles/maintenance.ts';
-
-/** A timetable duration in days (0.1 resolution, up to a year), or undefined. */
-function days(v: unknown): number | undefined {
-  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return undefined;
-  return Math.min(365, Math.round(v * 10) / 10);
-}
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
 export const MAX_UNITS = 24;
 export const MAX_TRAIN_LENGTH = MAX_TRAIN_TILES; // tiles
-export const MAX_ORDERS = 32;
 
 /** A unit in a command: a vehicle type id, or a type with the cargo a wagon is refitted to. */
 export type UnitSpec = string | TrainUnit;
@@ -66,10 +57,15 @@ export interface EditConsistCommand {
   units: UnitSpec[];
 }
 
-export interface SetOrdersCommand {
-  type: 'setOrders';
+/**
+ * Buy a copy of a vehicle: the same vehicles and refits, on the same line, with the same
+ * service interval. It is bought in `depot`, or else the depot the vehicle is in, or else the
+ * company's nearest suitable depot, and waits there to be started.
+ */
+export interface CloneVehicleCommand {
+  type: 'cloneVehicle';
   id: number;
-  orders: Order[];
+  depot?: number;
 }
 
 const noEffects = () => ({ dirtyChunks: new Set<number>() });
@@ -211,67 +207,6 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
   },
 };
 
-export const setOrdersHandler: CommandHandler<SetOrdersCommand> = {
-  needsCompany: true,
-  permission: 'operate',
-  plan(state, ctx, cmd): PlanResult {
-    const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
-    if (!t || t.owner !== ctx.companyId) return fail('Not your train');
-    if (!Array.isArray(cmd.orders) || cmd.orders.length > MAX_ORDERS) return fail(`At most ${MAX_ORDERS} orders`);
-    const orders: Order[] = [];
-    const n = cmd.orders.length;
-    for (const o of cmd.orders) {
-      const travel = days(o?.kind !== 'jump' ? o?.travel : undefined);
-      if (o?.kind === 'station') {
-        const st = isInt(o.station) ? state.stations.get(o.station) : undefined;
-        if (!st) return fail('Unknown station');
-        if (!state.canUseStation(ctx.companyId!, st)) return fail(`${st.name} belongs to another company`);
-        if (t.mode === 'air') {
-          if (!st.airport) return fail(`${st.name} has no airport`);
-        } else if (t.mode === 'water') {
-          if (stationDocks(state.map, st).length === 0) return fail(`${st.name} has no dock`);
-        } else if (t.mode === 'road' ? !roadStationOk(state, t, st.id) : !stationHas(state.map, st, 'rail')) {
-          return fail(t.mode === 'road' ? `${st.name} has no ${isBus(t.units[0]!) ? 'bus' : 'truck'} stop` : `${st.name} has no platforms`);
-        }
-        orders.push({ kind: 'station', station: st.id, fullLoad: o.fullLoad === true || undefined, wait: days(o.wait), travel });
-      } else if (o?.kind === 'waypoint') {
-        if (t.mode === 'road' || t.mode === 'air') return fail('Waypoints are for trains and ships');
-        const wp = isInt(o.waypoint) ? state.waypoints.get(o.waypoint) : undefined;
-        if (!wp) return fail('Unknown waypoint');
-        if (t.mode === 'water' ? !wp.buoy : wp.buoy) return fail(t.mode === 'water' ? 'Ships steer by buoys' : 'Buoys are for ships');
-        if (!wp.buoy && !state.accessFor(ctx.companyId!).uses[wp.owner]) return fail(`${wp.name} is on another company's track`);
-        orders.push({ kind: 'waypoint', waypoint: wp.id, travel });
-      } else if (o?.kind === 'depot') {
-        orders.push({ kind: 'depot', travel });
-      } else if (o?.kind === 'jump') {
-        if (!isInt(o.to) || o.to < 0 || o.to >= n) return fail('A jump must go to an order in the list');
-        if (!JUMP_CONDITIONS.includes(o.cond)) return fail('Invalid condition');
-        const op = o.op === 'ge' ? 'ge' : 'lt';
-        const value = typeof o.value === 'number' && Number.isFinite(o.value) ? Math.max(0, Math.min(1000, o.value)) : 0;
-        orders.push({ kind: 'jump', to: o.to, cond: o.cond, op, value });
-      } else {
-        return fail('Invalid order');
-      }
-    }
-    if (orders.length > 0 && orders.every((o) => o.kind === 'jump')) return fail('Add a station, waypoint or depot to jump to');
-    return {
-      ok: true,
-      cost: 0,
-      commit() {
-        const current = t.orders[t.orderIndex];
-        t.orders = orders;
-        // Keep heading to the same station if it's still in the list.
-        const same = current?.kind === 'station' ? orders.findIndex((o) => o.kind === 'station' && o.station === current.station) : -1;
-        t.orderIndex = same >= 0 ? same : 0;
-        settleOrders(state, t);
-        t.routeFor = -1;
-        state.dirtyTrains.add(t.id);
-        return noEffects();
-      },
-    };
-  },
-};
-
 export const editConsistHandler: CommandHandler<EditConsistCommand> = {
   needsCompany: true,
   category: 'vehicles',
@@ -323,6 +258,41 @@ export const editConsistHandler: CommandHandler<EditConsistCommand> = {
         state.rail.invalidateStats(t);
         state.dirtyTrains.add(t.id);
         return noEffects();
+      },
+    };
+  },
+};
+
+export const cloneVehicleHandler: CommandHandler<CloneVehicleCommand> = {
+  needsCompany: true,
+  category: 'vehicles',
+  plan(state, ctx, cmd): PlanResult {
+    const t = isInt(cmd.id) ? state.trains.get(cmd.id) : undefined;
+    if (!t || t.owner !== ctx.companyId) return fail('Not your vehicle');
+    const units = t.units.map((u) => ({ ...u }));
+    const buyIn = (depot: number) => buyTrainHandler.plan(state, ctx, { type: 'buyTrain', depot, units });
+    let plan: PlanResult;
+    if (cmd.depot !== undefined) plan = buyIn(cmd.depot);
+    else if (t.status === 'depot' && t.depot >= 0) plan = buyIn(t.depot);
+    else {
+      // The nearest depot that can sell this vehicle (electric engines need power, heavy jets a large airport).
+      const depot = state.nearestDepot(t, (d) => buyIn(d).ok);
+      if (depot < 0) return fail(`${t.name} has no depot that can build a copy of it`);
+      plan = buyIn(depot);
+    }
+    if (!plan.ok) return plan;
+    const line = t.line !== undefined ? state.lines.get(t.line) : undefined;
+    if (line && typeof parseOrders(state, t.owner, vehicleMode(t), line.orders, [t]) === 'string') return fail(`${line.name} no longer suits ${t.name}`);
+    const commit = plan.commit;
+    return {
+      ok: true,
+      cost: plan.cost,
+      commit() {
+        const effects = commit();
+        const copy = state.trains.get(state.nextTrainId - 1)!;
+        copy.serviceInterval = t.serviceInterval;
+        if (line) assignVehicle(state, copy, line);
+        return effects;
       },
     };
   },

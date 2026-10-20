@@ -94,6 +94,7 @@ try {
     tileToScreen(x: number, y: number): { x: number; y: number };
     command(cmd: object): Promise<{ ok: boolean; error?: string }>;
     findClear(x: number, y: number, w: number, h: number): { x: number; y: number } | null;
+    trains(): { id: number; mode?: string; status: string }[];
   };
   const hook = <T>(fn: (h: Hook, arg: never) => T, arg?: unknown) =>
     a.evaluate(([f, x]) => new Function('h', 'arg', `return (${f})(h, arg)`)((window as unknown as { transportsim: Hook }).transportsim, x), [fn.toString(), arg] as const) as Promise<T>;
@@ -199,21 +200,37 @@ try {
   await depotWin.waitFor({ timeout: 5000 });
   await depotWin.getByRole('button', { name: /^Buy for/ }).click();
   await depotWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
-  const trainWin = a.locator('.window', { has: a.locator('ol.orders') });
-  await trainWin.getByRole('button', { name: /Add stations/ }).click();
+  const trainWin = a.locator('.window', { has: a.getByRole('button', { name: '+ New line' }) });
+  await trainWin.getByRole('button', { name: '+ New line' }).click();
+  // The new line's window opens; its stops are added there.
+  const lineWin = a.locator('.window', { has: a.locator('ol.orders') });
+  await lineWin.getByRole('button', { name: /Add stations/ }).click();
   await clickTile(sx - 2, sy - 4);
   await clickTile(sx + 7, sy - 4);
   await a.waitForTimeout(600);
-  check((await trainWin.locator('ol.orders li').count()) === 2, 'train got two orders by clicking stations');
-  await trainWin.getByRole('button', { name: 'Done adding' }).click();
-  await trainWin.getByRole('button', { name: '+ Service' }).click();
+  check((await lineWin.locator('ol.orders li').count()) === 2, 'train line got two stops by clicking stations');
+  await lineWin.getByRole('button', { name: 'Done adding' }).click();
+  await lineWin.getByRole('button', { name: '+ Service' }).click();
   await a.waitForTimeout(500);
-  check((await trainWin.innerText()).includes('Service at nearest depot'), 'added a depot service order');
+  check((await lineWin.innerText()).includes('Service at nearest depot'), 'added a depot service order');
+  check((await trainWin.innerText()).includes('Next stop'), 'the train window shows only the next stop');
+  await a.screenshot({ path: `${outDir}/03b-line-on-map.png` });
+  await lineWin.locator('button[aria-label="Close"]').click();
   await trainWin.getByRole('button', { name: /Start/ }).click();
   await a.getByRole('button', { name: '4×' }).click();
   await a.waitForTimeout(6000);
   const status = await trainWin.locator('.kv b').first().innerText();
   check(/Heading|Loading at/.test(status), `train is running (${status})`);
+  // Duplicate it: the copy waits in the depot, on the same line.
+  await trainWin.getByRole('button', { name: /Duplicate/ }).click();
+  await a.waitForTimeout(800);
+  await a.getByRole('button', { name: '〰 Lines' }).click();
+  const linesWin = a.locator('.window', { hasText: 'Your lines' });
+  check((await linesWin.innerText()).includes('2 vehicles'), 'duplicated the train onto its line');
+  await linesWin.locator('button[aria-label="Close"]').click();
+  // Sell the copy again: the money is needed for the building below.
+  const copyId = await hook((h) => h.trains().filter((t) => t.mode === undefined && t.status === 'depot').at(-1)?.id ?? -1);
+  check((await hook((h, id: number) => h.command({ type: 'trainAction', id, action: 'sell' }), copyId)).ok, 'sold the duplicate');
   await trainWin.getByRole('button', { name: /Locate/ }).click();
   await hook((h) => h.view({ distance: 7, pitch: 0.55, yaw: 2.2 }));
   await a.waitForTimeout(800);
@@ -252,13 +269,14 @@ try {
   // On a fresh levelled area: dig a valley and bridge it, raise a hill and tunnel through it.
   const terra = (x0: number, y0: number, x1: number, y1: number, mode: string, lv?: number) =>
     hook((h, c: object) => h.command(c), { type: 'terraform', x0, y0, x1, y1, mode, level: lv });
-  const bx = sx;
-  let by = sy + 20;
-  for (const oy of [20, -20, 32, -32]) {
-    by = sy + oy;
-    if ((await terra(bx - 14, by - 6, bx + 14, by + 6, 'level', 4)).ok) break;
-  }
-  check((await terra(bx - 3, by - 3, bx + 3, by + 3, 'level', 2)).ok, 'dug a valley');
+  // The nearest open land south of the start, with room around it for the slopes levelling makes.
+  const open = await hook((h, s: { x: number; y: number }) => h.findClear(s.x - 21, s.y + 10, 43, 27), { x: sx, y: sy });
+  const bx = (open?.x ?? sx - 21) + 21;
+  const by = (open?.y ?? sy + 10) + 13;
+  const flat = await terra(bx - 14, by - 6, bx + 14, by + 6, 'level', 4);
+  check(flat.ok, `levelled land for a bridge and a tunnel${flat.ok ? '' : `: ${flat.error}`}`);
+  const valley = await terra(bx - 3, by - 3, bx + 3, by + 3, 'level', 2);
+  check(valley.ok, `dug a valley${valley.ok ? '' : `: ${valley.error}`}`);
   await terra(bx + 8, by - 3, bx + 12, by + 3, 'raise');
   await terra(bx + 8, by - 3, bx + 12, by + 3, 'raise');
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x + 4, y: s.y, yaw: 0.25, pitch: 0.95, distance: 30 }), { x: bx, y: by });
@@ -369,13 +387,16 @@ try {
   const roadDepot = a.locator('.window', { hasText: 'Road depot' });
   await roadDepot.getByRole('button', { name: /^Buy for/ }).click();
   await roadDepot.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
-  const busWin = a.locator('.window', { has: a.locator('ol.orders') }).last();
-  await busWin.getByRole('button', { name: /Add stations/ }).click();
+  const busWin = a.locator('.window', { has: a.getByRole('button', { name: '+ New line' }) }).last();
+  await busWin.getByRole('button', { name: '+ New line' }).click();
+  const busLine = a.locator('.window', { has: a.locator('ol.orders') }).last();
+  await busLine.getByRole('button', { name: /Add stations/ }).click();
   await clickTile(sx - 2, sy + 8);
   await clickTile(sx - 5, sy + 8);
-  await busWin.getByRole('button', { name: 'Done adding' }).click();
-  check((await busWin.locator('ol.orders li').count()) === 2, 'bus got two stops');
-  if ((await busWin.locator('ol.orders li').count()) !== 2) console.log('  toasts:', await a.locator('.toast').allInnerTexts(), JSON.stringify(await tileAt(sx - 5, sy + 8)), JSON.stringify(await tileAt(sx - 2, sy + 8)));
+  await busLine.getByRole('button', { name: 'Done adding' }).click();
+  check((await busLine.locator('ol.orders li').count()) === 2, 'bus got two stops');
+  if ((await busLine.locator('ol.orders li').count()) !== 2) console.log('  toasts:', await a.locator('.toast').allInnerTexts(), JSON.stringify(await tileAt(sx - 5, sy + 8)), JSON.stringify(await tileAt(sx - 2, sy + 8)));
+  await busLine.locator('button[aria-label="Close"]').click();
   await busWin.getByRole('button', { name: /Start/ }).click();
   await a.waitForTimeout(5000);
   const busStatus = await busWin.locator('.kv b').first().innerText();
@@ -592,7 +613,7 @@ try {
     await hangarWin.waitFor({ timeout: 5000 });
     await hangarWin.getByRole('button', { name: /^Buy for/ }).click();
     await hangarWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
-    const planeWin = d.locator('.window', { has: d.locator('ol.orders') }).last();
+    const planeWin = d.locator('.window', { has: d.getByRole('button', { name: '+ New line' }) }).last();
     const home = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap1.x, ap1.y])).data;
     // The far airport may be off screen (its tiles not loaded here); find it among the stations.
     const away = await dh((h, at: number) => h.stations().find((st) => st.airport && st.id !== at)?.id ?? -1, home);
@@ -669,7 +690,7 @@ try {
     await depotWin.waitFor({ timeout: 5000 });
     await depotWin.getByRole('button', { name: /^Buy for/ }).click();
     await depotWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
-    const shipWin = d.locator('.window', { has: d.locator('ol.orders') }).last();
+    const shipWin = d.locator('.window', { has: d.getByRole('button', { name: '+ New line' }) }).last();
     const near = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 2, wy + 4])).data;
     const farSt = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 14, wy + 4])).data;
     const shipId = await dh((h) => h.trains().filter((t) => t.mode === 'water').at(-1)?.id ?? -1);

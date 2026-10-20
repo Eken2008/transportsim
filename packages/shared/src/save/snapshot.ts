@@ -9,7 +9,8 @@ import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
-import { JUMP_CONDITIONS, type AirPhase, type AirState, type ShipState } from '../vehicles/train.ts';
+import { JUMP_CONDITIONS, type AirPhase, type AirState, type Order, type ShipState } from '../vehicles/train.ts';
+import { LINE_COLORS, VEHICLE_MODES, addLine, vehicleMode, type Line } from '../vehicles/lines.ts';
 import { isCargo } from '../economy/cargo.ts';
 import { industryType, newIndustry, type CargoAmounts, type Industry } from '../economy/industries.ts';
 import type { StationPacket } from '../economy/cargoSystem.ts';
@@ -38,6 +39,8 @@ export interface Snapshot {
   nextStationId?: number;
   trains?: Train[];
   nextTrainId?: number;
+  lines?: Line[];
+  nextLineId?: number;
   news?: NewsItem[];
   nextNewsId?: number;
   agreements?: Agreement[];
@@ -70,6 +73,8 @@ export function takeSnapshot(state: GameState): Snapshot {
     nextStationId: state.nextStationId,
     trains: [...state.trains.values()],
     nextTrainId: state.nextTrainId,
+    lines: [...state.lines.values()],
+    nextLineId: state.nextLineId,
     news: state.news,
     nextNewsId: state.nextNewsId,
     agreements: [...state.agreements.values()],
@@ -228,11 +233,41 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
     if (map.layers.type[i] === TileType.ShipDepot) state.shipDepots.add(i);
     if (map.layers.signals[i]) state.signalTiles.add(i);
   }
+  for (const l of Array.isArray(snap.lines) ? snap.lines : []) {
+    if (!l || typeof l.id !== 'number' || !state.companies.has(l.owner) || !VEHICLE_MODES.includes(l.mode)) continue;
+    state.lines.set(l.id, {
+      id: l.id,
+      owner: l.owner,
+      name: String(l.name ?? 'Line').slice(0, 40),
+      mode: l.mode,
+      color: Number.isInteger(l.color) && l.color >= 0 && l.color < LINE_COLORS.length ? l.color : 0,
+      orders: sanitizeOrders(l.orders),
+    });
+  }
+  state.nextLineId = Math.max(num(snap.nextLineId, 0), ...[...state.lines.keys()].map((k) => k + 1));
   for (const t of Array.isArray(snap.trains) ? snap.trains : []) {
     const train = sanitizeTrain(t, state, snap.version);
     if (train) state.trains.set(train.id, train);
   }
   state.nextTrainId = Math.max(num(snap.nextTrainId, 0), ...[...state.trains.keys()].map((k) => k + 1));
+  // Vehicles follow their line's orders. Saves from before lines: vehicles of a company with the
+  // same orders share a new line.
+  const migrated = new Map<string, Line>();
+  for (const t of state.trains.values()) {
+    const line = t.line !== undefined ? state.lines.get(t.line) : undefined;
+    if (line && line.owner === t.owner && line.mode === vehicleMode(t)) {
+      t.orders = line.orders;
+      continue;
+    }
+    t.line = undefined;
+    if (t.orders.length === 0) continue;
+    const key = `${t.owner}|${vehicleMode(t)}|${JSON.stringify(t.orders)}`;
+    let shared = migrated.get(key);
+    if (!shared) migrated.set(key, (shared = addLine(state, t.owner, vehicleMode(t), t.orders)));
+    t.line = shared.id;
+    t.orders = shared.orders;
+  }
+  state.dirtyLines.clear();
   state.rail.rebuildOccupancy();
   state.road.rebuildOccupancy();
   state.air.rebuild();
@@ -358,14 +393,8 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState, v
     path,
     pos: num(t.pos, 0),
     speed: num(t.speed, 0),
-    orders: (Array.isArray(t.orders) ? t.orders : []).filter(
-      (o) =>
-        o &&
-        (o.kind === 'depot' ||
-          (o.kind === 'station' && typeof o.station === 'number') ||
-          (o.kind === 'waypoint' && typeof o.waypoint === 'number') ||
-          (o.kind === 'jump' && typeof o.to === 'number' && JUMP_CONDITIONS.includes(o.cond))),
-    ),
+    line: typeof t.line === 'number' ? t.line : undefined,
+    orders: sanitizeOrders(t.orders),
     orderIndex: num(t.orderIndex, 0),
     toDepot: t.toDepot === true,
     route: [],
@@ -393,4 +422,15 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState, v
     oldWarned: t.oldWarned === true || undefined,
     brakeFail: Math.max(0, Math.floor(num(t.brakeFail, 0))) || undefined,
   };
+}
+
+function sanitizeOrders(input: unknown): Order[] {
+  return (Array.isArray(input) ? (input as Order[]) : []).filter(
+    (o) =>
+      o &&
+      (o.kind === 'depot' ||
+        (o.kind === 'station' && typeof o.station === 'number') ||
+        (o.kind === 'waypoint' && typeof o.waypoint === 'number') ||
+        (o.kind === 'jump' && typeof o.to === 'number' && JUMP_CONDITIONS.includes(o.cond))),
+  );
 }

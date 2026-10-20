@@ -38,7 +38,8 @@ import { ShipSystem } from '../vehicles/shipSystem.ts';
 import { removeWaterTile } from '../commands/water.ts';
 import { hangarTile } from '../air/airports.ts';
 import { isRailVehicle } from '../vehicles/train.ts';
-import type { Train } from '../vehicles/train.ts';
+import type { Order, Train } from '../vehicles/train.ts';
+import { deleteLine, setLineOrders, type Line } from '../vehicles/lines.ts';
 import { GameMap } from '../world/map.ts';
 import { generateTerrain } from '../world/terrain.ts';
 import { TICKS_PER_DAY, daysFromYmd, ymdFromDays } from './date.ts';
@@ -90,6 +91,11 @@ export class GameState {
   nextTrainId = 0;
   readonly dirtyTrains = new Set<number>();
   readonly removedTrains = new Set<number>();
+  readonly lines = new Map<number, Line>();
+  nextLineId = 0;
+  /** Lines changed/removed since the last sync flush. */
+  readonly dirtyLines = new Set<number>();
+  readonly removedLines = new Set<number>();
   /** Tile indices of all depots. */
   readonly depots = new Set<number>();
   /** Tile indices of all road depots. */
@@ -373,12 +379,10 @@ export class GameState {
     // Other companies' trains on its track go home first, and lose orders for its stations.
     for (const a of [...this.agreements.values()]) if (a.host === id || a.guest === id) this.agreements.delete(a.id);
     this.agreementsChanged();
-    for (const t of [...this.trains.values()]) {
-      if (t.owner === id) continue;
-      this.dropOrdersFor(t, id);
-      if (this.isOnTrackOf(t, id)) this.towHome(t);
-    }
+    for (const line of this.lines.values()) if (line.owner !== id) this.dropOrdersFor(line, id);
+    for (const t of [...this.trains.values()]) if (t.owner !== id && this.isOnTrackOf(t, id)) this.towHome(t);
     for (const t of [...this.trains.values()]) if (t.owner === id) this.removeVehicle(t);
+    for (const line of [...this.lines.values()]) if (line.owner === id) deleteLine(this, line.id);
     for (const wp of [...this.waypoints.values()]) if (wp.buoy && wp.owner === id) this.deleteWaypoint(wp.id);
     const { type, owner } = this.map.layers;
     const dirty = new Set<number>();
@@ -472,9 +476,9 @@ export class GameState {
     if (a.status !== 'active') return 0;
     this.agreementsChanged();
     let towed = 0;
+    for (const line of this.lines.values()) if (line.owner === a.guest) this.dropOrdersFor(line, a.host);
     for (const t of [...this.trains.values()]) {
       if (t.owner !== a.guest || !isRailVehicle(t)) continue;
-      this.dropOrdersFor(t, a.host);
       if (this.isOnTrackOf(t, a.host)) {
         this.towHome(t);
         towed++;
@@ -489,40 +493,48 @@ export class GameState {
     return t.path.some((s) => !isSpanTd(segTd(s)) && o[segTile(s)] === owner);
   }
 
-  private dropOrdersFor(t: Train, owner: number): void {
-    const keep = t.orders.filter((o) => o.kind !== 'station' || this.stations.get(o.station)?.owner !== owner);
-    if (keep.length === t.orders.length) return;
-    t.orders = keep;
-    t.orderIndex = keep.length ? Math.min(t.orderIndex, keep.length - 1) : 0;
-    t.routeFor = -1;
-    this.dirtyTrains.add(t.id);
+  /** A line loses its stops at `owner`'s stations. */
+  private dropOrdersFor(line: Line, owner: number): void {
+    this.dropOrders(line, (o) => o.kind === 'station' && this.stations.get(o.station)?.owner === owner);
+  }
+
+  /** Remove some of a line's orders; jumps follow the orders that stay. */
+  private dropOrders(line: Line, drop: (o: Order) => boolean): void {
+    if (!line.orders.some(drop)) return;
+    const index: number[] = [];
+    const keep: Order[] = [];
+    line.orders.forEach((o, i) => {
+      index[i] = keep.length;
+      if (!drop(o)) keep.push(o);
+    });
+    const fixed = keep.map((o) => (o.kind === 'jump' ? { ...o, to: Math.min(index[o.to] ?? 0, Math.max(0, keep.length - 1)) } : o));
+    setLineOrders(this, line, fixed.every((o) => o.kind === 'jump') ? [] : fixed);
   }
 
   /** Put a vehicle straight into its company's nearest depot, or sell it if there is none. */
   towHome(t: Train): void {
-    const w = this.map.width;
-    const free = t.air ?? t.ship;
-    const head = free ? Math.floor(free.y) * this.map.width + Math.floor(free.x) : t.path.length ? segTile(t.path[0]!) : Math.max(0, t.depot);
-    const hx = head % w;
-    const hy = (head - hx) / w;
-    let best = -1;
-    let bestD = Infinity;
-    const depots = t.mode === 'road' ? this.roadDepots : t.mode === 'air' ? this.hangars(t.owner) : t.mode === 'water' ? this.shipDepots : this.depots;
-    for (const d of depots) {
-      if (this.map.layers.owner[d] !== t.owner) continue;
-      const dx = (d % w) - hx;
-      const dy = Math.floor(d / w) - hy;
-      if (dx * dx + dy * dy < bestD) {
-        bestD = dx * dx + dy * dy;
-        best = d;
-      }
-    }
+    const best = this.nearestDepot(t);
     if (best >= 0) {
       this.systemOf(t).enterDepot(t, best);
       return;
     }
     this.addMoney(t.owner, resaleValue(t.value, (this.date - t.builtDays) / 365), 'vehicles');
     this.removeVehicle(t);
+  }
+
+  /** The company's depot (of the vehicle's kind) nearest to it, as the crow flies, that passes `ok`; -1 if none. */
+  nearestDepot(t: Train, ok?: (depot: number) => boolean): number {
+    const w = this.map.width;
+    const free = t.air ?? t.ship;
+    const head = free ? Math.floor(free.y) * this.map.width + Math.floor(free.x) : t.path.length ? segTile(t.path[0]!) : Math.max(0, t.depot);
+    const hx = head % w;
+    const hy = (head - hx) / w;
+    const depots = t.mode === 'road' ? this.roadDepots : t.mode === 'air' ? this.hangars(t.owner) : t.mode === 'water' ? this.shipDepots : this.depots;
+    const near = [...depots]
+      .filter((d) => this.map.layers.owner[d] === t.owner)
+      .map((d) => ({ d, dist: ((d % w) - hx) ** 2 + (Math.floor(d / w) - hy) ** 2 }))
+      .sort((a, b) => a.dist - b.dist);
+    return near.find(({ d }) => !ok || ok(d))?.d ?? -1;
   }
 
   /** Count ticks guest trains spend on other companies' track (billed daily). */
@@ -559,14 +571,7 @@ export class GameState {
     if (type[wp.tile] === TileType.Rail) data[wp.tile] = data[wp.tile]! & ~WAYPOINT_FLAG;
     if (type[wp.tile] === TileType.Water) data[wp.tile] = data[wp.tile]! & ~WATER_BUOY;
     this.map.touchTile(wp.tile % this.map.width, Math.floor(wp.tile / this.map.width));
-    for (const t of this.trains.values()) {
-      const keep = t.orders.filter((o) => o.kind !== 'waypoint' || o.waypoint !== id);
-      if (keep.length === t.orders.length) continue;
-      t.orders = keep;
-      t.orderIndex = keep.length ? Math.min(t.orderIndex, keep.length - 1) : 0;
-      t.routeFor = -1;
-      this.dirtyTrains.add(t.id);
-    }
+    for (const line of this.lines.values()) this.dropOrders(line, (o) => o.kind === 'waypoint' && o.waypoint === id);
   }
 
   onTrackChanged(): void {

@@ -5,7 +5,7 @@ import type { TerrainHit } from '../render/picking.ts';
 import { toast, useApp } from '../store.ts';
 import type { Modifiers, Tool } from './tool.ts';
 
-/** Click stations, waypoints or depots to append them to the selected train's orders. Esc or right-click ends. */
+/** Click stations, waypoints or depots to append them to the selected line's stops. Esc or right-click ends. */
 export class OrdersTool implements Tool {
   private last = -1;
 
@@ -63,13 +63,13 @@ export class OrdersTool implements Tool {
   onDown(): void {}
 
   onUp(hit: TerrainHit | null): void {
-    const trainId = useApp.getState().ordersFor;
-    const train = trainId !== null ? client.world?.trains.get(trainId) : undefined;
-    if (!hit || !train) return;
+    const lineId = useApp.getState().ordersFor;
+    const line = lineId !== null ? client.world?.state.lines.get(lineId) : undefined;
+    if (!hit || !line) return;
     const order = this.orderAt(hit);
-    if (!order) return toast('Click a station, waypoint or depot to add it to the orders', 'info', 2000);
-    const orders = [...train.orders, order];
-    void client.command({ type: 'setOrders', id: train.id, orders }).then((r) => {
+    if (!order) return toast('Click a station, waypoint or depot to add it to the line', 'info', 2000);
+    const orders = [...line.orders, order];
+    void client.command({ type: 'editLine', id: line.id, orders }).then((r) => {
       if (!r.ok && r.error) toast(r.error, 'error');
     });
   }

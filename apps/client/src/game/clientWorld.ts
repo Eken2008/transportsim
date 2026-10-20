@@ -9,6 +9,7 @@ import {
   type GameSettings,
   type GlobalState,
   type Industry,
+  type Line,
   type Station,
   type Town,
   type TrainInfo,
@@ -35,6 +36,8 @@ export class ClientWorld {
   /** All trains (details), and the latest motion sample for trains near our view. */
   readonly trains = new Map<number, TrainInfo>();
   trainsRev = 0;
+  /** Bumped when lines change. */
+  linesRev = 0;
   readonly motions = new Map<number, { m: TrainMotion; at: number }>();
   /** Signal tile → mask of trackdirs showing red (only for tiles near our view). */
   readonly signalRed = new Map<number, number>();
@@ -143,6 +146,14 @@ export class ClientWorld {
     // Trains parked in a depot are no longer on the map.
     for (const t of trains) if (t.status === 'depot') this.motions.delete(t.id);
     this.trainsRev++;
+  }
+
+  applyLines(lines: Line[], removed: number[], full: boolean): void {
+    const m = this.state.lines;
+    if (full) m.clear();
+    for (const l of lines) m.set(l.id, l);
+    for (const id of removed) m.delete(id);
+    this.linesRev++;
   }
 
   applyTrainPositions(motions: TrainMotion[]): void {

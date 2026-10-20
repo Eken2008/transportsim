@@ -151,6 +151,10 @@ class AppClient {
         this.world?.applyTrains(m.trains, m.removed, m.full);
         useApp.setState((s) => ({ trainsRev: s.trainsRev + 1 }));
         return;
+      case 'lines':
+        this.world?.applyLines(m.lines, m.removed, m.full);
+        useApp.setState((s) => ({ linesRev: s.linesRev + 1 }));
+        return;
       case 'trainPos':
         this.world?.applyTrainPositions(m.trains);
         return;

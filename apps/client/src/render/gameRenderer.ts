@@ -20,6 +20,7 @@ import { SignalLights } from './signalLights.ts';
 import { IndustryRenderer } from './industryMesh.ts';
 import { FloatingText } from './floatingText.ts';
 import { CrossingBooms } from './crossings.ts';
+import { LineOverlay } from './lineOverlay.ts';
 import { SignalTool } from '../tools/signalTool.ts';
 import { BridgeTool, TunnelTool } from '../tools/structureTools.ts';
 import { AirportRole, TileType, type Piece } from '@transportsim/shared';
@@ -53,6 +54,8 @@ export class GameRenderer {
   private reservationsRev = '';
   readonly floaters: FloatingText;
   readonly crossings: CrossingBooms;
+  /** Lines on the map while the lines window (or a line's) is open. */
+  private readonly lineOverlay: LineOverlay;
   private downAt: { x: number; y: number } | null = null;
 
   private readonly canvas: HTMLCanvasElement;
@@ -107,6 +110,8 @@ export class GameRenderer {
     this.floaters = new FloatingText(canvas.parentElement!, world);
     this.crossings = new CrossingBooms(world);
     this.scene.add(this.crossings.root);
+    this.lineOverlay = new LineOverlay(world);
+    this.scene.add(this.lineOverlay.mesh);
     world.onIncome = (tile, amount) => this.floaters.add(tile, '+£' + Math.round(amount).toLocaleString('en-GB'));
     this.labels = new LabelLayer(canvas.parentElement!, world);
     this.scene.add(this.chunks.root, this.cursor.root, this.ghost.mesh);
@@ -363,6 +368,7 @@ export class GameRenderer {
     this.updateWrecks();
     this.industries.update(now);
     this.crossings.update(dt, now, this.controller.target);
+    this.lineOverlay.update(this.controller.distance);
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;
     fog.far = this.controller.distance * 9 + 300;
@@ -403,6 +409,7 @@ export class GameRenderer {
     this.industries.dispose();
     this.floaters.dispose();
     this.crossings.dispose();
+    this.lineOverlay.dispose();
     this.world.onIncome = null;
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();

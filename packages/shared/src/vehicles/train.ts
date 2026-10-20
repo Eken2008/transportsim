@@ -123,6 +123,8 @@ export interface Train {
   owner: number;
   name: string;
   units: TrainUnit[];
+  /** The line it runs on; its orders are the line's. */
+  line?: number;
   status: TrainStatus;
   /** Depot tile while parked; -1 otherwise. */
   depot: number;
@@ -132,6 +134,7 @@ export interface Train {
   pos: number;
   /** km/h */
   speed: number;
+  /** Its line's orders (the same list on the server); empty without a line. */
   orders: Order[];
   orderIndex: number;
   /** Heading for the nearest depot (player "send to depot"). */

@@ -1,4 +1,4 @@
-import { JUMP_CONDITIONS, type JumpCondition, type JumpOrder, type Order, type TrainInfo } from '@transportsim/shared';
+import { JUMP_CONDITIONS, type JumpCondition, type JumpOrder, type Line, type Order } from '@transportsim/shared';
 import { client } from '../net/client.ts';
 import { useApp } from '../store.ts';
 import { act } from './windows.tsx';
@@ -63,39 +63,25 @@ function NumberField({ value, onCommit, label, width = 52 }: { value: number | u
   );
 }
 
-/** Orders and timetable of a train: stations, waypoints, depot visits and conditional jumps. */
-export function OrdersEditor({ t, mine, warn }: { t: TrainInfo; mine: boolean; warn: (o: Order) => React.ReactNode }) {
-  const editing = useApp((s) => s.ordersFor === t.id);
-  const setOrders = (orders: Order[]) => act({ type: 'setOrders', id: t.id, orders });
-  const patch = (i: number, p: Partial<Order>) => setOrders(t.orders.map((o, k) => (k === i ? ({ ...o, ...p } as Order) : o)));
-  const timetabled = t.orders.some((o) => o.kind !== 'jump' && (o.travel || (o.kind === 'station' && o.wait)));
-  const total = t.orders.reduce((s, o) => s + (o.kind !== 'jump' ? (o.travel ?? 0) + (o.kind === 'station' ? (o.wait ?? 0) : 0) : 0), 0);
+/** A line's stops and timetable: stations, waypoints, depot visits and conditional jumps. */
+export function OrdersEditor({ line, mine, warn = () => null }: { line: Line; mine: boolean; warn?: (o: Order) => React.ReactNode }) {
+  const editing = useApp((s) => s.ordersFor === line.id);
+  const orders = line.orders;
+  const setOrders = (next: Order[]) => act({ type: 'editLine', id: line.id, orders: next });
+  const patch = (i: number, p: Partial<Order>) => setOrders(orders.map((o, k) => (k === i ? ({ ...o, ...p } as Order) : o)));
+  const timetabled = orders.some((o) => o.kind !== 'jump' && (o.travel || (o.kind === 'station' && o.wait)));
+  const total = orders.reduce((s, o) => s + (o.kind !== 'jump' ? (o.travel ?? 0) + (o.kind === 'station' ? (o.wait ?? 0) : 0) : 0), 0);
 
   return (
     <>
       <div className="row" style={{ marginTop: 14 }}>
-        <h4 style={{ margin: 0, flex: 1 }}>Orders</h4>
-        {timetabled && (
-          <span className={`small ${t.lateness && t.lateness > 0.5 ? 'neg' : 'muted'}`} title="Against the timetabled travel times">
-            {t.lateness === undefined ? '' : Math.abs(t.lateness) < 0.5 ? 'on time · ' : t.lateness > 0 ? `${t.lateness} d late · ` : `${-t.lateness} d early · `}
-            round trip {total.toFixed(1)} d
-          </span>
-        )}
-        {mine && (
-          <button
-            className={`ghost small ${t.autofill ? 'active-text' : ''}`}
-            title="Record travel times into the timetable as the train runs"
-            aria-pressed={!!t.autofill}
-            onClick={() => act({ type: 'trainAction', id: t.id, action: 'autofill' })}
-          >
-            ⏱ {t.autofill ? 'Recording…' : 'Autofill'}
-          </button>
-        )}
+        <h4 style={{ margin: 0, flex: 1 }}>Stops</h4>
+        {timetabled && <span className="small muted">round trip {total.toFixed(1)} d</span>}
       </div>
-      {t.orders.length === 0 && <p className="muted">No orders yet. Add the stations this train should serve.</p>}
+      {orders.length === 0 && <p className="muted">No stops yet. Add the stations this line should serve.</p>}
       <ol className="orders">
-        {t.orders.map((o, i) => (
-          <li key={i} className={`${i === t.orderIndex ? 'current' : ''} kind-${o.kind}`}>
+        {orders.map((o, i) => (
+          <li key={i} className={`kind-${o.kind}`}>
             <div className="order-main">
               <span className="order-name">
                 {orderName(o, i)}
@@ -103,10 +89,10 @@ export function OrdersEditor({ t, mine, warn }: { t: TrainInfo; mine: boolean; w
               </span>
               {mine && (
                 <>
-                  <button className="ghost small" disabled={i === 0} aria-label="Move up" onClick={() => setOrders(swapAt(t.orders, i, i - 1))}>
+                  <button className="ghost small" disabled={i === 0} aria-label="Move up" onClick={() => setOrders(swapAt(orders, i, i - 1))}>
                     ↑
                   </button>
-                  <button className="ghost small" aria-label="Remove order" onClick={() => setOrders(removeAt(t.orders, i))}>
+                  <button className="ghost small" aria-label="Remove order" onClick={() => setOrders(removeAt(orders, i))}>
                     ✕
                   </button>
                 </>
@@ -140,7 +126,7 @@ export function OrdersEditor({ t, mine, warn }: { t: TrainInfo; mine: boolean; w
                 )}
               </div>
             )}
-            {o.kind === 'jump' && mine && <JumpEditor o={o} count={t.orders.length} onChange={(p) => patch(i, p)} />}
+            {o.kind === 'jump' && mine && <JumpEditor o={o} count={orders.length} onChange={(p) => patch(i, p)} />}
           </li>
         ))}
       </ol>
@@ -149,17 +135,17 @@ export function OrdersEditor({ t, mine, warn }: { t: TrainInfo; mine: boolean; w
           <button
             className={editing ? 'primary' : ''}
             style={{ flex: 1 }}
-            onClick={() => (editing ? useApp.setState({ ordersFor: null, tool: null }) : useApp.setState({ ordersFor: t.id, tool: 'orders' }))}
+            onClick={() => (editing ? useApp.setState({ ordersFor: null, tool: null }) : useApp.setState({ ordersFor: line.id, tool: 'orders' }))}
           >
             {editing ? 'Done adding' : '+ Add stations, waypoints, depots (click them)'}
           </button>
-          <button title="Visit the nearest depot for a service, then carry on" onClick={() => setOrders([...t.orders, { kind: 'depot' }])}>
+          <button title="Visit the nearest depot for a service, then carry on" onClick={() => setOrders([...orders, { kind: 'depot' }])}>
             + Service
           </button>
           <button
             title="Jump to another order when a condition holds"
-            disabled={t.orders.length === 0}
-            onClick={() => setOrders([...t.orders, { kind: 'jump', to: 0, cond: 'load', op: 'lt', value: 50 }])}
+            disabled={orders.length === 0}
+            onClick={() => setOrders([...orders, { kind: 'jump', to: 0, cond: 'load', op: 'lt', value: 50 }])}
           >
             + Jump
           </button>
