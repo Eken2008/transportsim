@@ -1264,17 +1264,31 @@ export class RailSystem {
   }
 
   private goalFor(t: Train): PathGoal | null {
-    if (t.toDepot || t.serviceTrip) return this.goalForOrder(t, { kind: 'depot' });
+    // Sent to a depot: the nearest. A service detour: the one most on the way to the current order.
+    if (t.toDepot) return this.depotGoalFor(t);
+    if (t.serviceTrip) return this.depotGoalFor(t, t.orders[t.orderIndex]);
     const o = t.orders[t.orderIndex];
     return o ? this.goalForOrder(t, o) : null;
   }
 
+  /**
+   * Goal: any of the company's depots. Given the order to carry on with afterwards, a depot
+   * also costs the distance from it on to that order, so trains get serviced on their line
+   * rather than at a depot that happens to be closer but leads them away from it.
+   */
+  private depotGoalFor(t: Train, after?: Order): PathGoal | null {
+    const map = this.state.map;
+    const depots = [...this.state.depots].filter((d) => map.layers.owner[d] === t.owner);
+    if (!depots.length) return null;
+    const next = after && after.kind !== 'depot' ? this.goalForOrder(t, after) : null;
+    if (!next) return depotGoal(map, depots);
+    const w = map.width;
+    return depotGoal(map, depots, (d) => next.estimate(d % w, Math.floor(d / w)));
+  }
+
   private goalForOrder(t: Train, o: Order): PathGoal | null {
     const map = this.state.map;
-    if (o.kind === 'depot') {
-      const depots = [...this.state.depots].filter((d) => map.layers.owner[d] === t.owner);
-      return depots.length ? depotGoal(map, depots) : null;
-    }
+    if (o.kind === 'depot') return this.depotGoalFor(t, t.orders[peekNextOrder(this.state, t)]);
     if (o.kind === 'station') {
       const st = this.state.stations.get(o.station);
       return st ? stationGoal(map, st.id, st) : null;

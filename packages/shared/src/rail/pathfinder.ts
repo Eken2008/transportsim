@@ -9,6 +9,8 @@ export interface PathGoal {
   isGoal(s: number): boolean;
   /** Admissible distance estimate (tiles) from a tile to the goal. */
   estimate(x: number, y: number): number;
+  /** Extra cost (tiles) of ending on this goal segment, to prefer some goals over others. */
+  cost?(s: number): number;
 }
 
 export interface PathOptions {
@@ -54,6 +56,7 @@ export function findPath(map: GameMap, start: number, goal: PathGoal, opts: Path
       let cost = gc + segLength(n);
       if (TD_HEADING[segTd(n)] !== heading) cost += CURVE_PENALTY;
       if (opts.penalty) cost += opts.penalty(n);
+      if (goal.cost && goal.isGoal(n)) cost += goal.cost(n);
       const old = g.get(n);
       if (old !== undefined && old <= cost) continue;
       g.set(n, cost);
@@ -123,6 +126,7 @@ export function findTurnaround(map: GameMap, start: number, goal: PathGoal, leng
       let cost = gc + segLength(n);
       if (TD_HEADING[segTd(n)] !== heading) cost += CURVE_PENALTY;
       if (opts.penalty) cost += opts.penalty(n);
+      if (phase === 1 && goal.cost && goal.isGoal(n)) cost += goal.cost(n);
       if (push(n * 2 + phase, cur, cost) && phase === 0) driven.set(n * 2, driven.get(cur)! + segLength(n));
     }
   }
@@ -144,22 +148,27 @@ export function stationGoal(map: GameMap, stationId: number, box: { x0: number; 
   };
 }
 
-/** Goal: drive into one of the given depot tiles through its door. */
-export function depotGoal(map: GameMap, depots: number[]): PathGoal {
-  const set = new Set(depots);
+/**
+ * Goal: drive into one of the given depot tiles through its door. With `extra`, reaching a
+ * depot costs that much more (say, the way on from it), so the search weighs depots by it.
+ */
+export function depotGoal(map: GameMap, depots: number[], extra?: (depot: number) => number): PathGoal {
+  const costs = new Map(depots.map((d) => [d, extra?.(d) ?? 0]));
   const w = map.width;
   return {
     isGoal(s) {
-      return set.has(segTile(s));
+      return costs.has(segTile(s));
     },
     estimate(x, y) {
+      if (extra && costs.has(y * w + x)) return 0; // the extra is already paid on arrival
       let best = Infinity;
-      for (const d of depots) {
+      for (const [d, c] of costs) {
         const dx = d % w;
-        best = Math.min(best, Math.hypot(dx - x, (d - dx) / w - y));
+        best = Math.min(best, Math.hypot(dx - x, (d - dx) / w - y) + c);
       }
       return best * 0.95;
     },
+    cost: extra ? (s) => costs.get(segTile(s)) ?? 0 : undefined,
   };
 }
 
