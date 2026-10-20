@@ -41,7 +41,7 @@ MAX_PLAYERS=32 MAX_MAP_SIZE=4096 MAX_ROOMS=4 HOST_GRACE_SECONDS=300 bun run star
 
 ## Behind a reverse proxy
 
-Put TLS in front with any proxy that passes WebSocket upgrades. With nginx:
+Put TLS in front with any proxy that passes WebSocket upgrades. With nginx, the smallest config is:
 
 ```nginx
 location / {
@@ -50,11 +50,14 @@ location / {
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection "upgrade";
     proxy_read_timeout 300s;
-    client_max_body_size 100m;
 }
 ```
 
-Players upload a save when they host a game from one, and a 2048² save can reach about 20 MB, so allow large WebSocket frames. The server accepts messages up to 96 MB.
+[nginx.example.conf](nginx.example.conf) is a full example with an HTTPS redirect, gzip, caching for the client's hashed assets, and `/health` kept to localhost.
+
+Players upload a save over the WebSocket when they host a game from one, and a 2048² save can reach about 20 MB. The server accepts messages up to 96 MB. nginx doesn't limit WebSocket frame sizes, but check that any other proxy or load balancer in front allows large frames.
+
+`/health` lists the join code of every running game, private games too. Don't expose it publicly.
 
 With Caddy, `reverse_proxy 127.0.0.1:8787` is enough.
 
