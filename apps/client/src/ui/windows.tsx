@@ -251,8 +251,13 @@ export function trainStatus(t: TrainInfo): string {
   if (t.status === 'loading') return `Loading at ${stationName(t.lastStation)}`;
   if (t.status === 'stopped') return 'Stopped';
   if (t.depot >= 0) return 'Waiting to leave the depot';
-  if (t.toDepot) return 'Heading for depot';
   const o = t.orders[t.orderIndex];
+  if (t.lost) {
+    if (!t.toDepot && o?.kind === 'station') return `⚠ Lost: no route to ${stationName(o.station)}`;
+    if (!t.toDepot && o?.kind === 'waypoint') return `⚠ Lost: no route to ${client.world?.state.waypoints.get(o.waypoint)?.name ?? 'a waypoint'}`;
+    return '⚠ Lost: no route to a depot';
+  }
+  if (t.toDepot) return 'Heading for depot';
   if (!o) return 'No orders';
   if (o.kind === 'station') return `Heading to ${stationName(o.station)}`;
   if (o.kind === 'waypoint') return `Heading via ${client.world?.state.waypoints.get(o.waypoint)?.name ?? 'a waypoint'}`;
@@ -293,7 +298,9 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
     <Win w={w} title={t.name} width={320}>
       <VehicleView id={t.id} onClick={locate} onDoubleClick={() => moving && follow(t.id)} />
       <div className="vehicle-status row">
-        <b style={{ flex: 1 }}>{trainStatus(t)}</b>
+        <b style={{ flex: 1 }} className={t.lost ? 'neg' : undefined}>
+          {trainStatus(t)}
+        </b>
         <span className="mono muted">{Math.round(motion?.speed ?? 0)} km/h</span>
       </div>
       <div className="row wrap vehicle-actions">
@@ -376,7 +383,7 @@ function TrainInfoWindow({ w }: { w: GameWindow & { kind: 'trainInfo' } }) {
     <Win w={w} title={`${t.name} details`} width={360}>
       <div className="kv">
         <span>Status</span>
-        <b>{trainStatus(t)}</b>
+        <b className={t.lost ? 'neg' : undefined}>{trainStatus(t)}</b>
         <span>Speed</span>
         <b className="mono">
           {Math.round(motion?.speed ?? 0)} / {stats.maxSpeed} km/h

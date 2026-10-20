@@ -5,6 +5,7 @@ import {
   GameMap,
   GameState,
   HOUSE_TYPES,
+  LOST_DAYS,
   ROAD_E,
   ROAD_N,
   ROAD_ONE_WAY,
@@ -202,5 +203,30 @@ describe('road vehicles', () => {
     const east = map.tileIndex(31, 10);
     expect(roadNext(map, roadSeg(west, Edge.W, Edge.E)).length).toBe(1);
     expect(roadNext(map, roadSeg(east, Edge.E, Edge.W))).toEqual([]);
+  });
+
+  test('a vehicle with no route to its next stop is reported lost until it finds one', () => {
+    const { state, run, days, buy } = world();
+    // The second stop is on a road of its own, not joined to the first.
+    run({ type: 'buildRoad', x0: 20, y0: 30, x1: 40, y1: 30 });
+    run({ type: 'buildRoadStop', x: 7, y: 10, kind: 'bus' });
+    run({ type: 'buildRoadStop', x: 30, y: 30, kind: 'bus' });
+    const bus = buy(['city_bus']);
+    run({ type: 'setOrders', id: bus.id, orders: [{ kind: 'station', station: 0 }, { kind: 'station', station: 1 }] });
+    run({ type: 'trainAction', id: bus.id, action: 'start' });
+    days(LOST_DAYS + 8);
+    expect(bus.lost).toBe(true);
+    const lost = state.news.filter((n) => n.vehicle === bus.id);
+    expect(lost.length).toBe(1);
+    expect(lost[0]!.text).toContain('is lost');
+    expect(lost[0]!.text).toContain(state.stations.get(1)!.name);
+    // Told once, not every day.
+    days(5);
+    expect(state.news.filter((n) => n.vehicle === bus.id).length).toBe(1);
+    // Join the roads: it finds its way and is no longer lost.
+    run({ type: 'buildRoad', x0: 40, y0: 10, x1: 40, y1: 30 });
+    days(3);
+    expect(bus.lost).toBe(false);
+    expect(bus.noRouteSince).toBeUndefined();
   });
 });

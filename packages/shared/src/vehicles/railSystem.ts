@@ -36,6 +36,7 @@ import { signalKindOf, type SignalKind } from '../commands/signals.ts';
 import { CROSSING_FLAG } from '../commands/track.ts';
 import { RAIL_TYPE_SPEED, isElectrified } from '../rail/railTypes.ts';
 import { cargoMass, isRailVehicle, routeKey, targetCode, trainStats, type Order, type Train, type TrainMotion, type TrainStats } from './train.ts';
+import { foundRoute, noRoute } from './lost.ts';
 import { advanceOrder, needsService, peekNextOrder } from './orders.ts';
 import { DERAIL_OVERSPEED } from '../incidents/rail.ts';
 
@@ -1264,6 +1265,7 @@ export class RailSystem {
     if (!goal) {
       t.route = [];
       t.replanAt = this.state.tick + REPLAN_DELAY;
+      noRoute(this.state, t);
       return;
     }
     this.dropReservations(t, true);
@@ -1285,9 +1287,10 @@ export class RailSystem {
         t.serviceTrip = false;
         t.routeFor = -1;
         t.replanAt = 0;
-      }
+      } else noRoute(this.state, t);
       return;
     }
+    foundRoute(this.state, t);
     t.route = this.continueRoute(t, path);
   }
 

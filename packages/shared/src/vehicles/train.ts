@@ -180,6 +180,10 @@ export interface Train {
   brakeFail?: number;
   /** Tick it last ran past a red signal (during a brake failure), for accident reports. */
   ranRedAt?: number;
+  /** Tick it first failed to find a route to its current order (cleared once it finds one). */
+  noRouteSince?: number;
+  /** Has gone too long without a route to its next stop; its owner has been told. */
+  lost?: boolean;
 }
 
 export interface TrainStats {

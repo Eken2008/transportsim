@@ -16,6 +16,7 @@ import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
 import { ROADSTOP_TRUCK, ROAD_WORKS, ROAD_WORKS_KMH } from '../town/road.ts';
 import { isBus } from './catalog.ts';
+import { foundRoute, noRoute } from './lost.ts';
 import { advanceOrder, needsService } from './orders.ts';
 import { BRAKE_KMH_PER_S, DWELL_TICKS, KMH_PER_TILE_PER_S, brakingDistance, speedForDistance } from './railSystem.ts';
 import { cargoMass, routeKey, targetCode, type Order, type Train, type TrainMotion } from './train.ts';
@@ -514,9 +515,10 @@ export class RoadSystem {
         t.serviceTrip = false;
         t.routeFor = -1;
         t.replanAt = 0;
-      }
+      } else noRoute(this.state, t);
       return;
     }
+    foundRoute(this.state, t);
     t.route = path;
     // Replanned in a junction: claim the new way out.
     if (this.laneKey(t.path[0]!) % 8 === 7) this.claim(t, this.lanesThrough(t, 0) ?? []);

@@ -12,6 +12,9 @@ function look(n: NewsItem): void {
   focusOn(n.tile % w, Math.floor(n.tile / w));
 }
 
+/** The vehicle a news item is about, if it still exists. */
+const vehicleOf = (n: NewsItem) => (n.vehicle !== undefined && client.world?.trains.has(n.vehicle) ? n.vehicle : undefined);
+
 function NewsLine({ n }: { n: NewsItem }) {
   const company = useApp((s) => s.global?.companies.find((c) => c.id === n.company));
   return (
@@ -30,6 +33,11 @@ function NewsLine({ n }: { n: NewsItem }) {
           )}
         </div>
       </div>
+      {vehicleOf(n) !== undefined && (
+        <button className="ghost small" title="Open the vehicle" aria-label="Open the vehicle" onClick={() => openWindow({ kind: 'train', id: n.vehicle! })}>
+          🚂
+        </button>
+      )}
       {n.tile !== undefined && (
         <button className="ghost small" title="Show on the map" aria-label="Show on the map" onClick={() => look(n)}>
           ⌖
@@ -80,7 +88,16 @@ export function NewsTicker() {
   }, [item]);
   if (!visible) return null;
   return (
-    <button className="panel news-ticker" onClick={() => (visible.tile !== undefined ? look(visible) : openWindow({ kind: 'news', id: 0 }))} title={`${visible.detail ? `Why: ${visible.detail}\n` : ''}Click to see where; all news in 📰 News`}>
+    <button
+      className="panel news-ticker"
+      onClick={() => {
+        const v = vehicleOf(visible);
+        if (v !== undefined) openWindow({ kind: 'train', id: v });
+        else if (visible.tile !== undefined) look(visible);
+        else openWindow({ kind: 'news', id: 0 });
+      }}
+      title={`${visible.detail ? `Why: ${visible.detail}\n` : ''}Click to see ${visible.vehicle !== undefined ? 'the vehicle' : 'where'}; all news in 📰 News`}
+    >
       <span aria-hidden>{ICONS[visible.kind]}</span> {visible.text}
     </button>
   );

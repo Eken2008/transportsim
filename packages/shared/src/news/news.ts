@@ -12,6 +12,8 @@ export interface NewsItem {
   tile?: number;
   /** More on what happened (an accident's cause), shown under the text. */
   detail?: string;
+  /** The vehicle the news is about, if any. */
+  vehicle?: number;
 }
 
 /** News items kept in the game state (and saves). */
@@ -31,6 +33,7 @@ export function sanitizeNews(input: unknown): NewsItem[] {
       company: typeof n.company === 'number' ? n.company : undefined,
       tile: typeof n.tile === 'number' ? n.tile : undefined,
       detail: typeof n.detail === 'string' ? n.detail.slice(0, 400) : undefined,
+      vehicle: typeof n.vehicle === 'number' ? n.vehicle : undefined,
     });
   }
   return out;

@@ -3,6 +3,7 @@ import type { GameState } from '../sim/state.ts';
 import { findShipPath } from '../water/shipPath.ts';
 import { dockBerth, navigable, stationDocks, waterLevelAtPoint } from '../water/waterways.ts';
 import { TileType } from '../world/constants.ts';
+import { foundRoute, noRoute } from './lost.ts';
 import { advanceOrder, needsService } from './orders.ts';
 import { DWELL_TICKS, KMH_PER_TILE_PER_S } from './railSystem.ts';
 import type { ShipState, Train, TrainMotion } from './train.ts';
@@ -153,9 +154,12 @@ export class ShipSystem {
   private plan(t: Train, s: ShipState): boolean {
     s.ver = this.state.waterVersion;
     const dest = this.destination(t);
-    if (!dest) return false;
-    const path = findShipPath(this.state.map, this.tileOf(s), dest.targets, this.blocked);
-    if (!path) return false;
+    const path = dest && findShipPath(this.state.map, this.tileOf(s), dest.targets, this.blocked);
+    if (!dest || !path) {
+      noRoute(this.state, t);
+      return false;
+    }
+    foundRoute(this.state, t);
     s.path = path;
     s.goal = dest.goal;
     return true;

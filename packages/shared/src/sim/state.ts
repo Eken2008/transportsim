@@ -8,6 +8,7 @@ import { industryMonthly } from '../economy/industryChanges.ts';
 import { Random } from '../util/random.ts';
 import { CargoSystem } from '../economy/cargoSystem.ts';
 import { generateIndustries, type Industry } from '../economy/industries.ts';
+import { warnLost } from '../vehicles/lost.ts';
 import { MaintenanceSystem } from '../vehicles/maintenance.ts';
 import { IncidentSystem } from '../incidents/rail.ts';
 import { COSTS } from '../economy/costs.ts';
@@ -225,6 +226,7 @@ export class GameState {
   private onNewDay(): void {
     this.cargo.daily();
     this.maintenance.daily();
+    warnLost(this);
     this.rail.clearWrecks();
     this.growTowns();
     townActionsDaily(this);
@@ -706,7 +708,7 @@ export class GameState {
     this.removedStations.add(id);
   }
 
-  addNews(kind: NewsKind, text: string, extra: { company?: number; tile?: number; detail?: string } = {}): NewsItem {
+  addNews(kind: NewsKind, text: string, extra: { company?: number; tile?: number; detail?: string; vehicle?: number } = {}): NewsItem {
     const item: NewsItem = { id: this.nextNewsId++, date: this.date, kind, text, ...extra };
     this.news.push(item);
     if (this.news.length > NEWS_HISTORY) this.news.splice(0, this.news.length - NEWS_HISTORY);
