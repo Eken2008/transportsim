@@ -220,7 +220,12 @@ export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): v
       const data = map.layers.data[i]!;
       if (type === TileType.Road && data & ROAD_ONE_WAY) addOneWayArrow(g, x, y, centre + 0.022, bits, (data & ROAD_ONE_WAY_REVERSED) !== 0);
       if (type === TileType.Road && data & ROAD_WORKS) addRoadWorks(g, x, y, centre + 0.02);
-      if (type === TileType.RoadStop) addStopFurniture(g, x, y, centre, (bits & ROAD_EDGE_BITS[1]!) !== 0, (map.layers.track[i]! & ROADSTOP_TRUCK) !== 0);
+      if (type === TileType.RoadStop) {
+        const alongX = (bits & ROAD_EDGE_BITS[1]!) !== 0;
+        // Ground at the road's two ends (W/E or N/S): a stop on a slope climbs with it.
+        const end = (e: 0 | 1 | 2 | 3) => Math.max(0, edgeHeight(corners, e)) * HEIGHT_SCALE + 0.01;
+        addStopFurniture(g, x, y, alongX ? end(3) : end(0), alongX ? end(1) : end(2), alongX, (map.layers.track[i]! & ROADSTOP_TRUCK) !== 0);
+      }
     }
   }
 }
@@ -280,17 +285,27 @@ function addStatue(g: GeoBuilder, map: GameMap, x: number, y: number): void {
   g.cylinderY(cx, cz, h + 0.5, h + 0.58, 0.04); // head
 }
 
-/** Bus stop shelters (or truck loading bays) on both sides of a drive-through stop. */
-function addStopFurniture(g: GeoBuilder, x: number, y: number, h: number, alongX: boolean, truck: boolean): void {
+/**
+ * Bus stop shelters (or truck loading bays) on both sides of a drive-through stop. `h0` and `h1`
+ * are the ground heights at the road's west/north and east/south ends, which differ on a slope.
+ */
+function addStopFurniture(g: GeoBuilder, x: number, y: number, h0: number, h1: number, alongX: boolean, truck: boolean): void {
+  /** World point `along` the road (0..1 across the tile) and `across` it from the centre line, `up` above the ground. */
+  const p = (along: number, across: number, up: number) => {
+    const h = h0 + (h1 - h0) * along + up;
+    return alongX ? new THREE.Vector3(x + along, h, y + 0.5 + across) : new THREE.Vector3(x + 0.5 + across, h, y + along);
+  };
   for (const side of [-1, 1]) {
     const off = 0.4 * side;
-    const [x0, z0, x1, z1] = alongX ? [x + 0.2, y + 0.5 + off - 0.07, x + 0.8, y + 0.5 + off + 0.07] : [x + 0.5 + off - 0.07, y + 0.2, x + 0.5 + off + 0.07, y + 0.8];
     if (truck) {
-      g.color(STOP_YELLOW).aabb(x0, h, z0, x1, h + 0.08, z1); // loading bay edge
+      g.color(STOP_YELLOW).box(p(0.2, off, 0), p(0.8, off, 0), 0.14, 0.08); // loading bay edge
     } else {
-      g.color(GARAGE_DOOR).aabb(x0, h, z0, x0 + 0.02, h + 0.26, z0 + 0.02);
-      g.color(GARAGE_DOOR).aabb(x1 - 0.02, h, z1 - 0.02, x1, h + 0.26, z1);
-      g.color(STOP_ROOF).aabb(x0 - 0.02, h + 0.26, z0 - 0.02, x1 + 0.02, h + 0.29, z1 + 0.02); // shelter roof
+      // Posts at the shelter's two outer corners, rising from the ground where they stand.
+      for (const [along, across] of [[0.21, off - 0.06], [0.79, off + 0.06]] as const) {
+        const c = p(along, across, 0);
+        g.color(GARAGE_DOOR).aabb(c.x - 0.01, c.y, c.z - 0.01, c.x + 0.01, c.y + 0.26, c.z + 0.01);
+      }
+      g.color(STOP_ROOF).box(p(0.18, off, 0.26), p(0.82, off, 0.26), 0.18, 0.03); // shelter roof
     }
   }
 }

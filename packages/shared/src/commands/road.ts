@@ -319,7 +319,8 @@ export const buildRoadStopHandler: CommandHandler<BuildRoadStopCommand> = {
     const owner = map.layers.owner[i]!;
     if (owner !== OWNER_NONE && owner !== ctx.companyId) return fail('That road belongs to another company');
     const data = map.layers.data[i]!;
-    if (!isStraightRoad(data) || data & ROAD_ONE_WAY || !map.isFlat(x, y)) return fail('Road stops need a flat, straight two-way road');
+    // Straight road is flat or climbs along itself, so the stop can go on a slope too.
+    if (!isStraightRoad(data) || data & ROAD_ONE_WAY) return fail('Road stops need a straight two-way road');
     if (state.roadBusy(i)) return fail('A road vehicle is in the way');
     const company = ctx.companyId!;
     const join = findJoinStation(map, state.stations, company, x, y, x, y);

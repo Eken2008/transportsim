@@ -137,4 +137,23 @@ describe('roads', () => {
     run(0, { type: 'clearArea', x0: 61, y0: 22, x1: 61, y1: 22 });
     expect(state.roadDepots.size).toBe(0);
   });
+
+  test('stops go on road that climbs a slope, with or without a ramp foundation', () => {
+    const { map, run, exec, tile } = world();
+    // A hill a level up east of x = 81: tile (80, y) climbs west→east as it is.
+    for (let y = 40; y <= 60; y++) for (let x = 81; x <= 86; x++) map.heights[map.cornerIndex(x, y)] = 3;
+    run(0, { type: 'buildRoad', x0: 78, y0: 50, x1: 83, y1: 50 });
+    expect(map.isFlat(80, 50)).toBe(false);
+    run(0, { type: 'buildRoadStop', x: 80, y: 50, kind: 'bus' });
+    expect(map.layers.type[tile(80, 50)]).toBe(TileType.RoadStop);
+    // One raised corner: the road climbs on a ramp foundation, and a stop can go there too.
+    map.heights[map.cornerIndex(91, 70)] = 3;
+    run(0, { type: 'buildRoad', x0: 88, y0: 70, x1: 93, y1: 70 });
+    expect(map.layers.foundation[tile(90, 70)]).not.toBe(0);
+    run(0, { type: 'buildRoadStop', x: 90, y: 70, kind: 'truck' });
+    expect(map.layers.type[tile(90, 70)]).toBe(TileType.RoadStop);
+    // Still not on a one-way road.
+    run(0, { type: 'setOneWay', x: 82, y: 50 });
+    expect(exec(0, { type: 'buildRoadStop', x: 82, y: 50, kind: 'bus' }).ok).toBe(false);
+  });
 });
