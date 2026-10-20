@@ -4,6 +4,7 @@ import type { AreaGhost } from '../render/areaGhost.ts';
 import type { TerrainHit } from '../render/picking.ts';
 import { toast, useApp } from '../store.ts';
 import type { Modifiers, Tool } from './tool.ts';
+import { CatchmentPreview } from './catchmentPreview.ts';
 
 const OK = '#7ee787';
 const REMOVE = '#ffa657';
@@ -94,11 +95,16 @@ export class RoadTool implements Tool {
 /** Single-tile road tools: stops, depots and one-way roads. */
 export class RoadPlaceTool implements Tool {
   private lastKey = '';
+  /** Stops, airports and docks show the catchment of the station they would make or join. */
+  private readonly catchment: CatchmentPreview | null;
 
   constructor(
     private readonly ghost: AreaGhost,
     private readonly kind: 'roadStop' | 'roadDepot' | 'oneWay' | 'airport' | 'lock' | 'dock' | 'shipDepot' | 'buoy',
-  ) {}
+    catchment: AreaGhost,
+  ) {
+    this.catchment = kind === 'roadStop' || kind === 'airport' || kind === 'dock' ? new CatchmentPreview(catchment) : null;
+  }
 
   /** Tiles the thing being placed covers (an airport's north-west corner is under the cursor). */
   private footprint(hit: TerrainHit): { x: number; y: number }[] {
@@ -150,6 +156,7 @@ export class RoadPlaceTool implements Tool {
   onHover(hit: TerrainHit | null): void {
     if (!hit) {
       this.ghost.hide();
+      this.catchment?.hide();
       useApp.setState({ hover: null });
       this.lastKey = '';
       return;
@@ -169,6 +176,7 @@ export class RoadPlaceTool implements Tool {
         error: r && !r.ok ? r.error : undefined,
       },
     });
+    this.catchment?.update(this.footprint(hit));
   }
 
   onDown(): void {}
@@ -183,11 +191,13 @@ export class RoadPlaceTool implements Tool {
 
   invalidate(): void {
     this.lastKey = '';
+    this.catchment?.invalidate();
   }
 
   cancel(): void {
     this.lastKey = '';
     this.ghost.hide();
+    this.catchment?.hide();
     useApp.setState({ hover: null });
   }
 }

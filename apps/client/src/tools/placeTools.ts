@@ -13,7 +13,7 @@ import type { AreaGhost } from '../render/areaGhost.ts';
 import type { TerrainHit } from '../render/picking.ts';
 import { toast, useApp } from '../store.ts';
 import type { Modifiers, Tool } from './tool.ts';
-import { catchmentRect, rectTiles, residentsIn } from '../game/catchment.ts';
+import { CatchmentPreview } from './catchmentPreview.ts';
 
 const OK = '#7ee787';
 const BAD = '#ff5a5f';
@@ -80,45 +80,26 @@ abstract class PreviewTool implements Tool {
 
 /** Place a rectangular station; size and orientation come from the options panel (R rotates). */
 export class StationTool extends PreviewTool {
-  private catchKey = '';
+  private readonly catchment: CatchmentPreview;
 
-  constructor(
-    ghost: AreaGhost,
-    private readonly catchment: AreaGhost,
-  ) {
+  constructor(ghost: AreaGhost, catchment: AreaGhost) {
     super(ghost);
+    this.catchment = new CatchmentPreview(catchment);
   }
 
   override onHover(hit: TerrainHit | null, mods: Modifiers): void {
     super.onHover(hit, mods);
-    const map = client.world?.map;
-    if (!hit || !map) {
-      this.catchment.hide();
-      this.catchKey = '';
-      return;
-    }
-    const d = this.describe(hit);
-    const xs = d.tiles.map((t) => t.x);
-    const ys = d.tiles.map((t) => t.y);
-    const r = catchmentRect(map, { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) });
-    const key = JSON.stringify(r);
-    if (key !== this.catchKey) {
-      this.catchKey = key;
-      this.catchment.show(rectTiles(r), '#58a6ff');
-    }
-    const hover = useApp.getState().hover;
-    if (hover) useApp.setState({ hover: { ...hover, info: `Catchment: ${residentsIn(map, r).toLocaleString('en-GB')} residents` } });
+    this.catchment.update(hit && this.describe(hit).tiles);
   }
 
   override invalidate(): void {
     super.invalidate();
-    this.catchKey = '';
+    this.catchment.invalidate();
   }
 
   override cancel(): void {
     super.cancel();
     this.catchment.hide();
-    this.catchKey = '';
   }
 
   protected describe(hit: TerrainHit) {

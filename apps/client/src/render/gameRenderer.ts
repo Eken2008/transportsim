@@ -296,7 +296,7 @@ export class GameRenderer {
       case 'dock':
       case 'shipDepot':
       case 'buoy':
-        this.tool = new RoadPlaceTool(this.area, id);
+        this.tool = new RoadPlaceTool(this.area, id, this.catchment);
         break;
       case 'orders':
         this.tool = new OrdersTool(this.area);
@@ -325,10 +325,10 @@ export class GameRenderer {
     }
   }
 
-  /** Show the catchment of the station picked in its window (unless the station tool is using the overlay). */
+  /** Show the catchment of the station picked in its window (unless a station-placing tool is using the overlay). */
   private showStationCatchment(): void {
     const s = useApp.getState();
-    if (s.tool === 'station') return;
+    if (s.tool === 'station' || s.tool === 'roadStop' || s.tool === 'airport' || s.tool === 'dock') return;
     const st = s.catchmentFor !== null ? this.world.state.stations.get(s.catchmentFor) : undefined;
     if (!st) return this.catchment.hide();
     this.catchment.show(rectTiles(catchmentRect(this.world.map, st)), '#58a6ff');
