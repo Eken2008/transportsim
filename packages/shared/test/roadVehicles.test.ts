@@ -6,7 +6,9 @@ import {
   GameState,
   HOUSE_TYPES,
   ROAD_E,
+  ROAD_N,
   ROAD_ONE_WAY,
+  ROAD_S,
   ROAD_W,
   TICKS_PER_DAY,
   TileType,
@@ -105,6 +107,60 @@ describe('road vehicles', () => {
     });
     expect(moved).toBeGreaterThan(1000);
     for (const bus of buses) expect(bus.profitThisYear + bus.profitLastYear).toBeGreaterThan(0);
+  });
+
+  test('buses going both ways round a ring of junctions never gridlock', () => {
+    // A square ring with dead-end stubs at the corners (making them junctions), a stop on each
+    // side, and buses circling both ways: queues fill the sides and used to lock the corners.
+    const { state, run, days, buy } = world();
+    const [a, b] = [20, 25];
+    run({ type: 'buildRoad', x0: a, y0: a - 1, x1: a, y1: b + 1 });
+    run({ type: 'buildRoad', x0: b, y0: a - 1, x1: b, y1: b + 1 });
+    run({ type: 'buildRoad', x0: a - 1, y0: a, x1: b + 1, y1: a });
+    run({ type: 'buildRoad', x0: a - 1, y0: b, x1: b + 1, y1: b });
+    run({ type: 'buildRoad', x0: 3, y0: 10, x1: 3, y1: a });
+    run({ type: 'buildRoad', x0: 3, y0: a, x1: a - 1, y1: a });
+    for (const [x, y] of [[22, a], [b, 22], [22, b], [a, 22]] as const) run({ type: 'buildRoadStop', x, y, kind: 'bus' });
+    const buses = Array.from({ length: 16 }, (_, i) => {
+      const bus = buy(['city_bus']);
+      const seq = i % 2 ? [0, 1, 2, 3] : [0, 3, 2, 1];
+      run({ type: 'setOrders', id: bus.id, orders: seq.map((station) => ({ kind: 'station' as const, station })) });
+      run({ type: 'trainAction', id: bus.id, action: 'start' });
+      return bus;
+    });
+    const visits = new Map<number, number>();
+    const was = new Map<number, string>();
+    const movedAt = new Map<number, number>();
+    let worst = 0;
+    days(100, () => {
+      for (const bus of buses) {
+        if (bus.status === 'loading' && was.get(bus.id) !== 'loading') visits.set(bus.id, (visits.get(bus.id) ?? 0) + 1);
+        was.set(bus.id, bus.status);
+        if (bus.status !== 'running' || bus.speed > 0.1 || bus.path.length === 0) movedAt.set(bus.id, state.tick);
+        worst = Math.max(worst, state.tick - (movedAt.get(bus.id) ?? state.tick));
+      }
+    });
+    expect(worst).toBeLessThan(TICKS_PER_DAY * 10);
+    for (const bus of buses) expect(visits.get(bus.id) ?? 0).toBeGreaterThanOrEqual(5);
+  });
+
+  test('a road built beside a bus does not leave the tile blocked', () => {
+    const { state, map, run, buy } = world();
+    run({ type: 'buildRoadStop', x: 7, y: 10, kind: 'bus' });
+    run({ type: 'buildRoadStop', x: 50, y: 10, kind: 'bus' });
+    const bus = buy(['city_bus']);
+    run({ type: 'setOrders', id: bus.id, orders: [{ kind: 'station', station: 0 }, { kind: 'station', station: 1 }] });
+    run({ type: 'trainAction', id: bus.id, action: 'start' });
+    const tile = map.tileIndex(30, 10);
+    while (rsTile(bus.path[0] ?? 0) !== tile) state.step();
+    // A town grows a side street off the tile under the bus, making it a junction.
+    map.layers.data[tile] = map.layers.data[tile]! | ROAD_S;
+    const side = map.tileIndex(30, 11);
+    map.layers.type[side] = TileType.Road;
+    map.layers.data[side] = ROAD_N;
+    state.onRoadsChanged();
+    while (bus.path.some((s) => rsTile(s) === tile)) state.step();
+    expect(state.roadBusy(tile)).toBe(false);
   });
 
   test('a truck carries coal from a mine to a power station', () => {

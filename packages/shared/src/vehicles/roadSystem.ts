@@ -27,15 +27,28 @@ const REPLAN_DELAY = 45;
 const CREEP_KMH = 4;
 /** Acceleration scale (as for trains, road vehicles reach speed in seconds). */
 const ACCEL_SCALE = 6;
+/** A held-up vehicle looks for another way round this often. */
+const REROUTE_TICKS = Math.round(TICKS_PER_DAY / 2);
+/** A vehicle held up this long in a gridlock squeezes past the vehicle in its way. */
+const GRIDLOCK_TICKS = TICKS_PER_DAY;
 
 /**
  * Moves buses and trucks (Trains with mode 'road'). Each road segment belongs to a lane: one
  * per direction of travel on plain road, and a single one for a whole junction tile, U-turns
- * and depots, so vehicles queue behind each other and cross junctions one at a time.
+ * and depots, so vehicles queue behind each other and cross junctions one at a time. A vehicle
+ * only enters a junction when it can get out the other side, so queues don't lock up.
  */
 export class RoadSystem {
   /** lane key → vehicles using that lane. */
   private occ = new Map<number, Set<number>>();
+  /** lane key → vehicle that will pass through it next, having entered a junction (see boxLanes). */
+  private claims = new Map<number, number>();
+  /** vehicle → lanes it has claimed. */
+  private claimed = new Map<number, number[]>();
+  /** Vehicles held up by another, and since which tick. */
+  private waitingSince = new Map<number, number>();
+  /** Vehicles let through the vehicle ahead to break a gridlock. */
+  private passing = new Set<number>();
   /** Called when a road vehicle stops at a station (cargo handling). */
   onArrive: ((t: Train, station: number) => void) | null = null;
   onLoading: ((t: Train, station: number) => boolean) | null = null;
@@ -50,10 +63,8 @@ export class RoadSystem {
   private lanesFor = -1;
 
   private laneKey(s: number): number {
-    if (this.lanesFor !== this.state.roadVersion) {
-      this.lanesFor = this.state.roadVersion;
-      this.lanes.clear();
-    }
+    // A road change can turn a tile into a junction or back, moving vehicles to other lanes.
+    if (this.lanesFor !== this.state.roadVersion) this.rebuildOccupancy();
     let k = this.lanes.get(s);
     if (k === undefined) {
       const tile = rsTile(s);
@@ -64,25 +75,106 @@ export class RoadSystem {
     return k;
   }
 
-  private occupiedByOther(s: number, id: number): boolean {
-    const set = this.occ.get(this.laneKey(s));
-    if (set) for (const o of set) if (o !== id) return true;
+  /** A vehicle other than `id` using or claiming lane `k`, or -1. */
+  private laneHolder(k: number, id: number): number {
+    const set = this.occ.get(k);
+    if (set) for (const o of set) if (o !== id) return o;
+    const c = this.claims.get(k);
+    return c !== undefined && c !== id ? c : -1;
+  }
+
+  /** A vehicle other than `id` in the way of segment `s`, or -1. */
+  private holderOf(s: number, id: number): number {
+    const k = this.laneKey(s);
+    const h = this.laneHolder(k, id);
+    if (h >= 0) return h;
     // A vehicle in a junction blocks every lane through it, and vice versa.
     const tile = rsTile(s);
-    if (this.laneKey(s) % 8 !== 7) {
-      const j = this.occ.get(tile * 8 + 7);
-      if (j) for (const o of j) if (o !== id) return true;
-    } else {
-      for (let k = 0; k < 4; k++) {
-        const lane = this.occ.get(tile * 8 + k);
-        if (lane) for (const o of lane) if (o !== id) return true;
-      }
+    if (k % 8 !== 7) return this.laneHolder(tile * 8 + 7, id);
+    for (let l = 0; l < 4; l++) {
+      const o = this.laneHolder(tile * 8 + l, id);
+      if (o >= 0) return o;
     }
-    return false;
+    return -1;
+  }
+
+  private occupiedByOther(s: number, id: number): boolean {
+    return this.holderOf(s, id) >= 0;
+  }
+
+  /** The vehicle holding up t's next step, or -1. */
+  private blocker(t: Train): number {
+    const next = t.route[0];
+    if (next === undefined) return -1;
+    const h = this.holderOf(next, t.id);
+    const k = this.laneKey(next);
+    if (h >= 0 || k % 8 !== 7 || t.path.some((p) => this.laneKey(p) === k)) return h;
+    for (let j = 1; j < t.route.length; j++) {
+      const s = t.route[j]!;
+      const o = this.holderOf(s, t.id);
+      if (o >= 0) return o;
+      if (this.laneKey(s) % 8 !== 7) break;
+    }
+    return -1;
+  }
+
+  /**
+   * Is t part of a gridlock: waiting on a vehicle that waits on another ... that waits on t?
+   * (Road changes can put vehicles in a junction together, and nothing else would untangle it.)
+   */
+  private gridlocked(t: Train): boolean {
+    const seen = new Set<number>();
+    for (let cur = t; ; ) {
+      const b = this.blocker(cur);
+      if (b === t.id) return true;
+      const o = this.state.trains.get(b);
+      if (!o || seen.has(b) || o.status !== 'running' || o.brokenDown || !this.waitingSince.has(b)) return false;
+      seen.add(b);
+      cur = o;
+    }
+  }
+
+  /**
+   * Don't block the box: a vehicle may enter a junction (or a U-turn, or a run of them) at
+   * route[i] only when the rest of the run and the lane out the far side are free too.
+   * Returns the lanes to claim on the way through, or null if it must wait.
+   */
+  private boxLanes(t: Train, i: number): number[] | null {
+    const route = t.route;
+    const k = this.laneKey(route[i]!);
+    if (k % 8 !== 7 || t.path.some((p) => this.laneKey(p) === k)) return [];
+    return this.lanesThrough(t, i + 1);
+  }
+
+  /** Lanes of route[i...] up to and including the first one outside a junction, or null if any is taken. */
+  private lanesThrough(t: Train, i: number): number[] | null {
+    const route = t.route;
+    const out: number[] = [];
+    for (let j = i; j < route.length; j++) {
+      const s = route[j]!;
+      if (this.occupiedByOther(s, t.id)) return null;
+      out.push(this.laneKey(s));
+      if (this.laneKey(s) % 8 !== 7) break;
+    }
+    return out;
+  }
+
+  /** Hold lanes ahead so nobody else can take them while the vehicle is in a junction. */
+  private claim(t: Train, lanes: number[]): void {
+    if (lanes.length === 0) return;
+    for (const k of lanes) this.claims.set(k, t.id);
+    const held = (this.claimed.get(t.id) ?? []).filter((k) => this.claims.get(k) === t.id && !lanes.includes(k));
+    this.claimed.set(t.id, [...held, ...lanes]);
+  }
+
+  private dropClaims(t: Train): void {
+    for (const k of this.claimed.get(t.id) ?? []) if (this.claims.get(k) === t.id) this.claims.delete(k);
+    this.claimed.delete(t.id);
   }
 
   private occupy(t: Train, s: number): void {
     const k = this.laneKey(s);
+    if (this.claims.get(k) === t.id) this.claims.delete(k);
     let set = this.occ.get(k);
     if (!set) this.occ.set(k, (set = new Set()));
     set.add(t.id);
@@ -97,6 +189,9 @@ export class RoadSystem {
   }
 
   private releaseAll(t: Train): void {
+    this.dropClaims(t);
+    this.waitingSince.delete(t.id);
+    this.passing.delete(t.id);
     for (const s of t.path) {
       const set = this.occ.get(this.laneKey(s));
       set?.delete(t.id);
@@ -118,8 +213,14 @@ export class RoadSystem {
   }
 
   rebuildOccupancy(): void {
+    this.lanesFor = this.state.roadVersion;
+    this.lanes.clear();
     this.occ.clear();
-    for (const t of this.state.trains.values()) if (t.mode === 'road') for (const s of t.path) this.occupy(t, s);
+    this.claims.clear();
+    this.claimed.clear();
+    const road = [...this.state.trains.values()].filter((t) => t.mode === 'road');
+    for (const t of road) for (const s of t.path) this.occupy(t, s);
+    for (const t of road) if (t.path.length && this.laneKey(t.path[0]!) % 8 === 7) this.claim(t, this.lanesThrough(t, 0) ?? []);
   }
 
   removeFromWorld(t: Train): void {
@@ -235,6 +336,19 @@ export class RoadSystem {
     if (t.speed < 0.05 && limit < 0.5) t.speed = 0;
     this.advance(t, (t.speed / KMH_PER_TILE_PER_S) * DT);
     if (t.speed === 0 && t.status === 'running') this.whenStopped(t);
+    if (t.speed === 0 && t.status === 'running' && !t.brokenDown && this.blocker(t) >= 0) this.whenHeldUp(t);
+    else this.waitingSince.delete(t.id);
+  }
+
+  private whenHeldUp(t: Train): void {
+    const since = this.waitingSince.get(t.id);
+    if (since === undefined) {
+      this.waitingSince.set(t.id, this.state.tick);
+      return;
+    }
+    const waited = this.state.tick - since;
+    if (waited % REROUTE_TICKS === 0) this.plan(t);
+    if (waited >= GRIDLOCK_TICKS && this.gridlocked(t)) this.passing.add(t.id);
   }
 
   private tryLeaveDepot(t: Train): void {
@@ -251,9 +365,10 @@ export class RoadSystem {
   /** Distance to the first place the vehicle must stop: a vehicle ahead, a closed crossing, or the end of its route. */
   private stopDistance(t: Train, horizon: number): number {
     let d = rsLength(t.path[0]!) - t.pos;
-    for (const s of t.route) {
+    for (let i = 0; i < t.route.length; i++) {
+      const s = t.route[i]!;
       if (d > horizon) return d;
-      if (this.occupiedByOther(s, t.id)) return d - GAP;
+      if (!(i === 0 && this.passing.has(t.id)) && (this.occupiedByOther(s, t.id) || !this.boxLanes(t, i))) return d - GAP;
       if (this.crossingClosed?.(rsTile(s)) && !t.path.some((p) => rsTile(p) === rsTile(s))) return d - GAP;
       d += rsLength(s);
     }
@@ -269,7 +384,9 @@ export class RoadSystem {
         break;
       }
       const next = t.route[0];
-      if (next === undefined || !roadNext(this.state.map, head).includes(next) || this.occupiedByOther(next, t.id)) {
+      const pass = this.passing.has(t.id);
+      const box = next === undefined ? null : pass ? [] : this.boxLanes(t, 0);
+      if (next === undefined || !roadNext(this.state.map, head).includes(next) || (!pass && this.occupiedByOther(next, t.id)) || !box) {
         t.pos = rsLength(head);
         t.speed = 0;
         break;
@@ -277,6 +394,8 @@ export class RoadSystem {
       t.route.shift();
       t.path.unshift(next);
       this.occupy(t, next);
+      this.claim(t, box);
+      this.passing.delete(t.id);
       t.pos = 0;
       dist -= room;
     }
@@ -355,6 +474,8 @@ export class RoadSystem {
   }
 
   plan(t: Train): void {
+    this.dropClaims(t);
+    this.passing.delete(t.id);
     const key = this.targetKey(t);
     t.routeFor = routeKey(this.state.roadVersion, key);
     const o = t.orders[t.orderIndex];
@@ -380,6 +501,8 @@ export class RoadSystem {
       return;
     }
     t.route = path;
+    // Replanned in a junction: claim the new way out.
+    if (this.laneKey(t.path[0]!) % 8 === 7) this.claim(t, this.lanesThrough(t, 0) ?? []);
   }
 
   motion(t: Train): TrainMotion {
