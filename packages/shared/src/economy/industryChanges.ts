@@ -8,7 +8,6 @@ import {
   newIndustry,
   pickIndustryType,
   placeIndustry,
-  plantFarmFields,
   transportedShare,
   zoneFits,
   type Industry,
@@ -33,7 +32,8 @@ function served(ind: Industry): boolean {
 
 /**
  * Monthly industry changes: well-served primary industries grow, neglected ones shrink;
- * industries unserved for years may close; and now and then a new one opens.
+ * industries unserved for years may close (farms never do); and now and then a new
+ * non-farm industry opens.
  */
 export function industryMonthly(state: GameState, rng: Random, year: number): void {
   for (const ind of [...state.industries.values()]) {
@@ -58,8 +58,9 @@ export function industryMonthly(state: GameState, rng: Random, year: number): vo
     }
 
     // Closure: long unserved, and (primary industries) at low production. The last of a type
-    // stays open so every cargo chain keeps existing.
+    // stays open so every cargo chain keeps existing. Farms never close.
     if (
+      type.model !== 'farm' &&
       (ind.idleMonths ?? 0) >= CLOSE_AFTER_MONTHS &&
       (type.production === 0 || ind.level <= 0.5) &&
       rng.chance(CLOSE_CHANCE) &&
@@ -73,10 +74,11 @@ export function industryMonthly(state: GameState, rng: Random, year: number): vo
     }
   }
 
-  // New industries: about one a year per TILES_PER_NEW_INDUSTRY tiles of map.
+  // New industries: about one a year per TILES_PER_NEW_INDUSTRY tiles of map. Farms only
+  // appear at world generation.
   const perMonth = (state.map.width * state.map.height) / TILES_PER_NEW_INDUSTRY / 12;
   if (rng.chance(Math.min(0.9, perMonth))) {
-    const type = pickIndustryType(rng, year, state.map.climate.id);
+    const type = pickIndustryType(rng, year, state.map.climate.id, (t) => t.model !== 'farm');
     const towns = [...state.towns.values()];
     const others = [...state.industries.values()];
     for (let attempt = 0; attempt < 200; attempt++) {
@@ -85,7 +87,6 @@ export function industryMonthly(state: GameState, rng: Random, year: number): vo
       if (!industryFits(state.map, x, y, type.w, type.h, towns, others) || !zoneFits(state.map, type, x, y)) continue;
       const ind = newIndustry(state.nextIndustryId++, type, x, y, industryName(type, x, y, towns, others));
       placeIndustry(state.map, ind);
-      if (type.model === 'farm') plantFarmFields(state.map, ind, rng);
       state.industries.set(ind.id, ind);
       state.dirtyIndustries.add(ind.id);
       state.addNews('company', `New ${type.name.toLowerCase()} opens: ${ind.name}`, { tile: centre(state, ind) });

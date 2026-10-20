@@ -254,9 +254,9 @@ export function clearIndustry(map: GameMap, ind: Industry): void {
 /** Industry types of a climate that can appear in a given year. */
 export const typesFor = (year: number, climate: Climate) => INDUSTRY_TYPES.filter((t) => t.intro <= year && t.climates.includes(climate));
 
-/** Pick a type by weight. */
-export function pickIndustryType(rng: Random, year: number, climate: Climate): IndustryType {
-  const types = typesFor(year, climate);
+/** Pick a type by weight, optionally only among those passing `allow`. */
+export function pickIndustryType(rng: Random, year: number, climate: Climate, allow: (t: IndustryType) => boolean = () => true): IndustryType {
+  const types = typesFor(year, climate).filter(allow);
   const total = types.reduce((s, t) => s + t.weight, 0);
   let r = rng.next() * total;
   for (const t of types) {
