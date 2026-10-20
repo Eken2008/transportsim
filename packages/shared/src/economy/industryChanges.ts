@@ -18,9 +18,11 @@ import {
 export const MIN_LEVEL = 0.25;
 export const MAX_LEVEL = 8;
 /** Months without service before an industry may close. */
-export const CLOSE_AFTER_MONTHS = 60;
+export const CLOSE_AFTER_MONTHS = 120;
+/** Monthly chance that an industry past CLOSE_AFTER_MONTHS closes. */
+const CLOSE_CHANCE = 0.02;
 /** New industries per year per this many map tiles. */
-const TILES_PER_NEW_INDUSTRY = 120_000;
+const TILES_PER_NEW_INDUSTRY = 60_000;
 
 /** Was the industry served last month (cargo taken away, or delivered to it)? */
 function served(ind: Industry): boolean {
@@ -55,8 +57,14 @@ export function industryMonthly(state: GameState, rng: Random, year: number): vo
       }
     }
 
-    // Closure: long unserved, and (primary industries) at low production.
-    if ((ind.idleMonths ?? 0) >= CLOSE_AFTER_MONTHS && (type.production === 0 || ind.level <= 0.5) && rng.chance(0.1)) {
+    // Closure: long unserved, and (primary industries) at low production. The last of a type
+    // stays open so every cargo chain keeps existing.
+    if (
+      (ind.idleMonths ?? 0) >= CLOSE_AFTER_MONTHS &&
+      (type.production === 0 || ind.level <= 0.5) &&
+      rng.chance(CLOSE_CHANCE) &&
+      [...state.industries.values()].some((o) => o !== ind && o.type === ind.type)
+    ) {
       state.addNews('company', `${ind.name} announces its closure`, { tile: centre(state, ind) });
       clearIndustry(state.map, ind);
       state.industries.delete(ind.id);

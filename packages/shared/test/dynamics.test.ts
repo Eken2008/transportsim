@@ -49,12 +49,24 @@ describe('industry dynamics', () => {
   test('industries unserved for years close, with news', () => {
     const { state, add } = flat();
     const mill = add('steel_mill', 20, 20);
+    const other = add('steel_mill', 60, 20);
     const rng = new Random(2);
-    for (let m = 0; m < CLOSE_AFTER_MONTHS + 60 && state.industries.has(mill.id); m++) industryMonthly(state, rng, 1950);
-    expect(state.industries.has(mill.id)).toBe(false);
-    expect(state.removedIndustries.has(mill.id)).toBe(true);
-    expect(state.map.layers.type[state.map.tileIndex(21, 21)]).toBe(TileType.Clear);
+    for (let m = 0; m < CLOSE_AFTER_MONTHS + 240 && state.industries.has(mill.id) && state.industries.has(other.id); m++) industryMonthly(state, rng, 1950);
+    const closed = state.industries.has(mill.id) ? other : mill;
+    expect(state.industries.has(closed.id)).toBe(false);
+    expect(state.removedIndustries.has(closed.id)).toBe(true);
+    expect(state.map.layers.type[state.map.tileIndex(closed.x + 1, closed.y + 1)]).toBe(TileType.Clear);
     expect(state.news.some((n) => n.text.includes('closure'))).toBe(true);
+  });
+
+  test('the last industry of a type never closes', () => {
+    const { state, add } = flat();
+    add('steel_mill', 20, 20);
+    const rng = new Random(4);
+    for (let m = 0; m < CLOSE_AFTER_MONTHS + 600; m++) {
+      industryMonthly(state, rng, 1950);
+      expect([...state.industries.values()].some((i) => i.type === 'steel_mill')).toBe(true);
+    }
   });
 
   test('new industries open over the years', () => {

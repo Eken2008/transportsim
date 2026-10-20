@@ -125,7 +125,7 @@ export function transportedShare(ind: Industry, cargo: CargoId): number {
 }
 
 /** Land tiles per industry at world generation. */
-const TILES_PER_INDUSTRY = 2600;
+const TILES_PER_INDUSTRY = 1000;
 const MIN_TOWN_DISTANCE = 7;
 const MIN_INDUSTRY_SPACING = 5;
 
