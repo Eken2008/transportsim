@@ -4,7 +4,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 
 > Status: all milestones of the [plan](docs/PLAN.md) (M0–M8) are in.
 >
-> - **World:** procedural terrain with towns, roads and houses that grow with good service; terraforming.
+> - **World:** procedural terrain with rivers running from the hills to the sea, towns, roads and houses that grow with good service; terraforming.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
 > - **Stations and depots:** multi-platform stations and depots.
 > - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.
@@ -13,10 +13,10 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Accidents:** with accidents on, trains only see so far ahead, so unsafe signalling crashes trains; brake failures pass red signals; on realistic, overspeed derails trains; road vehicles stuck on level crossings are hit; aircraft can crash; ships can founder. Wreckage blocks the line or the water, and a crash closes the runway, for a while.
 > - **Road vehicles:** company roads, one-way roads, bus and truck stops, road depots; buses and trucks that keep left, queue and take junctions one at a time.
 > - **Air:** small (from 1930) and city (from 1955) airports with runway, gates and hangar; aircraft from mail biplanes to jumbo jets that taxi, take off, hold while the runway is busy and land. Heavy jets need a city airport; with accidents on, aircraft can crash after engine failures or landing at too small an airport.
-> - **Water:** canals at any height, locks between levels, docks on the shore, ship depots and buoys; ferries, cargo ships, tankers and hovercraft that find their way over the water grid and wait their turn at locks. With accidents on, a ship that breaks down may founder.
+> - **Water:** navigable rivers, canals at any height, locks between levels (also on river rapids), docks on the shore, ship depots and buoys; ferries, cargo ships, tankers and hovercraft that find their way over the water grid and wait their turn at locks. With accidents on, a ship that breaks down may founder.
 > - **Orders:** stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
 > - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, routed by cargodist (demand to every reachable destination, transfers between trains), paid per leg by distance and journey time.
-> - **Industries:** mines, forests, farms and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food. Served industries grow, neglected ones close, new ones open. Optional inflation.
+> - **Industries:** mines, forests, farms (among their fields) and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food. Served industries grow, neglected ones close, new ones open. Optional inflation.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members.
 > - **Finances:** quarterly books, loans with interest, property maintenance, company value and a league table; graphs of ten years of company history and of cargo payment rates. Three quarters in the red means bankruptcy.
 > - **Competition:** station ratings from service quality; stations that cover the same houses split them by rating.
@@ -89,7 +89,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `P`                                              | Waypoint: click straight track (click again to remove); trains pass through without stopping |
 | `G` `Z` `H` `J` `K`                              | Roads: build (drag; Ctrl removes), remove, bus/truck stop, road depot, one-way |
 | `Y`                                              | Airport (click its north-west corner; choose small or city airport)             |
-| `U` `I` `O` `M` `X`                              | Water: canal (drag over flat land), lock (on a straight slope), dock (on the shore), ship depot, buoy |
+| `U` `I` `O` `M` `X`                              | Water: canal (drag over flat land), lock (on a straight slope or river rapids), dock (on the shore), ship depot, buoy |
 | `V`                                              | Convert track type (drag an area); the rail tools choose standard, electrified or high-speed track |
 | `8`                                              | Bulldoze an area                                             |
 | Click                                            | Open a depot, hangar or ship depot, station (show its catchment) or train (rearrange vehicles in a depot) |

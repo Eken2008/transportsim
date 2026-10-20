@@ -2,6 +2,7 @@ export * from './util/random.ts';
 export * from './world/constants.ts';
 export * from './world/map.ts';
 export * from './world/terrain.ts';
+export * from './world/rivers.ts';
 export * from './world/chunks.ts';
 export * from './sim/settings.ts';
 export * from './sim/date.ts';

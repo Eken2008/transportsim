@@ -171,6 +171,7 @@ export class GameState {
       roughness: settings.roughness,
       waterLevel: settings.waterLevel,
       treeDensity: settings.treeDensity,
+      rivers: settings.rivers ?? 1,
     });
     const state = new GameState(settings, map);
     for (const t of generateTowns(map, settings.seed, settings.startYear)) state.towns.set(t.id, t);

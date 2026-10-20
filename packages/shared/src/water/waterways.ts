@@ -1,15 +1,20 @@
 import { EDGE_DX, EDGE_DY } from '../rail/track.ts';
-import { TileType, WATER_BUOY, WATER_CANAL } from '../world/constants.ts';
+import { TileType, WATER_BUOY, WATER_CANAL, WATER_RAPIDS, WATER_RIVER } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
 
 /**
- * Waterways: the sea (Water tiles at height 0), canals (Water tiles with WATER_CANAL, flat at any
- * height), locks (a straight slope linking two levels), ship depots and docks. Every Water tile
- * is flat, so neighbouring water tiles always share a level; only locks change level.
+ * Waterways: the sea (Water tiles at height 0), rivers and canals (Water tiles with WATER_RIVER
+ * or WATER_CANAL, flat at any height), locks (a straight slope linking two levels), ship depots
+ * and docks. Apart from river rapids, every Water tile is flat, so neighbouring water tiles share
+ * a level; ships only change level through locks (which can be built on rapids).
  */
 
 export const isCanal = (map: GameMap, i: number) => map.layers.type[i] === TileType.Water && (map.layers.data[i]! & WATER_CANAL) !== 0;
 export const hasBuoy = (map: GameMap, i: number) => map.layers.type[i] === TileType.Water && (map.layers.data[i]! & WATER_BUOY) !== 0;
+export const isRiver = (map: GameMap, i: number) => map.layers.type[i] === TileType.Water && (map.layers.data[i]! & WATER_RIVER) !== 0;
+export const isRapids = (map: GameMap, i: number) => map.layers.type[i] === TileType.Water && (map.layers.data[i]! & WATER_RAPIDS) !== 0;
+/** Flat water a ship can sail across (not rapids). */
+export const isOpenWater = (map: GameMap, i: number) => map.layers.type[i] === TileType.Water && (map.layers.data[i]! & WATER_RAPIDS) === 0;
 
 /** Axis of a lock or ship depot: 0 = ships move east-west, 1 = north-south. */
 export const waterAxis = (map: GameMap, i: number) => map.layers.data[i]! & 1;
@@ -23,7 +28,8 @@ const AXIS_EDGES = [
 /** Can a ship be on this tile? Depots only count as an end point (see `shipStep`). */
 export function navigable(map: GameMap, i: number): boolean {
   const t = map.layers.type[i];
-  return t === TileType.Water || t === TileType.Lock || t === TileType.ShipDepot;
+  if (t === TileType.Water) return (map.layers.data[i]! & WATER_RAPIDS) === 0;
+  return t === TileType.Lock || t === TileType.ShipDepot;
 }
 
 /** Does this tile let ships in or out across `edge`? */
@@ -51,8 +57,8 @@ export function shipStep(map: GameMap, i: number, edge: number, depotOk = false)
 export function waterLevelAt(map: GameMap, x: number, y: number): number {
   const i = map.tileIndex(x, y);
   const t = map.layers.type[i];
-  if (t === TileType.Water || t === TileType.ShipDepot) return map.tileMinHeight(x, y);
-  if (t === TileType.Lock) return (map.tileMinHeight(x, y) + map.tileMaxHeight(x, y)) / 2;
+  if ((t === TileType.Water && !(map.layers.data[i]! & WATER_RAPIDS)) || t === TileType.ShipDepot) return map.tileMinHeight(x, y);
+  if (t === TileType.Lock || t === TileType.Water) return (map.tileMinHeight(x, y) + map.tileMaxHeight(x, y)) / 2;
   return -1;
 }
 

@@ -44,7 +44,7 @@ export function GameInfoWindow({ w }: { w: GameWindow & { kind: 'game' } }) {
         </span>
         <span>Terrain</span>
         <span>
-          {ROUGHNESS[s.roughness]}, sea level {Math.round(s.waterLevel * 100)}%, trees {Math.round(s.treeDensity * 100)}%
+          {ROUGHNESS[s.roughness]}, sea level {Math.round(s.waterLevel * 100)}%, trees {Math.round(s.treeDensity * 100)}%, rivers {Math.round((s.rivers ?? 1) * 100)}%
         </span>
         <span>Timeline</span>
         <span>

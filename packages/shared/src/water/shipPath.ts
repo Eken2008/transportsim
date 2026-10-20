@@ -1,6 +1,6 @@
 import { TileType } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
-import { shipStep } from './waterways.ts';
+import { isOpenWater, shipStep } from './waterways.ts';
 import { MinHeap } from '../util/heap.ts';
 
 /** Most tiles a ship route search looks at before giving up. */
@@ -40,7 +40,7 @@ export function findShipPath(map: GameMap, start: number, targets: ReadonlySet<n
   const closed = new Set<number>();
   const open = new MinHeap();
   open.push(h(start), start);
-  const water = (i: number) => map.layers.type[i] === TileType.Water && !blocked?.(i);
+  const water = (i: number) => isOpenWater(map, i) && !blocked?.(i);
   let expanded = 0;
   while (open.size) {
     const i = open.pop();

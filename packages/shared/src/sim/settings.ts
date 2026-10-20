@@ -13,6 +13,8 @@ export interface GameSettings {
   roughness: TerrainRoughness;
   waterLevel: number;
   treeDensity: number;
+  /** River count multiplier (0..2). */
+  rivers: number;
   /** Era: vehicles unlock/obsolete over time. Sandbox: everything available. */
   timeline: TimelineMode;
   startYear: number;
@@ -35,6 +37,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   roughness: 'hilly',
   waterLevel: 0.22,
   treeDensity: 1,
+  rivers: 1,
   timeline: 'era',
   startYear: 1900,
   accidents: 'low',
@@ -73,6 +76,7 @@ export function sanitizeSettings(input: Partial<GameSettings>, limits: ServerLim
     roughness: oneOf(input.roughness, ['flat', 'hilly', 'mountainous'] as const, d.roughness),
     waterLevel: clamp(input.waterLevel, 0, 0.8, d.waterLevel),
     treeDensity: clamp(input.treeDensity, 0, 2, d.treeDensity),
+    rivers: clamp(input.rivers, 0, 2, d.rivers),
     timeline: oneOf(input.timeline, ['era', 'sandbox'] as const, d.timeline),
     startYear: Math.round(clamp(input.startYear, 1850, 2050, d.startYear)),
     accidents: oneOf(input.accidents, ['off', 'low', 'realistic'] as const, d.accidents),

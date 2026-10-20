@@ -63,3 +63,7 @@ export const MAX_TREES = 4;
 export const WATER_CANAL = 0x1;
 /** A buoy floats on this water tile (it is a waypoint). */
 export const WATER_BUOY = 0x2;
+/** A river: flat water at any height that nobody owns. */
+export const WATER_RIVER = 0x4;
+/** River rapids: a straight slope where the river drops a level. Ships need a lock to pass. */
+export const WATER_RAPIDS = 0x8;

@@ -4,9 +4,9 @@ import { structuresAt } from '../rail/structures.ts';
 import { EDGE_DX, EDGE_DY } from '../rail/track.ts';
 import { waypointName } from '../rail/waypoint.ts';
 import type { GameState } from '../sim/state.ts';
-import { hasBuoy, isCanal, lockAxisFor, navigable } from '../water/waterways.ts';
+import { hasBuoy, isCanal, isRapids, isRiver, lockAxisFor, navigable } from '../water/waterways.ts';
 import { reclassifyTile } from '../world/terrain.ts';
-import { Ground, TileType, WATER_BUOY, WATER_CANAL } from '../world/constants.ts';
+import { Ground, TileType, WATER_BUOY, WATER_CANAL, WATER_RAPIDS, WATER_RIVER } from '../world/constants.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
 /** Dig canals over an area of flat land (a line or a rectangle). */
@@ -18,7 +18,7 @@ export interface BuildCanalCommand {
   y1: number;
 }
 
-/** A lock on a straight slope, linking water at two levels. */
+/** A lock on a straight slope (bare land or river rapids), linking water at two levels. */
 export interface BuildLockCommand {
   type: 'buildLock';
   x: number;
@@ -114,7 +114,8 @@ export const buildLockHandler: CommandHandler<BuildLockCommand> = {
     const map = state.map;
     if (!isInt(x) || !isInt(y) || !map.inBounds(x, y)) return fail('Out of bounds');
     const i = map.tileIndex(x, y);
-    if (map.layers.type[i] !== TileType.Clear) return fail('Locks go on bare land');
+    const rapids = isRapids(map, i);
+    if (map.layers.type[i] !== TileType.Clear && !rapids) return fail('Locks go on bare land or river rapids');
     const axis = lockAxisFor(map, x, y);
     if (axis < 0) return fail('Locks go on a straight slope, one level high');
     return {
@@ -124,7 +125,8 @@ export const buildLockHandler: CommandHandler<BuildLockCommand> = {
         map.setClear(i, Ground.Grass, 0);
         map.layers.type[i] = TileType.Lock;
         map.layers.owner[i] = ctx.companyId!;
-        map.layers.data[i] = axis;
+        // Bit 1: built on rapids (they come back when the lock goes).
+        map.layers.data[i] = axis | (rapids ? 2 : 0);
         const dirtyChunks = new Set<number>();
         map.touchTile(x, y, dirtyChunks);
         state.onWaterChanged();
@@ -143,7 +145,7 @@ function waterEdges(state: GameState, x: number, y: number, company: number): nu
     const ny = y + EDGE_DY[e as 0]!;
     if (!map.inBounds(nx, ny)) continue;
     const n = map.tileIndex(nx, ny);
-    if (map.layers.type[n] === TileType.Water && !hasBuoy(map, n) && !foreignCanal(state, n, company)) out.push(e);
+    if (map.layers.type[n] === TileType.Water && !hasBuoy(map, n) && !isRapids(map, n) && !foreignCanal(state, n, company)) out.push(e);
   }
   return out;
 }
@@ -201,6 +203,7 @@ export const buildShipDepotHandler: CommandHandler<BuildShipDepotCommand> = {
     const i = map.tileIndex(x, y);
     const company = ctx.companyId!;
     if (map.layers.type[i] !== TileType.Water) return fail('Ship depots go on water');
+    if (isRapids(map, i)) return fail('Ship depots need calm water, not rapids');
     if (hasBuoy(map, i)) return fail('A buoy is in the way');
     if (foreignCanal(state, i, company)) return fail('That canal belongs to another company');
     if (state.ships.busy(i)) return fail('A ship is in the way');
@@ -216,13 +219,14 @@ export const buildShipDepotHandler: CommandHandler<BuildShipDepotCommand> = {
     else axis = open(1) > open(0) ? 1 : 0;
     if (open(axis) === 0) return fail('Ships could not get in or out of a depot there');
     const canal = isCanal(map, i);
+    const river = isRiver(map, i);
     return {
       ok: true,
       cost: state.cost(WATER_COSTS.shipDepot),
       commit() {
         map.layers.type[i] = TileType.ShipDepot;
         map.layers.owner[i] = company;
-        map.layers.data[i] = axis | (canal ? 2 : 0);
+        map.layers.data[i] = axis | (canal ? 2 : 0) | (river ? 4 : 0);
         state.shipDepots.add(i);
         const dirtyChunks = new Set<number>();
         map.touchTile(x, y, dirtyChunks);
@@ -242,6 +246,7 @@ export const buildBuoyHandler: CommandHandler<BuildBuoyCommand> = {
     const i = map.tileIndex(x, y);
     const company = ctx.companyId!;
     if (map.layers.type[i] !== TileType.Water) return fail('Buoys go on water');
+    if (isRapids(map, i)) return fail('Buoys need calm water, not rapids');
     if (hasBuoy(map, i)) return fail('There is a buoy here already');
     if (foreignCanal(state, i, company)) return fail('That canal belongs to another company');
     return {
@@ -301,16 +306,20 @@ export function removeWaterTile(state: GameState, i: number, company: number, di
       reclassifyTile(map, x, y);
     }
   } else if (type === TileType.Lock) {
-    map.setClear(i, Ground.Rough, 0);
+    if (map.layers.data[i]! & 2) {
+      map.setWater(i);
+      map.layers.data[i] = WATER_RIVER | WATER_RAPIDS;
+    } else map.setClear(i, Ground.Rough, 0);
   } else if (type === TileType.ShipDepot) {
     const canal = (map.layers.data[i]! & 2) !== 0;
+    const river = (map.layers.data[i]! & 4) !== 0;
     const owner = map.layers.owner[i]!;
     state.shipDepots.delete(i);
     map.setWater(i);
     if (canal) {
       map.layers.data[i] = WATER_CANAL;
       map.layers.owner[i] = owner;
-    }
+    } else if (river) map.layers.data[i] = WATER_RIVER;
   } else if (type === TileType.Dock) {
     station = map.layers.data[i]!;
     map.setClear(i, Ground.Rough, 0);

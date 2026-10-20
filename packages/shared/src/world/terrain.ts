@@ -1,7 +1,8 @@
 import { createNoise2D } from 'simplex-noise';
 import { Random } from '../util/random.ts';
-import { Ground, MAX_HEIGHT, MAX_TREES, SNOW_LINE, TileType, WATER_CANAL } from './constants.ts';
+import { Ground, MAX_HEIGHT, MAX_TREES, SNOW_LINE, TileType, WATER_CANAL, WATER_RAPIDS, WATER_RIVER } from './constants.ts';
 import { GameMap } from './map.ts';
+import { carveRivers } from './rivers.ts';
 
 export type TerrainRoughness = 'flat' | 'hilly' | 'mountainous';
 
@@ -12,6 +13,8 @@ export interface TerrainOptions {
   waterLevel: number;
   /** Tree density multiplier (0..2). */
   treeDensity: number;
+  /** River count multiplier (0..2); 1 if left out. */
+  rivers?: number;
 }
 
 const ROUGHNESS = {
@@ -95,10 +98,19 @@ export function generateTerrain(map: GameMap, opts: TerrainOptions): void {
   }
   enforceSlopeLimit(heights, cw, ch);
 
-  // 3. Tile classification: water, ground and trees
+  // 3. Rivers from the hills down to the sea
+  const rivers = carveRivers(heights, map.width, map.height, opts.seed, opts.rivers ?? 1, Math.max(3, Math.round(params.maxHeight * 0.3)));
+
+  // 4. Tile classification: water, ground and trees
   for (let y = 0; y < map.height; y++) {
     for (let x = 0; x < map.width; x++) {
       const i = y * map.width + x;
+      const river = rivers.get(i);
+      if (river !== undefined) {
+        map.setWater(i);
+        map.layers.data[i] = WATER_RIVER | (river ? WATER_RAPIDS : 0);
+        continue;
+      }
       const [a, b, c, d] = map.tileCorners(x, y);
       const max = Math.max(a, b, c, d);
       if (max === 0) {
@@ -153,7 +165,7 @@ export function reclassifyTile(map: GameMap, x: number, y: number): void {
   const i = map.tileIndex(x, y);
   const type = map.layers.type[i];
   const maxH = map.tileMaxHeight(x, y);
-  if (type === TileType.Water && maxH > 0 && !(map.layers.data[i]! & WATER_CANAL)) {
+  if (type === TileType.Water && maxH > 0 && !(map.layers.data[i]! & (WATER_CANAL | WATER_RIVER))) {
     map.setClear(i, Ground.Grass, 0);
   } else if (type === TileType.Clear && maxH === 0 && touchesWater(map, x, y)) {
     map.setWater(i);

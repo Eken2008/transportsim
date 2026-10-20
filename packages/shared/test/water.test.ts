@@ -7,9 +7,14 @@ import {
   TICKS_PER_DAY,
   TileType,
   WATER_CANAL,
+  WATER_RAPIDS,
+  WATER_RIVER,
   encodeSnapshot,
   executeCommand,
   findShipPath,
+  isRapids,
+  isRiver,
+  lockAxisFor,
   restoreSnapshot,
   type Command,
   type Train,
@@ -267,5 +272,55 @@ describe('ships', () => {
       });
     }
     expect(sunk).toBe(1);
+  });
+});
+
+describe('rivers', () => {
+  test('generated rivers are flat water with straight rapids, flowing on to the sea or the edge', () => {
+    const state = GameState.create({ ...DEFAULT_SETTINGS, mapWidth: 256, mapHeight: 256, seed: 7 });
+    const map = state.map;
+    let tiles = 0;
+    let rapids = 0;
+    for (let y = 0; y < map.height; y++) {
+      for (let x = 0; x < map.width; x++) {
+        const i = map.tileIndex(x, y);
+        if (!isRiver(map, i)) continue;
+        tiles++;
+        if (isRapids(map, i)) {
+          rapids++;
+          expect(lockAxisFor(map, x, y)).toBeGreaterThanOrEqual(0);
+        } else expect(map.isFlat(x, y)).toBe(true);
+        // Every river tile has water beside it, or is at the map edge.
+        const edge = x === 0 || y === 0 || x === map.width - 1 || y === map.height - 1;
+        const wet = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => map.type(x + dx!, y + dy!) === TileType.Water);
+        expect(edge || wet).toBe(true);
+      }
+    }
+    expect(tiles).toBeGreaterThan(30);
+    expect(rapids).toBeGreaterThan(0);
+    // No rivers when switched off.
+    const dry = GameState.create({ ...DEFAULT_SETTINGS, mapWidth: 256, mapHeight: 256, seed: 7, rivers: 0 });
+    expect(dry.map.layers.data.some((d, i) => dry.map.layers.type[i] === TileType.Water && (d & WATER_RIVER) !== 0)).toBe(false);
+  });
+
+  test('ships pass rapids only through a lock, which gives the rapids back when removed', () => {
+    const w = world();
+    const { map, run, exec } = w;
+    // A river along y = 50: level 1 up to x = 39, rapids on the x = 40 slope, level 2 beyond.
+    for (let x = 11; x <= 70; x++) {
+      const i = map.tileIndex(x, 50);
+      map.setWater(i);
+      map.layers.data[i] = WATER_RIVER | (x === 40 ? WATER_RAPIDS : 0);
+    }
+    const from = map.tileIndex(20, 50);
+    const to = new Set([map.tileIndex(60, 50)]);
+    expect(findShipPath(map, from, to)).toBeNull();
+    expect(exec({ type: 'buildShipDepot', x: 40, y: 50 }).ok).toBe(false);
+    expect(exec({ type: 'terraform', x0: 30, y0: 50, x1: 30, y1: 50, mode: 'raise' })).toMatchObject({ ok: false, error: expect.stringContaining('river') });
+    run({ type: 'buildLock', x: 40, y: 50 });
+    expect(findShipPath(map, from, to)).not.toBeNull();
+    run({ type: 'clearArea', x0: 40, y0: 50, x1: 40, y1: 50 });
+    expect(isRapids(map, map.tileIndex(40, 50))).toBe(true);
+    expect(findShipPath(map, from, to)).toBeNull();
   });
 });

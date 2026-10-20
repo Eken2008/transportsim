@@ -4,6 +4,8 @@ import {
   EDGE_DY,
   WATER_BUOY,
   WATER_CANAL,
+  WATER_RAPIDS,
+  lockAxisFor,
   waterAxis,
   waterLevelAt,
   CHUNK_SIZE,
@@ -304,8 +306,9 @@ const TIMBER_DECK = lin('#7b5a3c');
 const GATE = lin('#3b2f26');
 const BUOY_RED = lin('#c8352b');
 const SHED = lin('#6f7f8c');
+const FOAM = lin('#eef4f6');
 
-/** Canal banks, locks, ship depots, docks and buoys. */
+/** Canal banks, river rapids, locks, ship depots, docks and buoys. */
 function addWaterworks(g: GeoBuilder, map: GameMap, x: number, y: number, i: number): void {
   const type = map.layers.type[i];
   const data = map.layers.data[i]!;
@@ -326,6 +329,21 @@ function addWaterworks(g: GeoBuilder, map: GameMap, x: number, y: number, i: num
       if (!isWet(x, y + 1)) g.aabb(x, base, y + 0.94, x + 1, top, y + 1);
       if (!isWet(x - 1, y)) g.aabb(x, base, y, x + 0.06, top, y + 1);
       if (!isWet(x + 1, y)) g.aabb(x + 0.94, base, y, x + 1, top, y + 1);
+    }
+    if (data & WATER_RAPIDS) {
+      // White water: broken streaks across the flow, down the slope.
+      const alongX = lockAxisFor(map, x, y) === 0;
+      const [nw, ne, , sw] = map.tileCorners(x, y);
+      const far = alongX ? ne : sw;
+      g.color(FOAM);
+      for (let k = 0; k < 4; k++) {
+        const f = 0.14 + k * 0.24;
+        const h = (nw + (far - nw) * f) * HEIGHT_SCALE + WATER_Y + 0.006;
+        const a = 0.08 + tileHash(x, y, k) * 0.25;
+        const b = 0.92 - tileHash(x, y, k + 9) * 0.25;
+        if (alongX) g.aabb(x + f - 0.03, h - 0.02, y + a, x + f + 0.03, h + 0.008, y + b);
+        else g.aabb(x + a, h - 0.02, y + f - 0.03, x + b, h + 0.008, y + f + 0.03);
+      }
     }
     if (data & WATER_BUOY) {
       g.color(BUOY_RED).cylinderY(x + 0.5, y + 0.5, surface - 0.03, surface + 0.12, 0.07, 8);

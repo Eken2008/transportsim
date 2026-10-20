@@ -1,6 +1,8 @@
 import {
   CHUNK_SIZE,
   FIELD_CROP_SHIFT,
+  isRapids,
+  isRiver,
   waterAxis,
   Ground,
   HEIGHT_SCALE,
@@ -168,6 +170,20 @@ export function buildTerrainGeometry(map: GameMap, cx: number, cy: number, lod: 
   return geo;
 }
 
+/** Is a flat river tile at `level` next to (x, y), diagonals included? */
+function besideRiverAt(map: GameMap, x: number, y: number, level: number): boolean {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if ((dx === 0 && dy === 0) || !map.inBounds(nx, ny)) continue;
+      const i = map.tileIndex(nx, ny);
+      if (isRiver(map, i) && !isRapids(map, i) && map.cornerHeight(nx, ny) === level) return true;
+    }
+  }
+  return false;
+}
+
 /** Water surface quads for cells that touch sea level. Returns null if the chunk is dry. */
 export function buildWaterGeometry(map: GameMap, cx: number, cy: number, lod: Lod): THREE.BufferGeometry | null {
   const step = 1 << lod;
@@ -188,26 +204,47 @@ export function buildWaterGeometry(map: GameMap, cx: number, cy: number, lod: Lo
       if (wet) quads.push(tx, ty);
     }
   }
-  // Canals, locks and ship depots above sea level, tile by tile at their own level.
+  // Rivers, canals, locks and ship depots above sea level, tile by tile at their own level:
+  // x, z, width, depth, then the surface level at the NW, NE, SE and SW corners.
   const raised: number[] = [];
+  // Sides of rapids facing land, from the sloping surface down to the ground: x1, z1, x2, z2,
+  // then the ground level at each end.
+  const sides: number[] = [];
   for (let ty = y0; ty < y0 + CHUNK_SIZE; ty++) {
     for (let tx = x0; tx < x0 + CHUNK_SIZE; tx++) {
-      const t = map.layers.type[map.tileIndex(tx, ty)];
-      if (t !== TileType.Water && t !== TileType.Lock && t !== TileType.ShipDepot) continue;
-      if (map.tileMinHeight(tx, ty) === 0 && t !== TileType.Lock) continue; // under the sea plane
+      const i = map.tileIndex(tx, ty);
+      const t = map.layers.type[i];
+      const min = map.tileMinHeight(tx, ty);
+      if (t !== TileType.Water && t !== TileType.Lock && t !== TileType.ShipDepot) {
+        // River banks: water at the river's level over the low part of the bank, so the
+        // shoreline follows the ground instead of the tile edge.
+        if (min > 0 && besideRiverAt(map, tx, ty, min)) raised.push(tx, ty, 1, 1, min, min, min, min);
+        continue;
+      }
+      if (min === 0 && t !== TileType.Lock && !isRapids(map, i)) continue; // under the sea plane
       if (t === TileType.Lock) {
         // Two halves, each at its own level, meeting at the middle gate.
         const [nw, ne, , sw] = map.tileCorners(tx, ty);
-        if (waterAxis(map, map.tileIndex(tx, ty)) === 0) {
-          raised.push(tx, ty, 0.5, 1, nw, tx + 0.5, ty, 0.5, 1, ne);
+        if (waterAxis(map, i) === 0) {
+          raised.push(tx, ty, 0.5, 1, nw, nw, nw, nw, tx + 0.5, ty, 0.5, 1, ne, ne, ne, ne);
         } else {
-          raised.push(tx, ty, 1, 0.5, nw, tx, ty + 0.5, 1, 0.5, sw);
+          raised.push(tx, ty, 1, 0.5, nw, nw, nw, nw, tx, ty + 0.5, 1, 0.5, sw, sw, sw, sw);
         }
-      } else raised.push(tx, ty, 1, 1, map.tileMinHeight(tx, ty));
+      } else if (isRapids(map, i)) {
+        const c = map.tileCorners(tx, ty);
+        raised.push(tx, ty, 1, 1, ...c); // follows the slope
+        const [nw, ne, se, sw] = c;
+        const dry = (x: number, y: number) => map.inBounds(x, y) && map.layers.type[map.tileIndex(x, y)] !== TileType.Water;
+        if (dry(tx, ty - 1)) sides.push(tx, ty, tx + 1, ty, nw, ne);
+        if (dry(tx, ty + 1)) sides.push(tx, ty + 1, tx + 1, ty + 1, sw, se);
+        if (dry(tx - 1, ty)) sides.push(tx, ty, tx, ty + 1, nw, sw);
+        if (dry(tx + 1, ty)) sides.push(tx + 1, ty, tx + 1, ty + 1, ne, se);
+      } else raised.push(tx, ty, 1, 1, min, min, min, min);
     }
   }
   if (quads.length === 0 && raised.length === 0) return null;
-  const n = quads.length / 2 + raised.length / 5;
+  // Each side is drawn both ways round, so it shows from either bank.
+  const n = quads.length / 2 + raised.length / 8 + (sides.length / 6) * 2;
   const pos = new Float32Array(n * 18);
   let q = 0;
   for (let k = 0; k < quads.length; k += 2, q++) {
@@ -217,13 +254,22 @@ export function buildWaterGeometry(map: GameMap, cx: number, cy: number, lod: Lo
     const s = z + step;
     pos.set([x, WATER_Y, z, x, WATER_Y, s, e, WATER_Y, z, e, WATER_Y, z, x, WATER_Y, s, e, WATER_Y, s], q * 18);
   }
-  for (let k = 0; k < raised.length; k += 5, q++) {
+  for (let k = 0; k < raised.length; k += 8, q++) {
     const x = raised[k]!;
     const z = raised[k + 1]!;
     const e = x + raised[k + 2]!;
     const s = z + raised[k + 3]!;
-    const y = raised[k + 4]! * HEIGHT_SCALE + WATER_Y;
-    pos.set([x, y, z, x, y, s, e, y, z, e, y, z, x, y, s, e, y, s], q * 18);
+    const [nw, ne, se, sw] = [4, 5, 6, 7].map((o) => raised[k + o]! * HEIGHT_SCALE + WATER_Y) as [number, number, number, number];
+    pos.set([x, nw, z, x, sw, s, e, ne, z, e, ne, z, x, sw, s, e, se, s], q * 18);
+  }
+  for (let k = 0; k < sides.length; k += 6, q += 2) {
+    const [x1, z1, x2, z2] = [sides[k]!, sides[k + 1]!, sides[k + 2]!, sides[k + 3]!];
+    const g1 = sides[k + 4]! * HEIGHT_SCALE;
+    const g2 = sides[k + 5]! * HEIGHT_SCALE;
+    const t1 = g1 + WATER_Y;
+    const t2 = g2 + WATER_Y;
+    pos.set([x1, t1, z1, x1, g1, z1, x2, t2, z2, x2, t2, z2, x1, g1, z1, x2, g2, z2], q * 18);
+    pos.set([x1, t1, z1, x2, t2, z2, x1, g1, z1, x2, t2, z2, x2, g2, z2, x1, g1, z1], (q + 1) * 18);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));

@@ -190,6 +190,10 @@ function HostCard({ disabled, onBeforeHost, busy }: { disabled: boolean; onBefor
           <input type="range" min={0} max={2} step={0.1} value={s.treeDensity} onChange={(e) => set('treeDensity', +e.target.value)} />
         </label>
         <label className="field">
+          <span>Rivers · {Math.round(s.rivers * 100)}%</span>
+          <input type="range" min={0} max={2} step={0.1} value={s.rivers} onChange={(e) => set('rivers', +e.target.value)} />
+        </label>
+        <label className="field">
           <span>Timeline</span>
           <select value={s.timeline} onChange={(e) => set('timeline', e.target.value as TimelineMode)}>
             <option value="era">Eras — vehicles unlock over time</option>
