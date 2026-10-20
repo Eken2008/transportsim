@@ -155,6 +155,16 @@ export class HeadquartersTool extends PreviewTool {
     ];
     return { tiles, cmd: { type: 'buildHeadquarters', x, y } as Command };
   }
+
+  /** A company has one headquarters: placing ends once they are built. */
+  override onUp(hit: TerrainHit | null): void {
+    const target = hit ?? this.lastHit;
+    if (!target) return;
+    void client.command(this.describe(target).cmd).then((r) => {
+      if (!r.ok && r.error) toast(r.error, 'error', 2500);
+      else if (r.ok) useApp.setState({ tool: null });
+    });
+  }
 }
 
 /** Click plain straight track to make it a waypoint; click a waypoint to remove it. */

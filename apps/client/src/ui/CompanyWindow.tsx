@@ -176,25 +176,32 @@ function Headquarters({ c, canBuild }: { c: Company; canBuild: boolean }) {
   const tool = useApp((s) => s.tool);
   const placing = tool === 'headquarters';
   return (
-    <div className="row" style={{ marginTop: 8 }}>
-      <span style={{ flex: 1 }} className="small">
-        🏢 Headquarters: {c.hq === undefined ? <span className="muted">not built yet</span> : <b>{HQ_SIZE_NAMES[hqSizeFor(c.value)]}</b>}
-      </span>
-      {c.hq !== undefined && (
-        <button className="ghost" onClick={() => focusHq(c.hq!)}>
-          ⌖ View
-        </button>
+    <>
+      <div className="row" style={{ marginTop: 8 }}>
+        <span style={{ flex: 1 }} className="small">
+          🏢 Headquarters: {c.hq === undefined ? <span className="muted">not built yet</span> : <b>{HQ_SIZE_NAMES[hqSizeFor(c.value)]}</b>}
+        </span>
+        {c.hq !== undefined && (
+          <button className="ghost" onClick={() => focusHq(c.hq!)}>
+            ⌖ View
+          </button>
+        )}
+        {canBuild && (
+          <button
+            className={placing ? 'primary' : ''}
+            title="Pick a 2×2 spot of open land; headquarters grow as the company's value grows"
+            onClick={() => useApp.setState({ tool: placing ? null : 'headquarters' })}
+          >
+            {placing ? 'Cancel' : c.hq === undefined ? 'Build…' : 'Move…'}
+          </button>
+        )}
+      </div>
+      {placing && (
+        <p className="muted small" style={{ margin: '4px 0 0' }}>
+          Click a 2×2 spot of open land on the map{c.hq === undefined ? '' : ' to move your headquarters there'}. Esc cancels.
+        </p>
       )}
-      {canBuild && (
-        <button
-          className={placing ? 'primary' : ''}
-          title="Pick a 2×2 spot of open land; headquarters grow as the company's value grows"
-          onClick={() => useApp.setState({ tool: placing ? null : 'headquarters' })}
-        >
-          {c.hq === undefined ? 'Build…' : 'Move…'}
-        </button>
-      )}
-    </div>
+    </>
   );
 }
 

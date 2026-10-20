@@ -259,7 +259,6 @@ const TOOLS: ToolDef[] = [
   { id: 'dock', icon: '⚓', label: 'Dock (on the shore; faces the water nearest the cursor)', key: 'O', menu: 'water' },
   { id: 'shipDepot', icon: '🛳', label: 'Ship depot (on water, off the main channel)', key: 'M', menu: 'water' },
   { id: 'buoy', icon: '🔴', label: 'Buoy (a waypoint for ships)', key: 'X', menu: 'water' },
-  { id: 'headquarters', icon: '🏢', label: 'Company headquarters (2×2; build again to move them)', key: '0', menu: 'main' },
   { id: 'bulldoze', icon: '💥', label: 'Bulldoze (drag an area)', key: '8', menu: 'main' },
 ];
 
@@ -564,7 +563,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>-</kbd> zoom
       </div>
       <div>
-        <kbd>1</kbd> raise · <kbd>2</kbd> lower · <kbd>3</kbd> level land · <kbd>0</kbd> company headquarters
+        <kbd>1</kbd> raise · <kbd>2</kbd> lower · <kbd>3</kbd> level land
       </div>
       <div>
         <kbd>4</kbd> railway (drag; hold <kbd>Ctrl</kbd> to remove) · <kbd>5</kbd> remove railway
@@ -581,7 +580,7 @@ function Help({ onClose }: { onClose: () => void }) {
         <kbd>Shift</kbd>+<kbd>T</kbd> trees · <kbd>Shift</kbd>+<kbd>B</kbd> houses and industries: shown, see-through, hidden
       </div>
       <div>
-        Click a depot, station, headquarters or vehicle to open it · <kbd>T</kbd> vehicle list · <kbd>C</kbd> company · <kbd>F</kbd> finances · <kbd>L</kbd> league · 📈 graphs ·{' '}
+        Click a depot, station, headquarters or vehicle to open it · <kbd>T</kbd> vehicle list · <kbd>C</kbd> company (and its headquarters) · <kbd>F</kbd> finances · <kbd>L</kbd> league · 📈 graphs ·{' '}
         <kbd>Space</kbd> pause (host) · ⤓ Export downloads the game
       </div>
       <div>
