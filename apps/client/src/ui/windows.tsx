@@ -82,6 +82,12 @@ export function focusOn(x: number, y: number): void {
   useApp.setState((s) => ({ focus: { x, y, seq: (s.focus?.seq ?? 0) + 1 }, follow: null }));
 }
 
+/** Point the camera at the middle of a company's 2×2 headquarters, given their north-west tile. */
+export function focusHq(tile: number): void {
+  const width = client.world?.map.width;
+  if (width) focusOn((tile % width) + 0.5, Math.floor(tile / width) + 0.5);
+}
+
 /** Keep the camera on a vehicle until the player moves the camera. */
 export function follow(id: number): void {
   useApp.setState({ follow: id });

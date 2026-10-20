@@ -23,6 +23,8 @@ export const COSTS = {
   roadRemove: 40,
   roadStop: 900,
   roadDepot: 1_500,
+  /** A company's headquarters (building it again elsewhere moves it). */
+  headquarters: 25_000,
   /** Demolishing a town's house: a base and so much per resident. */
   houseRemove: 400,
   houseRemovePerResident: 20,

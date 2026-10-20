@@ -20,6 +20,8 @@ import {
   TileType,
   edgeHeight,
   houseType,
+  hqPart,
+  hqSize,
   type GameMap,
   type HouseType,
 } from '@transportsim/shared';
@@ -199,6 +201,11 @@ export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): v
         addStatue(g, map, x, y);
         continue;
       }
+      if (type === TileType.Headquarters) {
+        const h = map.surfaceHeight(x, y) * HEIGHT_SCALE;
+        g.color(PAVEMENT).aabb(x, h, y, x + 1, h + 0.015, y + 1);
+        continue;
+      }
       if (type === TileType.Water || type === TileType.Lock || type === TileType.ShipDepot || type === TileType.Dock) {
         addWaterworks(g, map, x, y, i);
         continue;
@@ -283,6 +290,95 @@ function addStatue(g: GeoBuilder, map: GameMap, x: number, y: number): void {
   g.color(BRONZE).cylinderY(cx, cz, h + 0.26, h + 0.5, 0.055);
   g.aabb(cx - 0.11, h + 0.42, cz - 0.025, cx + 0.11, h + 0.46, cz + 0.025); // arms
   g.cylinderY(cx, cz, h + 0.5, h + 0.58, 0.04); // head
+}
+
+const HQ_WALL = lin('#d8dde2');
+const HQ_GLASS = lin('#4f6a80');
+const HQ_ROOF = lin('#5a6068');
+const HQ_DOOR = lin('#2a2f35');
+/** Floors and half the width of the main block, by headquarters size. */
+const HQ_FLOORS = [2, 4, 7, 11, 16];
+const HQ_HALF = [0.5, 0.52, 0.46, 0.42, 0.38];
+const HQ_FLOOR_H = 0.16;
+
+/** Rows of windows on all four sides of a block. */
+function hqWindows(g: GeoBuilder, cx: number, cz: number, half: number, y0: number, floors: number): void {
+  g.color(HQ_GLASS);
+  const cols = Math.max(2, Math.round((half * 2) / 0.17));
+  const step = (half * 2) / cols;
+  const w = step * 0.55;
+  const d = 0.008;
+  for (let f = 0; f < floors; f++) {
+    const y = y0 + f * HQ_FLOOR_H + HQ_FLOOR_H * 0.3;
+    const top = y + HQ_FLOOR_H * 0.45;
+    for (let c = 0; c < cols; c++) {
+      const u = -half + (c + 0.5) * step;
+      g.aabb(cx + u - w / 2, y, cz + half - d, cx + u + w / 2, top, cz + half + d);
+      g.aabb(cx + u - w / 2, y, cz - half - d, cx + u + w / 2, top, cz - half + d);
+      g.aabb(cx + half - d, y, cz + u - w / 2, cx + half + d, top, cz + u + w / 2);
+      g.aabb(cx - half - d, y, cz + u - w / 2, cx - half + d, top, cz + u + w / 2);
+    }
+  }
+}
+
+/**
+ * Company headquarters in a chunk, one mesh drawn with the building material (so it fades and hides
+ * with the houses). Each is drawn from its north-west tile over its 2×2 plaza; it rises with its size,
+ * and its trim, canopy and flag are in the company's colour.
+ */
+export function buildHeadquarters(map: GameMap, cx: number, cy: number, companyColor: (owner: number) => THREE.Color): THREE.Mesh | null {
+  const g = new GeoBuilder();
+  const x0 = cx * CHUNK_SIZE;
+  const y0 = cy * CHUNK_SIZE;
+  for (let y = y0; y < y0 + CHUNK_SIZE; y++) {
+    for (let x = x0; x < x0 + CHUNK_SIZE; x++) {
+      const i = map.tileIndex(x, y);
+      if (map.layers.type[i] !== TileType.Headquarters || hqPart(map.layers.data[i]!) !== 0) continue;
+      addHeadquarters(g, x + 1, y + 1, map.surfaceHeight(x, y) * HEIGHT_SCALE + 0.015, hqSize(map.layers.data[i]!), companyColor(map.layers.owner[i]!));
+    }
+  }
+  const geo = g.build();
+  if (!geo) return null;
+  const mesh = new THREE.Mesh(geo, buildingMaterial);
+  mesh.matrixAutoUpdate = false;
+  return mesh;
+}
+
+/** One headquarters building centred at (cx, cz) on ground height h, its entrance facing south. */
+function addHeadquarters(g: GeoBuilder, cx: number, cz: number, h: number, size: number, color: THREE.Color): void {
+  const floors = HQ_FLOORS[size] ?? HQ_FLOORS[0]!;
+  const half = HQ_HALF[size] ?? HQ_HALF[0]!;
+  const top = h + floors * HQ_FLOOR_H + 0.04;
+  // Bigger headquarters stand on a wide two-storey base.
+  if (size >= 2) {
+    const base = h + 2 * HQ_FLOOR_H;
+    g.color(HQ_WALL).aabb(cx - 0.7, h, cz - 0.6, cx + 0.7, base, cz + 0.6);
+    g.color(HQ_GLASS).aabb(cx - 0.705, h + 0.04, cz - 0.605, cx + 0.705, h + 0.24, cz + 0.605);
+    g.color(color).aabb(cx - 0.72, base, cz - 0.62, cx + 0.72, base + 0.025, cz + 0.62);
+  }
+  g.color(HQ_WALL).aabb(cx - half, h, cz - half, cx + half, top, cz + half);
+  hqWindows(g, cx, cz, half, h, floors);
+  // Company-coloured cornice and roof.
+  g.color(color).aabb(cx - half - 0.02, top, cz - half - 0.02, cx + half + 0.02, top + 0.04, cz + half + 0.02);
+  g.color(HQ_ROOF).aabb(cx - half + 0.06, top + 0.04, cz - half + 0.06, cx + half - 0.06, top + 0.07, cz + half - 0.06);
+  // Entrance with a canopy on the south side.
+  const front = size >= 2 ? cz + 0.6 : cz + half;
+  g.color(HQ_DOOR).aabb(cx - 0.12, h, front - 0.01, cx + 0.12, h + 0.13, front + 0.012);
+  g.color(color).aabb(cx - 0.18, h + 0.13, front, cx + 0.18, h + 0.15, front + 0.12);
+  if (size >= 3) {
+    // A narrower crown on top.
+    const crown = half * 0.6;
+    g.color(HQ_WALL).aabb(cx - crown, top + 0.07, cz - crown, cx + crown, top + 0.32, cz + crown);
+    hqWindows(g, cx, cz, crown, top + 0.07, 1);
+    g.color(color).aabb(cx - crown - 0.015, top + 0.32, cz - crown - 0.015, cx + crown + 0.015, top + 0.35, cz + crown + 0.015);
+    if (size >= 4) g.color(HQ_ROOF).cylinderY(cx, cz, top + 0.35, top + 0.95, 0.02, 6); // antenna
+  } else {
+    // A flag in the company's colour by the entrance.
+    const fx = cx + 0.62;
+    const fz = cz + 0.75;
+    g.color(HQ_ROOF).cylinderY(fx, fz, h, h + 0.55, 0.012, 6);
+    g.color(color).aabb(fx + 0.012, h + 0.42, fz - 0.004, fx + 0.2, h + 0.54, fz + 0.004);
+  }
 }
 
 /**

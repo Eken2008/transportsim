@@ -3,7 +3,7 @@ import type { ClientWorld } from '../game/clientWorld.ts';
 import { client } from '../net/client.ts';
 import { useApp, type ToolId, type ViewMode } from '../store.ts';
 import { sound } from '../audio/sound.ts';
-import { BulldozeTool, CanalTool, ConvertTool, DepotTool, StationTool, WaypointTool } from '../tools/placeTools.ts';
+import { BulldozeTool, CanalTool, ConvertTool, DepotTool, HeadquartersTool, StationTool, WaypointTool } from '../tools/placeTools.ts';
 import { RoadPlaceTool, RoadTool } from '../tools/roadTools.ts';
 import { RailTool } from '../tools/railTool.ts';
 import { TerraformTool } from '../tools/terraformTool.ts';
@@ -307,6 +307,9 @@ export class GameRenderer {
       case 'waypoint':
         this.tool = new WaypointTool(this.area);
         break;
+      case 'headquarters':
+        this.tool = new HeadquartersTool(this.area);
+        break;
       case 'road':
       case 'removeRoad':
         this.tool = new RoadTool(this.area, id === 'removeRoad');
@@ -387,6 +390,13 @@ export class GameRenderer {
     else if (type === TileType.ShipDepot) openWindow({ kind: 'shipDepot', id: i });
     else if (type === TileType.Station) openWindow({ kind: 'station', id: map.layers.data[i]! });
     else if (type === TileType.Industry) openWindow({ kind: 'industry', id: map.layers.data[i]! });
+    else if (type === TileType.Headquarters) {
+      // Your own headquarters open your company; another company's, its books.
+      const owner = map.layers.owner[i]!;
+      const s = useApp.getState();
+      const mine = s.global?.players.find((p) => p.id === s.room?.playerId)?.companyId === owner;
+      openWindow(mine ? { kind: 'company', id: 0 } : { kind: 'finances', id: owner });
+    }
     else if ((type === TileType.House || type === TileType.Road || type === TileType.Statue) && map.layers.town[i]) openWindow({ kind: 'town', id: map.layers.town[i]! - 1 });
   }
 

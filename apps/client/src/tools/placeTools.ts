@@ -142,6 +142,21 @@ export class DepotTool extends PreviewTool {
   }
 }
 
+/** Place (or move) the company's 2×2 headquarters, centred on the cursor. */
+export class HeadquartersTool extends PreviewTool {
+  protected describe(hit: TerrainHit) {
+    const x = Math.round(hit.point.x) - 1;
+    const y = Math.round(hit.point.z) - 1;
+    const tiles = [
+      { x, y },
+      { x: x + 1, y },
+      { x, y: y + 1 },
+      { x: x + 1, y: y + 1 },
+    ];
+    return { tiles, cmd: { type: 'buildHeadquarters', x, y } as Command };
+  }
+}
+
 /** Click plain straight track to make it a waypoint; click a waypoint to remove it. */
 export class WaypointTool extends PreviewTool {
   protected describe(hit: TerrainHit) {

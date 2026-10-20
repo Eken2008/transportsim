@@ -10,6 +10,7 @@ import { REPUTATION_MAX, REPUTATION_MIN } from '../town/reputation.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
 import { sanitizeAgreements, type Agreement } from '../company/sharing.ts';
+import { findHeadquarters } from '../company/headquarters.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
 import { JUMP_CONDITIONS, type AirPhase, type AirState, type Order, type ShipState } from '../vehicles/train.ts';
 import { LINE_COLORS, VEHICLE_MODES, addLine, vehicleMode, type Line } from '../vehicles/lines.ts';
@@ -172,6 +173,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
     });
   }
   recountTowns(map, state.towns.values());
+  findHeadquarters(state);
   // Road works: saved timers, and a few more days for any works a save has no timer for.
   const works = new Map(Array.isArray(snap.roadWorks) ? snap.roadWorks : []);
   for (let i = 0; i < map.layers.type.length; i++) {

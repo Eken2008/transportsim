@@ -32,6 +32,8 @@ export const TileType = {
   ShipDepot: 13,
   /** A company's statue in a town (see town actions): owner = the company, town = the town. */
   Statue: 14,
+  /** Part of a company's 2×2 headquarters: owner = the company, data = part | size << 2 (see company/headquarters). */
+  Headquarters: 15,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 

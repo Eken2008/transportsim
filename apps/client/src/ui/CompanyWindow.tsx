@@ -1,8 +1,10 @@
 import {
   COMPANY_COLORS,
   COMPANY_ROLES,
+  HQ_SIZE_NAMES,
   RAIL_VEHICLES,
   ROLE_LABELS,
+  hqSizeFor,
   isAvailable,
   railVehicle,
   roleAllows,
@@ -13,7 +15,7 @@ import {
 import { useState } from 'react';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
-import { Win, act, useMyRole } from './windows.tsx';
+import { Win, act, focusHq, useMyRole } from './windows.tsx';
 import { SharingSection } from './SharingSection.tsx';
 
 /** Membership: found or join a company, answer requests, invite players, manage roles. */
@@ -100,6 +102,7 @@ function MyCompany({ c, role }: { c: Company; role: CompanyRole }) {
           🏆 League
         </button>
       </div>
+      <Headquarters c={c} canBuild={roleAllows(role, 'build')} />
       {isOwner && <CompanySettings c={c} />}
 
       <h4>Members</h4>
@@ -165,6 +168,33 @@ function MyCompany({ c, role }: { c: Company; role: CompanyRole }) {
         Leave company
       </button>
     </>
+  );
+}
+
+/** Where the company's headquarters stand, with buttons to look at them and to build or move them. */
+function Headquarters({ c, canBuild }: { c: Company; canBuild: boolean }) {
+  const tool = useApp((s) => s.tool);
+  const placing = tool === 'headquarters';
+  return (
+    <div className="row" style={{ marginTop: 8 }}>
+      <span style={{ flex: 1 }} className="small">
+        🏢 Headquarters: {c.hq === undefined ? <span className="muted">not built yet</span> : <b>{HQ_SIZE_NAMES[hqSizeFor(c.value)]}</b>}
+      </span>
+      {c.hq !== undefined && (
+        <button className="ghost" onClick={() => focusHq(c.hq!)}>
+          ⌖ View
+        </button>
+      )}
+      {canBuild && (
+        <button
+          className={placing ? 'primary' : ''}
+          title="Pick a 2×2 spot of open land; headquarters grow as the company's value grows"
+          onClick={() => useApp.setState({ tool: placing ? null : 'headquarters' })}
+        >
+          {c.hq === undefined ? 'Build…' : 'Move…'}
+        </button>
+      )}
+    </div>
   );
 }
 

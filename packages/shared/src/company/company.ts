@@ -57,6 +57,8 @@ export interface Company {
   badQuarters: number;
   /** Infrastructure owned, counted monthly. */
   infrastructure: Infrastructure;
+  /** Tile of the north-west corner of the company's headquarters, if it has built them. */
+  hq?: number;
   /** Company value (money − loan + vehicles + property), updated monthly. */
   value: number;
   /** Renew trains that outlive their design life when they visit a depot. */

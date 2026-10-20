@@ -376,6 +376,8 @@ export const clearAreaHandler: CommandHandler<ClearAreaCommand> = {
           }
           jobs.push({ i, kind: 'depot' });
           cost += COSTS.depotRemove;
+        } else if (type === TileType.Headquarters && own) {
+          blocked = 'Headquarters can’t be demolished: build them somewhere else to move them';
         } else if (type === TileType.House) {
           const data = map.layers.data[i]!;
           jobs.push({ i, kind: 'house' });

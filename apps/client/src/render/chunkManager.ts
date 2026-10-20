@@ -2,7 +2,7 @@ import { CHUNK_SIZE, COMPANY_COLORS, HEIGHT_SCALE, MAX_HEIGHT } from '@transport
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { buildTerrainGeometry, buildWaterGeometry, type Lod } from './terrainMesh.ts';
-import { addRoads, buildHouses } from './buildings.ts';
+import { addRoads, buildHeadquarters, buildHouses } from './buildings.ts';
 import { addFields } from './fields.ts';
 import { GeoBuilder } from './geoBuilder.ts';
 import { addTrack } from './trackMesh.ts';
@@ -168,6 +168,8 @@ export class ChunkManager {
       group.add(mesh);
     }
     for (const h of buildHouses(map, cx, cy)) group.add(h);
+    const hq = buildHeadquarters(map, cx, cy, (owner) => this.companyColor(owner));
+    if (hq) group.add(hq);
     if (lod <= 2) for (const t of buildTrees(map, cx, cy, lod >= 1)) group.add(t);
     this.root.add(group);
     this.views.set(id, { cx, cy, lod, group, builtRev: this.dataRev[id]!, lastWanted: now });

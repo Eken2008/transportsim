@@ -29,6 +29,7 @@ import { demolishTile, refreshStations } from '../commands/station.ts';
 import { removeAirport } from '../commands/airport.ts';
 import { OWNER_NONE, TileType, WATER_BUOY, WATER_CANAL } from '../world/constants.ts';
 import type { Agreement } from '../company/sharing.ts';
+import { removeHeadquarters, resizeHeadquarters } from '../company/headquarters.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
 import { ELECTRIC_TYPES } from '../rail/railTypes.ts';
 import { isSpanTd } from '../rail/track.ts';
@@ -275,6 +276,7 @@ export class GameState {
         if (due) this.addMoney(c.id, -due, 'property', mode);
       }
       c.value = this.companyValue(c);
+      resizeHeadquarters(this, c);
       c.history.push({ date: this.date, money: c.money, loan: c.loan, value: c.value, vehicles: vehicles.get(c.id) ?? 0, ...c.month });
       if (c.history.length > HISTORY_MONTHS) c.history.splice(0, c.history.length - HISTORY_MONTHS);
       c.month = { ledger: emptyLedger(), modes: {}, delivered: {} };
@@ -419,6 +421,7 @@ export class GameState {
     for (const wp of [...this.waypoints.values()]) if (wp.buoy && wp.owner === id) this.deleteWaypoint(wp.id);
     const { type, owner } = this.map.layers;
     const dirty = new Set<number>();
+    removeHeadquarters(this, this.companies.get(id)!, dirty);
     const stations = new Set<number>();
     for (let i = 0; i < type.length; i++) {
       if (owner[i] !== id) continue;

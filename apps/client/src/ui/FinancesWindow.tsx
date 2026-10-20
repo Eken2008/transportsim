@@ -18,7 +18,7 @@ import { useState } from 'react';
 import { client } from '../net/client.ts';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
-import { Win, act, useMyRole } from './windows.tsx';
+import { Win, act, focusHq, useMyRole } from './windows.tsx';
 import { MODE_LABELS } from './LinesWindow.tsx';
 
 const QUARTERS = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'];
@@ -222,6 +222,11 @@ export function LeagueWindow({ w }: { w: GameWindow & { kind: 'league' } }) {
             <span className="mono" title="Company value">
               {formatMoney(c.value)}
             </span>
+            {c.hq !== undefined && client.world && (
+              <button className="ghost" title="Show its headquarters" aria-label={`Show the headquarters of ${c.name}`} onClick={() => focusHq(c.hq!)}>
+                🏢
+              </button>
+            )}
             <button onClick={() => openWindow({ kind: 'finances', id: c.id })}>Books</button>
           </div>
         );

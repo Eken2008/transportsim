@@ -10,6 +10,7 @@ export * from './sim/date.ts';
 export * from './sim/state.ts';
 export * from './company/company.ts';
 export * from './company/sharing.ts';
+export * from './company/headquarters.ts';
 export * from './news/news.ts';
 export * from './rail/track.ts';
 export * from './rail/railTypes.ts';
