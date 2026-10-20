@@ -156,11 +156,12 @@ export function addTunnelPortal(g: GeoBuilder, map: GameMap, tile: number, info:
   const along = info.dir === 1 || info.dir === 3;
   const t = 0.08;
   g.color(PORTAL);
-  if (along) g.aabb(fx - t, y, fz - 0.45, fx + t, y + 0.62, fz + 0.45);
-  else g.aabb(fx - 0.45, y, fz - t, fx + 0.45, y + 0.62, fz + t);
+  if (along) g.aabb(fx - t, y, fz - 0.45, fx + t, y + 0.74, fz + 0.45);
+  else g.aabb(fx - 0.45, y, fz - t, fx + 0.45, y + 0.74, fz + t);
   g.color(DARK);
   const o = -EDGE_DX[info.dir] * (t + 0.004);
   const p = -EDGE_DY[info.dir] * (t + 0.004);
-  if (along) g.aabb(fx + o - 0.002, y, fz - 0.26, fx + o + 0.002, y + 0.46, fz + 0.26);
-  else g.aabb(fx - 0.26, y, fz + p - 0.002, fx + 0.26, y + 0.46, fz + p + 0.002);
+  // The mouth clears a pantograph at the contact wire.
+  if (along) g.aabb(fx + o - 0.002, y, fz - 0.26, fx + o + 0.002, y + 0.6, fz + 0.26);
+  else g.aabb(fx - 0.26, y, fz + p - 0.002, fx + 0.26, y + 0.6, fz + p + 0.002);
 }

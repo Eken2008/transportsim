@@ -33,8 +33,8 @@ const SLEEPER_CONCRETE = lin('#a7a39b');
 const BALLAST_HS = lin('#9d9a94');
 const MAST = lin('#59606a');
 const WIRE = lin('#2b2e33');
-/** Contact wire height above the rails. */
-const WIRE_HEIGHT = 0.4;
+/** Contact wire height above the track centre line: just where an electric loco's pantograph reaches. */
+const WIRE_HEIGHT = 0.55;
 const RAIL = lin('#c3c7cc');
 const ROAD = lin('#5d6166');
 const PLATFORM = lin('#b9b4aa');
@@ -183,10 +183,11 @@ export function addTrack(
       // Road stops keep road bits there, airports their tile roles.
       if (bits === 0 || map.layers.type[i] === TileType.RoadStop || map.layers.type[i] === TileType.Airport || map.layers.type[i] === TileType.Dock) continue;
       if (map.layers.type[i] === TileType.Rail && map.layers.data[i]! & CROSSING_FLAG) {
-        // Road surface under the crossing, perpendicular to the track.
+        // Road deck across the track, its top between the sleepers and the railheads so it
+        // never shares a plane with the ballast (z-fighting) and the rails show through.
         const roadPiece = hasPiece(bits, 0) ? 1 : 0;
         pieceEndpoints(map, x, y, roadPiece, _a, _b);
-        g.color(ROAD).box(_a.setY(_a.y - 0.005), _b.setY(_b.y - 0.005), 0.7, 0.035, false);
+        g.color(ROAD).box(_a.setY(_a.y - 0.005), _b.setY(_b.y - 0.005), 0.7, 0.062, false);
         if (lod <= 1) addCrossingFurniture(g, map, x, y, roadPiece === 1);
       }
       const type = map.layers.type[i];
