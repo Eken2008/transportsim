@@ -106,7 +106,7 @@ try {
   if (clearSpot) await hook((h, s: { x: number; y: number }) => h.view({ x: s.x + 4, y: s.y + 4 }), clearSpot);
   await a.waitForTimeout(1500);
   await a.keyboard.press('Digit1');
-  const box = (await a.locator('canvas').boundingBox())!;
+  const box = (await a.locator('.game > canvas').boundingBox())!;
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
   const moneyBefore = await a.locator('.money').innerText();
@@ -200,6 +200,9 @@ try {
   await depotWin.waitFor({ timeout: 5000 });
   await depotWin.getByRole('button', { name: /^Buy for/ }).click();
   await depotWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
+  // The vehicle window shows where it is; its details open from there.
+  const trainView = a.locator('.window', { has: a.locator('canvas.vehicle-view') });
+  await trainView.getByRole('button', { name: /Details/ }).click();
   const trainWin = a.locator('.window', { has: a.getByRole('button', { name: '+ New line' }) });
   await trainWin.getByRole('button', { name: '+ New line' }).click();
   // The new line's window opens; its stops are added there.
@@ -216,13 +219,15 @@ try {
   check((await trainWin.innerText()).includes('Next stop'), 'the train window shows only the next stop');
   await a.screenshot({ path: `${outDir}/03b-line-on-map.png` });
   await lineWin.locator('button[aria-label="Close"]').click();
-  await trainWin.getByRole('button', { name: /Start/ }).click();
+  await trainView.locator('.window-name').click(); // in front of its details window
+  await trainView.getByRole('button', { name: /Start/ }).click();
   await a.getByRole('button', { name: '4×' }).click();
   await a.waitForTimeout(6000);
   const status = await trainWin.locator('.kv b').first().innerText();
   check(/Heading|Loading at/.test(status), `train is running (${status})`);
+  await trainView.screenshot({ path: `${outDir}/03c2-vehicle-view.png` });
   // Duplicate it: the copy waits in the depot, on the same line.
-  await trainWin.getByRole('button', { name: /Duplicate/ }).click();
+  await trainView.getByRole('button', { name: /Duplicate/ }).click();
   await a.waitForTimeout(800);
   await a.getByRole('button', { name: '〰 Lines' }).click();
   const linesWin = a.locator('.window', { hasText: 'Your lines' });
@@ -231,7 +236,7 @@ try {
   // Sell the copy again: the money is needed for the building below.
   const copyId = await hook((h) => h.trains().filter((t) => t.mode === undefined && t.status === 'depot').at(-1)?.id ?? -1);
   check((await hook((h, id: number) => h.command({ type: 'trainAction', id, action: 'sell' }), copyId)).ok, 'sold the duplicate');
-  await trainWin.getByRole('button', { name: /Locate/ }).click();
+  await trainView.getByRole('button', { name: /Locate/ }).click();
   await hook((h) => h.view({ distance: 7, pitch: 0.55, yaw: 2.2 }));
   await a.waitForTimeout(800);
   await a.waitForTimeout(1500);
@@ -387,6 +392,9 @@ try {
   const roadDepot = a.locator('.window', { hasText: 'Road depot' });
   await roadDepot.getByRole('button', { name: /^Buy for/ }).click();
   await roadDepot.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
+  const busView = a.locator('.window', { has: a.locator('canvas.vehicle-view') }).last();
+  await busView.getByRole('button', { name: /Details/ }).click();
+  await busView.locator('button[aria-label="Close"]').click(); // keep the map clear for picking stops
   const busWin = a.locator('.window', { has: a.getByRole('button', { name: '+ New line' }) }).last();
   await busWin.getByRole('button', { name: '+ New line' }).click();
   const busLine = a.locator('.window', { has: a.locator('ol.orders') }).last();
@@ -397,9 +405,11 @@ try {
   check((await busLine.locator('ol.orders li').count()) === 2, 'bus got two stops');
   if ((await busLine.locator('ol.orders li').count()) !== 2) console.log('  toasts:', await a.locator('.toast').allInnerTexts(), JSON.stringify(await tileAt(sx - 5, sy + 8)), JSON.stringify(await tileAt(sx - 2, sy + 8)));
   await busLine.locator('button[aria-label="Close"]').click();
-  await busWin.getByRole('button', { name: /Start/ }).click();
+  await busWin.locator('button[aria-label="Close"]').click();
+  await roadDepot.getByRole('button', { name: 'Open' }).first().click();
+  await busView.getByRole('button', { name: /Start/ }).click();
   await a.waitForTimeout(5000);
-  const busStatus = await busWin.locator('.kv b').first().innerText();
+  const busStatus = await busView.locator('.vehicle-status b').innerText();
   check(/Heading|Loading/.test(busStatus), `bus is running (${busStatus})`);
   await hook((h, s: { x: number; y: number }) => h.view({ x: s.x - 3, y: s.y + 8, yaw: 0.6, pitch: 0.7, distance: 8 }), { x: sx, y: sy });
   await a.waitForTimeout(1500);
@@ -426,6 +436,7 @@ try {
   await depot2.getByRole('button', { name: /^Buy for/ }).click();
   await a.waitForTimeout(600);
   await depot2.getByRole('button', { name: 'Open' }).first().click();
+  await a.locator('.window', { has: a.locator('canvas.vehicle-view') }).last().getByRole('button', { name: /Details/ }).click();
   const parked = a.locator('.window', { hasText: 'Vehicles' }).last();
   const firstBefore = await parked.locator('ol.consist li').nth(0).innerText();
   await parked.locator('ol.consist li').nth(1).getByRole('button', { name: 'Move forward' }).click();
@@ -446,7 +457,7 @@ try {
   await b.getByPlaceholder('Player name').fill('Bob');
   await b.getByPlaceholder('Game code').fill(code);
   await b.getByRole('button', { name: 'Join by code' }).click();
-  await b.locator('canvas').waitFor({ timeout: 15_000 });
+  await b.locator('.game > canvas').waitFor({ timeout: 15_000 });
   await b.waitForTimeout(3000);
   check(await b.getByText('Allow autosaves?').count() === 0, 'guest is not asked about autosaves');
   await b.screenshot({ path: `${outDir}/04-guest.png` });
@@ -548,7 +559,7 @@ try {
   lastPage = a2;
   a2.on('pageerror', (e) => console.log(`[A2 pageerror] ${e.message}`));
   await a2.locator('.save').first().getByRole('button', { name: 'Host' }).click();
-  await a2.locator('canvas').waitFor({ timeout: 15_000 });
+  await a2.locator('.game > canvas').waitFor({ timeout: 15_000 });
   await a2.waitForTimeout(2500);
   const resumedMoney = await a2.locator('.money').innerText();
   // Running costs keep ticking, so allow a small drift between saving and reading the value.
@@ -613,6 +624,8 @@ try {
     await hangarWin.waitFor({ timeout: 5000 });
     await hangarWin.getByRole('button', { name: /^Buy for/ }).click();
     await hangarWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
+    const planeView = d.locator('.window', { has: d.locator('canvas.vehicle-view') }).last();
+    await planeView.getByRole('button', { name: /Details/ }).click();
     const planeWin = d.locator('.window', { has: d.getByRole('button', { name: '+ New line' }) }).last();
     const home = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [ap1.x, ap1.y])).data;
     // The far airport may be off screen (its tiles not loaded here); find it among the stations.
@@ -621,7 +634,8 @@ try {
     const r = await dh((h, o: number[]) => h.command({ type: 'setOrders', id: o[0], orders: [{ kind: 'station', station: o[1] }, { kind: 'station', station: o[2] }] }), [planeId, home, away]);
     check(r.ok, `gave the aircraft orders${r.ok ? '' : `: ${r.error}`}`);
     await d.waitForTimeout(800);
-    await planeWin.getByRole('button', { name: /Start/ }).click();
+    await planeView.locator('.window-name').click(); // in front of its details window
+    await planeView.getByRole('button', { name: /Start/ }).click();
     await d.waitForTimeout(6000);
     const planeStatus = await planeWin.locator('.kv b').first().innerText();
     check(/Heading|Loading/.test(planeStatus), `aircraft is flying (${planeStatus})`);
@@ -690,6 +704,8 @@ try {
     await depotWin.waitFor({ timeout: 5000 });
     await depotWin.getByRole('button', { name: /^Buy for/ }).click();
     await depotWin.getByRole('button', { name: 'Open' }).first().click({ timeout: 5000 });
+    const shipView = d.locator('.window', { has: d.locator('canvas.vehicle-view') }).last();
+    await shipView.getByRole('button', { name: /Details/ }).click();
     const shipWin = d.locator('.window', { has: d.getByRole('button', { name: '+ New line' }) }).last();
     const near = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 2, wy + 4])).data;
     const farSt = (await dh((h, t: number[]) => h.tile(t[0]!, t[1]!), [wx + 14, wy + 4])).data;
@@ -697,7 +713,8 @@ try {
     const r = await dh((h, o: number[]) => h.command({ type: 'setOrders', id: o[0], orders: [{ kind: 'station', station: o[1] }, { kind: 'station', station: o[2] }] }), [shipId, near, farSt]);
     check(r.ok, `gave the ship orders${r.ok ? '' : `: ${r.error}`}`);
     await d.waitForTimeout(800);
-    await shipWin.getByRole('button', { name: /Start/ }).click();
+    await shipView.locator('.window-name').click(); // in front of its details window
+    await shipView.getByRole('button', { name: /Start/ }).click();
     await d.waitForTimeout(6000);
     const shipStatus = await shipWin.locator('.kv b').first().innerText();
     check(/Heading|Loading/.test(shipStatus), `ship is sailing (${shipStatus})`);

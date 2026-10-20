@@ -22,6 +22,8 @@ interface ChunkView {
 const BUILD_BUDGET_MS = 6;
 const UNLOAD_AFTER_MS = 4000;
 const MAX_SUBSCRIBED = 700;
+/** How far around an extra point (tiles) chunks are shown. */
+const EXTRA_RADIUS = 20;
 
 /**
  * Decides which chunks are visible, keeps the server subscription in sync, and builds
@@ -79,7 +81,8 @@ export class ChunkManager {
     this.lastSubKey = '';
   }
 
-  update(camera: THREE.PerspectiveCamera, target: THREE.Vector3, distance: number): void {
+  /** `extra` are points (x, z) whose surroundings are also shown in full detail, e.g. for vehicle views. */
+  update(camera: THREE.PerspectiveCamera, target: THREE.Vector3, distance: number, extra: readonly { x: number; z: number }[] = []): void {
     const map = this.world.map;
     const now = performance.now();
     this.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -107,6 +110,16 @@ export class ChunkManager {
         const id = cy * map.chunksX + cx;
         this.wanted.set(id, lod);
         order.push({ id, d });
+      }
+    }
+    for (const p of extra) {
+      const r = EXTRA_RADIUS;
+      for (let cy = Math.max(0, Math.floor((p.z - r) / CHUNK_SIZE)); cy <= Math.min(map.chunksY - 1, Math.floor((p.z + r) / CHUNK_SIZE)); cy++) {
+        for (let cx = Math.max(0, Math.floor((p.x - r) / CHUNK_SIZE)); cx <= Math.min(map.chunksX - 1, Math.floor((p.x + r) / CHUNK_SIZE)); cx++) {
+          const id = cy * map.chunksX + cx;
+          if (!this.wanted.has(id)) order.push({ id, d: 0 });
+          this.wanted.set(id, 0);
+        }
       }
     }
     order.sort((a, b) => a.d - b.d);

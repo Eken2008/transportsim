@@ -109,6 +109,7 @@ export const nextViewMode = (m: ViewMode): ViewMode => (m === 'normal' ? 'transp
 
 export type GameWindow =
   | { kind: 'train'; id: number }
+  | { kind: 'trainInfo'; id: number }
   | { kind: 'depot'; id: number }
   | { kind: 'station'; id: number }
   | { kind: 'trains'; id: 0 }

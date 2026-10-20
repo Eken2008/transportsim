@@ -250,7 +250,7 @@ input[type='range'] {
   position: relative;
   height: 100%;
 }
-.game canvas {
+.game > canvas {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -633,6 +633,22 @@ input[type='range'] {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
+}
+/* A live view of a vehicle in its window. */
+.vehicle-view {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.vehicle-status {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--panel-2);
 }
 .kv {
   display: grid;

@@ -51,6 +51,7 @@ import { GameInfoWindow } from './GameInfoWindow.tsx';
 import { IndustryWindow } from './IndustryWindow.tsx';
 import { CargoWindow } from './CargoWindow.tsx';
 import { TownWindow } from './TownWindow.tsx';
+import { vehicleViews } from '../render/vehicleViews.ts';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
 export function useTick(ms: number): void {
@@ -196,6 +197,8 @@ export function WindowLayer() {
         switch (w.kind) {
           case 'train':
             return <TrainWindow key={key} w={w} />;
+          case 'trainInfo':
+            return <TrainInfoWindow key={key} w={w} />;
           case 'depot':
             return <DepotWindow key={key} w={w} />;
           case 'station':
@@ -261,6 +264,7 @@ function useTrain(id: number): TrainInfo | undefined {
   return client.world?.trains.get(id);
 }
 
+/** Where a vehicle is, like OpenTTD's vehicle window: a live view of it, its status and what to do with it. */
 function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   useTick(400);
   const t = useTrain(w.id);
@@ -270,8 +274,98 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   const following = useApp((s) => s.follow === w.id);
   if (!t) {
     return (
-      <Win w={w} title="Train">
-        <p className="muted">This train no longer exists.</p>
+      <Win w={w} title="Vehicle">
+        <p className="muted">This vehicle no longer exists.</p>
+      </Win>
+    );
+  }
+  const motion = client.world?.motions.get(t.id)?.m;
+  const locate = () => {
+    const width = client.world!.map.width;
+    if (motion?.air) return focusOn(Math.floor(motion.air[0]), Math.floor(motion.air[1]));
+    if (motion?.ship) return focusOn(Math.floor(motion.ship[0]), Math.floor(motion.ship[1]));
+    const tile = motion?.path.length ? segTile(motion.path[0]!) : t.depot;
+    if (tile >= 0) focusOn(tile % width, Math.floor(tile / width));
+  };
+  const moving = !!motion && (motion.path.length > 0 || !!motion.air || !!motion.ship);
+
+  return (
+    <Win w={w} title={t.name} width={320}>
+      <VehicleView id={t.id} onClick={locate} onDoubleClick={() => moving && follow(t.id)} />
+      <div className="vehicle-status row">
+        <b style={{ flex: 1 }}>{trainStatus(t)}</b>
+        <span className="mono muted">{Math.round(motion?.speed ?? 0)} km/h</span>
+      </div>
+      <div className="row wrap" style={{ marginTop: 8 }}>
+        {mine &&
+          (t.status === 'depot' || t.status === 'stopped' ? (
+            <button className="primary" onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>
+              ▶ Start
+            </button>
+          ) : (
+            <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'stop' })}>■ Stop</button>
+          ))}
+        {mine && t.status !== 'depot' && (
+          <>
+            <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'toDepot' })}>
+              {t.toDepot ? 'Cancel depot' : t.mode === 'air' ? 'Go to hangar' : 'Go to depot'}
+            </button>
+            {t.mode !== 'air' && (
+              <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'reverse' })} title="Only when stopped">
+                ⇄ Reverse
+              </button>
+            )}
+          </>
+        )}
+        {mine && t.orders.length > 1 && <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'skip' })}>Skip order</button>}
+        {canBuild && (
+          <button title="Buy a copy of it, on the same line, in its depot (or the nearest one)" onClick={() => act({ type: 'cloneVehicle', id: t.id })}>
+            ⧉ Duplicate
+          </button>
+        )}
+        {t.status === 'depot' && canBuild && (
+          <button className="danger" onClick={() => confirm(`Sell ${t.name}?`) && act({ type: 'trainAction', id: t.id, action: 'sell' })}>
+            Sell
+          </button>
+        )}
+        <button
+          className={following ? 'active-text ghost' : 'ghost'}
+          title={following ? 'Following — click to stop' : 'Click to locate, double-click to follow'}
+          onDoubleClick={() => moving && follow(t.id)}
+          onClick={locate}
+        >
+          {following ? '⌖ Following' : '⌖ Locate'}
+        </button>
+        <button title="Speed, cargo, profit, reliability, vehicles and line" onClick={() => openWindow({ kind: 'trainInfo', id: t.id })}>
+          ℹ Details
+        </button>
+      </div>
+    </Win>
+  );
+}
+
+/** A live view of a vehicle, drawn by the game renderer. */
+function VehicleView({ id, onClick, onDoubleClick }: { id: number; onClick: () => void; onDoubleClick: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current!;
+    vehicleViews.set(canvas, id);
+    return () => void vehicleViews.delete(canvas);
+  }, [id]);
+  return <canvas ref={ref} className="vehicle-view" title="Click to locate, double-click to follow" onClick={onClick} onDoubleClick={onDoubleClick} />;
+}
+
+/** Everything about a vehicle: speed, cargo, profit, upkeep, its vehicles and its line. */
+function TrainInfoWindow({ w }: { w: GameWindow & { kind: 'trainInfo' } }) {
+  useTick(400);
+  const t = useTrain(w.id);
+  const my = useMyRole();
+  const mine = my.companyId === t?.owner && roleAllows(my.role, 'operate');
+  const canBuild = mine && roleAllows(my.role, 'build');
+  if (!t) {
+    return (
+      <Win w={w} title="Vehicle details">
+        <p className="muted">This vehicle no longer exists.</p>
       </Win>
     );
   }
@@ -279,7 +373,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   const motion = client.world?.motions.get(t.id)?.m;
 
   return (
-    <Win w={w} title={t.name} width={360}>
+    <Win w={w} title={`${t.name} details`} width={360}>
       <div className="kv">
         <span>Status</span>
         <b>{trainStatus(t)}</b>
@@ -299,56 +393,6 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
         </span>
       </div>
       <Upkeep t={t} mine={mine} />
-      {mine && (
-        <div className="row wrap" style={{ marginTop: 10 }}>
-          {t.status === 'depot' || t.status === 'stopped' ? (
-            <button className="primary" onClick={() => act({ type: 'trainAction', id: t.id, action: 'start' })}>
-              ▶ Start
-            </button>
-          ) : (
-            <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'stop' })}>■ Stop</button>
-          )}
-          {t.status !== 'depot' && (
-            <>
-              <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'toDepot' })}>
-                {t.toDepot ? 'Cancel depot' : t.mode === 'air' ? 'Go to hangar' : 'Go to depot'}
-              </button>
-              {t.mode !== 'air' && (
-                <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'reverse' })} title="Only when stopped">
-                  ⇄ Reverse
-                </button>
-              )}
-            </>
-          )}
-          {t.orders.length > 1 && <button onClick={() => act({ type: 'trainAction', id: t.id, action: 'skip' })}>Skip order</button>}
-          {canBuild && (
-            <button title="Buy a copy of it, on the same line, in its depot (or the nearest one)" onClick={() => act({ type: 'cloneVehicle', id: t.id })}>
-              ⧉ Duplicate
-            </button>
-          )}
-          {t.status === 'depot' && canBuild && (
-            <button className="danger" onClick={() => confirm(`Sell ${t.name}?`) && act({ type: 'trainAction', id: t.id, action: 'sell' })}>
-              Sell
-            </button>
-          )}
-          {motion && (motion.path.length > 0 || motion.air || motion.ship) && (
-            <button
-              className={following ? 'active-text ghost' : 'ghost'}
-              title={following ? 'Following — click to stop' : 'Click to locate, double-click to follow'}
-              onDoubleClick={() => follow(t.id)}
-              onClick={() => {
-                if (motion.air) return focusOn(Math.floor(motion.air[0]), Math.floor(motion.air[1]));
-                if (motion.ship) return focusOn(Math.floor(motion.ship[0]), Math.floor(motion.ship[1]));
-                const tile = segTile(motion.path[0]!);
-                const width = client.world!.map.width;
-                focusOn(tile % width, Math.floor(tile / width));
-              }}
-            >
-              {following ? '⌖ Following' : '⌖ Locate'}
-            </button>
-          )}
-        </div>
-      )}
       <ConsistEditor t={t} mine={canBuild} />
       <VehicleLine
         t={t}

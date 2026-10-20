@@ -80,19 +80,18 @@ function pointBehind(map: GameMap, segs: readonly number[], pos: number, back: n
 }
 
 /** Is a vehicle within `far` tiles (horizontally) of the camera focus? */
-function nearFocus(map: GameMap, m: TrainMotion, focus: THREE.Vector3, far: number): boolean {
-  let x: number;
-  let y: number;
+/** Roughly where a vehicle is (map x, y), or null when it has no position. */
+export function motionPoint(map: GameMap, m: TrainMotion): { x: number; y: number } | null {
   const free = m.air ?? m.ship;
-  if (free) {
-    x = free[0];
-    y = free[1];
-  } else if (m.path.length) {
-    const tile = segTile(m.path[0]!);
-    x = tile % map.width;
-    y = Math.floor(tile / map.width);
-  } else return true;
-  return Math.abs(x - focus.x) < far && Math.abs(y - focus.z) < far;
+  if (free) return { x: free[0], y: free[1] };
+  if (!m.path.length) return null;
+  const tile = segTile(m.path[0]!);
+  return { x: tile % map.width, y: Math.floor(tile / map.width) };
+}
+
+function nearFocus(map: GameMap, m: TrainMotion, focus: THREE.Vector3, far: number): boolean {
+  const p = motionPoint(map, m);
+  return !p || (Math.abs(p.x - focus.x) < far && Math.abs(p.y - focus.z) < far);
 }
 
 /** Units inside a tunnel aren't drawn. */
@@ -154,7 +153,8 @@ export class TrainRenderer {
     return m;
   }
 
-  update(now: number, speedMultiplier: number, focus?: THREE.Vector3, zoom = 30): void {
+  /** `always` are vehicles drawn however far they are from the focus. */
+  update(now: number, speedMultiplier: number, focus?: THREE.Vector3, zoom = 30, always?: ReadonlySet<number>): void {
     const map = this.world.map;
     for (const m of this.meshes.values()) m.count = 0;
     this.picks.length = 0;
@@ -163,7 +163,7 @@ export class TrainRenderer {
 
     for (const [id, { m, at }] of this.world.motions) {
       const info = this.world.trains.get(id);
-      if (focus && !nearFocus(map, m, focus, far)) continue;
+      if (focus && !always?.has(id) && !nearFocus(map, m, focus, far)) continue;
       const dt = Math.min(MAX_EXTRAPOLATION, (now - at) / 1000);
       if (info && m.air) {
         this.placeAircraft(id, info.owner, info.units[0]!.type, m.air, dt, speedMultiplier);
