@@ -150,11 +150,11 @@ export function addTunnelPortal(g: GeoBuilder, map: GameMap, tile: number, info:
   const z = (tile - x) / w;
   const level = headLevel(map, tile, info);
   const y = level * HEIGHT_SCALE;
-  // Facade halfway into the tile, facing out of the hill.
-  const fx = x + 0.5 + EDGE_DX[info.dir] * 0.15;
-  const fz = z + 0.5 + EDGE_DY[info.dir] * 0.15;
-  const along = info.dir === 1 || info.dir === 3;
+  // Facade against the hill at the back of the portal's cutting, facing out.
   const t = 0.08;
+  const fx = x + 0.5 + EDGE_DX[info.dir] * (0.5 - t);
+  const fz = z + 0.5 + EDGE_DY[info.dir] * (0.5 - t);
+  const along = info.dir === 1 || info.dir === 3;
   g.color(PORTAL);
   if (along) g.aabb(fx - t, y, fz - 0.45, fx + t, y + 0.74, fz + 0.45);
   else g.aabb(fx - 0.45, y, fz - t, fx + 0.45, y + 0.74, fz + t);

@@ -1,6 +1,9 @@
 import {
   CHUNK_SIZE,
+  EDGE_CORNERS,
   FIELD_CROP_SHIFT,
+  headInfo,
+  headLevel,
   isRapids,
   isRiver,
   waterAxis,
@@ -82,6 +85,17 @@ function tileColor(map: GameMap, x: number, y: number, out: [number, number, num
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
+/** Tile-local x, z of the NW, NE, SE and SW corners. */
+const CORNER_XZ = [[0, 0], [1, 0], [1, 1], [0, 1]] as const;
+
+/** Floor level of a tunnel portal's cutting, or -1 if the tile isn't a portal. */
+function cuttingLevel(map: GameMap, x: number, y: number): number {
+  const i = map.tileIndex(x, y);
+  if (map.layers.type[i] !== TileType.Rail) return -1;
+  const info = headInfo(map, i);
+  return info?.kind === 'tunnel' ? headLevel(map, i, info) : -1;
+}
+
 /**
  * Build a flat-shaded terrain mesh for one chunk. Non-indexed so every triangle has its
  * own normal (the faceted low-poly look). Edges get skirts to hide LOD seams.
@@ -91,7 +105,14 @@ export function buildTerrainGeometry(map: GameMap, cx: number, cy: number, lod: 
   const cells = CHUNK_SIZE / step;
   const x0 = cx * CHUNK_SIZE;
   const y0 = cy * CHUNK_SIZE;
-  const triCount = cells * cells * 2 + cells * 4 * 2;
+  // Tunnel portals are cut level into the hill (close up), with walls up to the ground around.
+  const cuttings: number[] = [];
+  if (lod === 0) {
+    for (let ty = y0; ty < y0 + CHUNK_SIZE; ty++) {
+      for (let tx = x0; tx < x0 + CHUNK_SIZE; tx++) if (cuttingLevel(map, tx, ty) >= 0) cuttings.push(tx, ty);
+    }
+  }
+  const triCount = cells * cells * 2 + cells * 4 * 2 + (cuttings.length / 2) * 3 * 4;
   const pos = new Float32Array(triCount * 9);
   const col = new Float32Array(triCount * 9);
   let p = 0;
@@ -124,14 +145,47 @@ export function buildTerrainGeometry(map: GameMap, cx: number, cy: number, lod: 
       const ey = ty + step;
       const nw = H(tx, ty), ne = H(ex, ty), se = H(ex, ey), sw = H(tx, ey);
       tileColor(map, tx + (step >> 1), ty + (step >> 1), color);
+      const cut = lod === 0 ? cuttingLevel(map, tx, ty) : -1;
       // Counter-clockwise when seen from above (+Y), with Z pointing "south".
-      if (tileSplitsNWSE(nw, ne, se, sw)) {
+      if (cut >= 0) {
+        const h = cut * HEIGHT_SCALE;
+        pushTri(tx, h, ty, ex, h, ey, ex, h, ty);
+        pushTri(tx, h, ty, tx, h, ey, ex, h, ey);
+      } else if (tileSplitsNWSE(nw, ne, se, sw)) {
         pushTri(tx, nw, ty, ex, se, ey, ex, ne, ty);
         pushTri(tx, nw, ty, tx, sw, ey, ex, se, ey);
       } else {
         pushTri(tx, nw, ty, tx, sw, ey, ex, ne, ty);
         pushTri(ex, ne, ty, tx, sw, ey, ex, se, ey);
       }
+    }
+  }
+
+  // Cutting walls from the level floor up to the real ground on each edge that rises above it
+  // (unless a neighbouring portal is cut at the same level). Drawn both ways round.
+  for (let k = 0; k < cuttings.length; k += 2) {
+    const tx = cuttings[k]!;
+    const ty = cuttings[k + 1]!;
+    const floor = cuttingLevel(map, tx, ty);
+    const corners = map.tileCorners(tx, ty);
+    const f = floor * HEIGHT_SCALE;
+    color[0] = ROCK[0] * 0.85;
+    color[1] = ROCK[1] * 0.85;
+    color[2] = ROCK[2] * 0.85;
+    for (let e = 0; e < 4; e++) {
+      const [ca, cb] = EDGE_CORNERS[e]!;
+      if (corners[ca] === floor && corners[cb] === floor) continue;
+      const nx = tx + [0, 1, 0, -1][e]!;
+      const ny = ty + [-1, 0, 1, 0][e]!;
+      if (map.inBounds(nx, ny) && cuttingLevel(map, nx, ny) === floor) continue;
+      const [ax, az] = CORNER_XZ[ca]!;
+      const [bx, bz] = CORNER_XZ[cb]!;
+      const ha = corners[ca]! * HEIGHT_SCALE;
+      const hb = corners[cb]! * HEIGHT_SCALE;
+      pushTri(tx + ax, f, ty + az, tx + bx, f, ty + bz, tx + bx, hb, ty + bz);
+      pushTri(tx + ax, f, ty + az, tx + bx, hb, ty + bz, tx + ax, ha, ty + az);
+      pushTri(tx + ax, f, ty + az, tx + bx, hb, ty + bz, tx + bx, f, ty + bz);
+      pushTri(tx + ax, f, ty + az, tx + ax, ha, ty + az, tx + bx, hb, ty + bz);
     }
   }
 

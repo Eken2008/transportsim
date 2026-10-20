@@ -134,11 +134,49 @@ export function addPieceCurve(g: GeoBuilder, c: PieceCurve, lod: Lod, railType =
   for (const side of [-1, 1]) sweep(g, secs, (side * GAUGE) / 2, 0.011, 0.05, 0.025);
 }
 
+/** Mast offset from the track centre line. */
+const MAST_OFFSET = 0.27;
+/** Closest a mast may stand to the centre line of any other track (ballast half-width plus room). */
+const MAST_CLEARANCE = 0.25;
+
+const _c = new THREE.Vector3();
+
+/** Horizontal distance from world point (px, pz) to a piece's (smoothed) centre line. */
+function pieceDistance(c: PieceCurve, px: number, pz: number): number {
+  let best = Infinity;
+  for (let k = 0; k <= 12; k++) {
+    curvePoint(c, k / 12, _c);
+    best = Math.min(best, Math.hypot(_c.x - px, _c.z - pz));
+  }
+  return best;
+}
+
+/**
+ * Can a mast stand at world point (fx, fz) beside piece `own` of tile (x, y)? Only on open
+ * ground or track tiles, clear of every other track and never on a level crossing's road.
+ */
+function mastFits(map: GameMap, curves: TrackCurves, x: number, y: number, own: number, fx: number, fz: number): boolean {
+  const tx = Math.floor(fx);
+  const tz = Math.floor(fz);
+  if (!map.inBounds(tx, tz)) return false;
+  const i = map.tileIndex(tx, tz);
+  const type = map.layers.type[i];
+  if (type !== TileType.Clear && type !== TileType.Rail) return false;
+  if (type === TileType.Rail && map.layers.data[i]! & CROSSING_FLAG) return false;
+  if (type === TileType.Clear) return true;
+  const bits = map.layers.track[i]!;
+  for (let p = 0; p < PIECE_COUNT; p++) {
+    if (!hasPiece(bits, p) || (tx === x && tz === y && p === own)) continue;
+    if (pieceDistance(curves.get(i, p), fx, fz) < MAST_CLEARANCE) return false;
+  }
+  return true;
+}
+
 /**
  * Overhead line along a piece: the contact wire, and (unless `wireOnly`, e.g. under station
- * canopies) a mast beside the middle of the piece with an arm over the track.
+ * canopies) a mast beside the piece with an arm over the track, where there is room for one.
  */
-function addCatenary(g: GeoBuilder, c: PieceCurve, wireOnly: boolean): void {
+function addCatenary(g: GeoBuilder, map: GameMap, curves: TrackCurves, x: number, y: number, piece: number, c: PieceCurve, wireOnly: boolean): void {
   const n = 4;
   g.color(WIRE);
   for (let i = 0; i < n; i++) {
@@ -147,14 +185,20 @@ function addCatenary(g: GeoBuilder, c: PieceCurve, wireOnly: boolean): void {
     g.box(_a2.setY(_a2.y + WIRE_HEIGHT), _b2.setY(_b2.y + WIRE_HEIGHT), 0.012, 0.012, false);
   }
   if (wireOnly) return;
-  curvePoint(c, 0.5, _p);
-  const tan = curveTangent(c, 0.5, _t);
-  const side = _q.set(-tan.z, 0, tan.x).normalize();
-  const fx = _p.x + side.x * 0.27;
-  const fz = _p.z + side.z * 0.27;
-  const top = _p.y + WIRE_HEIGHT + 0.06;
-  g.color(MAST).aabb(fx - 0.014, _p.y - 0.03, fz - 0.014, fx + 0.014, top, fz + 0.014);
-  g.box(_a2.set(fx, top - 0.02, fz), _b2.set(_p.x - side.x * 0.05, top - 0.02, _p.z - side.z * 0.05), 0.012, 0.012, false);
+  for (const t of [0.5, 0.3, 0.7]) {
+    curvePoint(c, t, _p);
+    const tan = curveTangent(c, t, _t);
+    for (const s of [1, -1]) {
+      const side = _q.set(-tan.z, 0, tan.x).normalize().multiplyScalar(s);
+      const fx = _p.x + side.x * MAST_OFFSET;
+      const fz = _p.z + side.z * MAST_OFFSET;
+      if (!mastFits(map, curves, x, y, piece, fx, fz)) continue;
+      const top = _p.y + WIRE_HEIGHT + 0.06;
+      g.color(MAST).aabb(fx - 0.014, _p.y - 0.03, fz - 0.014, fx + 0.014, top, fz + 0.014);
+      g.box(_a2.set(fx, top - 0.02, fz), _b2.set(_p.x - side.x * 0.05, top - 0.02, _p.z - side.z * 0.05), 0.012, 0.012, false);
+      return;
+    }
+  }
 }
 
 /** A straight piece between two points (bridge decks). */
@@ -211,7 +255,7 @@ export function addTrack(
         if (!hasPiece(bits, p)) continue;
         const curve = curves.get(i, p);
         addPieceCurve(g, curve, lod, railType);
-        if (wires) addCatenary(g, curve, type === TileType.Station || !!head);
+        if (wires) addCatenary(g, map, curves, x, y, p, curve, type === TileType.Station || !!head);
       }
       if (type === TileType.Rail && map.layers.data[i]! & WAYPOINT_FLAG && lod <= 1) addWaypointMarker(g, map, x, y, hasPiece(bits, 0));
       const sig = map.layers.signals[i]!;
