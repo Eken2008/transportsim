@@ -357,7 +357,7 @@ export class GameRenderer {
     else if (type === TileType.ShipDepot) openWindow({ kind: 'shipDepot', id: i });
     else if (type === TileType.Station) openWindow({ kind: 'station', id: map.layers.data[i]! });
     else if (type === TileType.Industry) openWindow({ kind: 'industry', id: map.layers.data[i]! });
-    else if ((type === TileType.House || type === TileType.Road) && map.layers.town[i]) openWindow({ kind: 'town', id: map.layers.town[i]! - 1 });
+    else if ((type === TileType.House || type === TileType.Road || type === TileType.Statue) && map.layers.town[i]) openWindow({ kind: 'town', id: map.layers.town[i]! - 1 });
   }
 
   private pick(clientX: number, clientY: number): TerrainHit | null {

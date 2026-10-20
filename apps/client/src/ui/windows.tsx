@@ -19,6 +19,8 @@ import {
   lifespan,
   longestPlatform,
   railVehicle,
+  exclusionBarred,
+  formatDate,
   ratingParts,
   ratingPercent,
   roleAllows,
@@ -566,8 +568,16 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
   const waiting = CARGO_IDS.flatMap((cargo) =>
     Object.entries(st.waiting[cargo] ?? {}).map(([dest, n]) => ({ cargo, dest: Number(dest), n })),
   ).sort((a, b) => b.n - a.n);
+  const town = st.townId === null ? undefined : client.world?.state.towns.get(st.townId);
+  const barredBy = town?.exclusive && client.world && exclusionBarred(client.world.state).has(st.id) ? client.world.state.companies.get(town.exclusive.company) : undefined;
   return (
     <Win w={w} title={st.name}>
+      {barredBy && town?.exclusive && (
+        <div className="notice warn">
+          {barredBy.name} holds exclusive transport rights in {town.name} until {formatDate(town.exclusive.until)}: this station gets no
+          passengers, mail or cargo until then.
+        </div>
+      )}
       <div className="kv">
         <span>Owner</span>
         <b>{company?.name ?? '—'}</b>
@@ -650,7 +660,7 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
 
 function RatingBreakdown({ st }: { st: Station }) {
   const date = useApp((s) => s.global?.date ?? 0);
-  const p = ratingParts(st, date);
+  const p = ratingParts(st, date, st.townId === null ? undefined : client.world?.state.towns.get(st.townId));
   const part = (v: number) => <b className={`mono ${v < 0 ? 'neg' : ''}`}>{v > 0 ? `+${v}` : v}</b>;
   const now = ratingPercent(st.rating);
   const target = ratingPercent(p.target);
@@ -681,6 +691,20 @@ function RatingBreakdown({ st }: { st: Station }) {
         <span>
           {p.ageYears === null ? '—' : `${p.ageYears} years`} {part(p.age)}
         </span>
+        {p.advertUntil !== null && (
+          <>
+            <span>Advertising</span>
+            <span>
+              until {formatDate(p.advertUntil)} {part(p.advert)}
+            </span>
+          </>
+        )}
+        {p.hasStatue && (
+          <>
+            <span>Company statue in town</span>
+            <span>{part(p.statue)}</span>
+          </>
+        )}
       </div>
       <p className="muted small" style={{ margin: '6px 0 0' }}>
         The rating moves a little each day towards {target}%. Frequent, fast, modern trains and short queues raise it; a

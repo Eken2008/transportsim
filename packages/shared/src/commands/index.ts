@@ -95,6 +95,7 @@ import {
   type EndSharingCommand,
   type ProposeSharingCommand,
 } from './sharing.ts';
+import { townActionHandler, type TownActionCommand } from './town.ts';
 import { roleAllows } from '../company/company.ts';
 import type { CommandContext, CommandHandler, CommandEffects } from './types.ts';
 
@@ -115,6 +116,7 @@ export * from './maintenance.ts';
 export * from './road.ts';
 export * from './airport.ts';
 export * from './water.ts';
+export * from './town.ts';
 
 export type Command =
   | TerraformCommand
@@ -163,7 +165,8 @@ export type Command =
   | BuildLockCommand
   | BuildDockCommand
   | BuildShipDepotCommand
-  | BuildBuoyCommand;
+  | BuildBuoyCommand
+  | TownActionCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -214,6 +217,7 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   buildDock: buildDockHandler,
   buildShipDepot: buildShipDepotHandler,
   buildBuoy: buildBuoyHandler,
+  townAction: townActionHandler,
 };
 
 const PERMISSION_ERRORS = {

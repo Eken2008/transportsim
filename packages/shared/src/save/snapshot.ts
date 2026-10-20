@@ -4,6 +4,7 @@ import { railVehicle } from '../vehicles/catalog.ts';
 import { linkAllByGeometry } from '../rail/links.ts';
 import type { Train } from '../vehicles/train.ts';
 import { HEIGHT_SCALE, TileType, WATER_BUOY } from '../world/constants.ts';
+import { ROAD_WORKS } from '../town/road.ts';
 import { recountTowns, type Town, type TownStats } from '../town/towns.ts';
 import { REPUTATION_MAX, REPUTATION_MIN } from '../town/reputation.ts';
 import { decode, encode } from '../protocol/codec.ts';
@@ -53,6 +54,8 @@ export interface Snapshot {
   industries?: Industry[];
   nextIndustryId?: number;
   inflation?: { costs: number; payments: number };
+  /** Street tiles under road works → the day they finish. */
+  roadWorks?: [number, number][];
 }
 
 export function takeSnapshot(state: GameState): Snapshot {
@@ -86,6 +89,7 @@ export function takeSnapshot(state: GameState): Snapshot {
     industries: [...state.industries.values()],
     nextIndustryId: state.nextIndustryId,
     inflation: state.inflation,
+    roadWorks: [...state.roadWorks],
   };
 }
 
@@ -160,9 +164,21 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       stats: townStats(t.stats),
       lastStats: townStats(t.lastStats),
       ratings: townRatings(t.ratings),
+      statues: companyList(t.statues),
+      exclusive: grant(t.exclusive),
+      funded: grant(t.funded),
+      roadWorks: grant(t.roadWorks),
+      unwanted: companyDays(t.unwanted),
     });
   }
   recountTowns(map, state.towns.values());
+  // Road works: saved timers, and a few more days for any works a save has no timer for.
+  const works = new Map(Array.isArray(snap.roadWorks) ? snap.roadWorks : []);
+  for (let i = 0; i < map.layers.type.length; i++) {
+    if (map.layers.type[i] !== TileType.Road || !(map.layers.data[i]! & ROAD_WORKS)) continue;
+    const end = works.get(i);
+    state.roadWorks.set(i, typeof end === 'number' && Number.isFinite(end) ? end : state.date + 7);
+  }
   const amounts = (v: unknown): CargoAmounts =>
     Object.fromEntries(Object.entries(v && typeof v === 'object' ? v : {}).filter(([c, n]) => isCargo(c) && typeof n === 'number' && n >= 0));
   for (const ind of Array.isArray(snap.industries) ? snap.industries : []) {
@@ -219,6 +235,10 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       firstArrival: typeof s.firstArrival === 'number' ? s.firstArrival : typeof s.lastPickup === 'number' ? s.lastPickup : undefined,
       airport:
         s.airport && (s.airport.kind === 'small' || s.airport.kind === 'large') ? { kind: s.airport.kind, x: num(s.airport.x, 0), y: num(s.airport.y, 0) } : undefined,
+      advert:
+        s.advert && typeof s.advert.until === 'number' && s.advert.until > state.date
+          ? { bonus: Math.max(0, Math.min(255, num(s.advert.bonus, 0))), until: s.advert.until }
+          : undefined,
     });
   }
   if (!snap.layers?.links) linkAllByGeometry(map); // saves from before explicit links
@@ -329,6 +349,28 @@ function townRatings(v: unknown): Record<number, number> | undefined {
     if (/^\d+$/.test(k) && typeof r === 'number' && Number.isFinite(r)) out[Number(k)] = Math.round(Math.max(REPUTATION_MIN, Math.min(REPUTATION_MAX, r)));
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/** Company ids, as in a town's list of statues. */
+function companyList(v: unknown): number[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = [...new Set(v.filter((c): c is number => Number.isInteger(c) && c >= 0 && c < 256))];
+  return out.length ? out : undefined;
+}
+
+/** Company id → game day, as in the companies a town won't deal with. */
+function companyDays(v: unknown): Record<number, number> | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const out: Record<number, number> = {};
+  for (const [k, d] of Object.entries(v)) if (/^\d+$/.test(k) && typeof d === 'number' && Number.isFinite(d)) out[Number(k)] = d;
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** A town action held by a company until a day (exclusive rights, funded buildings, road works). */
+function grant(v: unknown): { company: number; until: number } | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const g = v as { company?: unknown; until?: unknown };
+  return Number.isInteger(g.company) && typeof g.until === 'number' && Number.isFinite(g.until) ? { company: g.company as number, until: g.until } : undefined;
 }
 
 const PHASES: AirPhase[] = ['taxi', 'gate', 'hold', 'takeoff', 'flying', 'holding', 'landing'];

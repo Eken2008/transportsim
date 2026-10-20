@@ -3,7 +3,7 @@ import { VEHICLE_MODES, type VehicleMode } from '../vehicles/lines.ts';
 import { isCargo, type CargoId } from './cargo.ts';
 
 /** Where money comes from and goes to, as in a company's books. Income is positive. */
-export const LEDGER_CATEGORIES = ['income', 'sharing', 'construction', 'vehicles', 'running', 'property', 'interest', 'incidents'] as const;
+export const LEDGER_CATEGORIES = ['income', 'sharing', 'construction', 'vehicles', 'running', 'property', 'interest', 'incidents', 'councils'] as const;
 export type LedgerCategory = (typeof LEDGER_CATEGORIES)[number];
 export type Ledger = Record<LedgerCategory, number>;
 
@@ -16,6 +16,7 @@ export const LEDGER_LABELS: Record<LedgerCategory, string> = {
   property: 'Property maintenance',
   interest: 'Loan interest',
   incidents: 'Accidents',
+  councils: 'Town councils',
 };
 
 /** The books split by transport type; money not tied to one (loan interest, terraforming) is in none. */

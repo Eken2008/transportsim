@@ -15,6 +15,7 @@ import {
   ROAD_EDGE_BITS,
   ROAD_ONE_WAY,
   ROAD_ONE_WAY_REVERSED,
+  ROAD_WORKS,
   ROADSTOP_TRUCK,
   TileType,
   edgeHeight,
@@ -194,6 +195,10 @@ export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): v
         addAirportTile(g, map, x, y, map.layers.track[i]!);
         continue;
       }
+      if (type === TileType.Statue) {
+        addStatue(g, map, x, y);
+        continue;
+      }
       if (type === TileType.Water || type === TileType.Lock || type === TileType.ShipDepot || type === TileType.Dock) {
         addWaterworks(g, map, x, y, i);
         continue;
@@ -214,6 +219,7 @@ export function addRoads(g: GeoBuilder, map: GameMap, cx: number, cy: number): v
       if (flat) g.color(ASPHALT).box(_b.set(x + 0.5, centre, y + 0.22), _a.clone().setZ(y + 0.78), 0.56, 0.03, false);
       const data = map.layers.data[i]!;
       if (type === TileType.Road && data & ROAD_ONE_WAY) addOneWayArrow(g, x, y, centre + 0.022, bits, (data & ROAD_ONE_WAY_REVERSED) !== 0);
+      if (type === TileType.Road && data & ROAD_WORKS) addRoadWorks(g, x, y, centre + 0.02);
       if (type === TileType.RoadStop) addStopFurniture(g, x, y, centre, (bits & ROAD_EDGE_BITS[1]!) !== 0, (map.layers.track[i]! & ROADSTOP_TRUCK) !== 0);
     }
   }
@@ -232,6 +238,46 @@ function addOneWayArrow(g: GeoBuilder, x: number, y: number, h: number, bits: nu
   g.tri(l, tip, r);
   g.tri(r, tip, l);
   g.box(p(-0.22, 0), p(0.1, 0), 0.05, 0.003, false);
+}
+
+const DUG = lin('#6b5137');
+const BARRIER_RED = lin('#d23a2c');
+const CONE = lin('#f07a1a');
+
+/** Road works: a dug-up patch in the middle of the road, fenced with red and white barriers, and a cone. */
+function addRoadWorks(g: GeoBuilder, x: number, y: number, h: number): void {
+  const [x0, z0, x1, z1] = [x + 0.3, y + 0.3, x + 0.7, y + 0.7];
+  g.color(DUG).aabb(x0, h - 0.005, z0, x1, h + 0.012, z1);
+  const rail = 0.018;
+  const sides: [number, number, number, number][] = [
+    [x0, z0 - rail, x1, z0],
+    [x0, z1, x1, z1 + rail],
+    [x0 - rail, z0, x0, z1],
+    [x1, z0, x1 + rail, z1],
+  ];
+  sides.forEach(([a, b, c, d], k) => {
+    g.color(k % 2 ? MARKING : BARRIER_RED).aabb(a, h + 0.07, b, c, h + 0.1, d);
+    g.color(BARRIER_RED).aabb(a, h + 0.035, b, c, h + 0.05, d);
+  });
+  g.color(MARKING);
+  for (const [px, pz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]] as const) g.aabb(px - 0.012, h, pz - 0.012, px + 0.012, h + 0.1, pz + 0.012);
+  g.color(CONE).pyramid(x + 0.2, y + 0.78, 0.035, h, 0.1);
+}
+
+const PLINTH = lin('#a29d92');
+const BRONZE = lin('#5f8a72');
+
+/** A company's statue: a bronze figure on a stone plinth in a small paved square. */
+function addStatue(g: GeoBuilder, map: GameMap, x: number, y: number): void {
+  const h = map.surfaceHeight(x, y) * HEIGHT_SCALE;
+  const cx = x + 0.5;
+  const cz = y + 0.5;
+  g.color(PAVEMENT).aabb(x + 0.04, h, y + 0.04, x + 0.96, h + 0.015, y + 0.96);
+  g.color(PLINTH).aabb(cx - 0.2, h + 0.015, cz - 0.2, cx + 0.2, h + 0.08, cz + 0.2);
+  g.aabb(cx - 0.13, h + 0.08, cz - 0.13, cx + 0.13, h + 0.26, cz + 0.13);
+  g.color(BRONZE).cylinderY(cx, cz, h + 0.26, h + 0.5, 0.055);
+  g.aabb(cx - 0.11, h + 0.42, cz - 0.025, cx + 0.11, h + 0.46, cz + 0.025); // arms
+  g.cylinderY(cx, cz, h + 0.5, h + 0.58, 0.04); // head
 }
 
 /** Bus stop shelters (or truck loading bays) on both sides of a drive-through stop. */

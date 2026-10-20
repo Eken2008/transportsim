@@ -26,6 +26,15 @@ export const COSTS = {
   /** Demolishing a town's house: a base and so much per resident. */
   houseRemove: 400,
   houseRemovePerResident: 20,
+  /** Town actions (see town/actions.ts). */
+  advertSmall: 8_000,
+  advertMedium: 16_000,
+  advertLarge: 35_000,
+  roadWorks: 135_000,
+  statue: 185_000,
+  fundBuildings: 235_000,
+  exclusiveRights: 330_000,
+  bribe: 400_000,
 } as const;
 
 /** What it costs to clear a tile of open land for building: its trees, or its field. */

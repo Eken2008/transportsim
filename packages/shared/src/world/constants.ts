@@ -30,6 +30,8 @@ export const TileType = {
   Dock: 12,
   /** Ship depot on water: data bit 0 = axis, bit 1 = built on a canal. */
   ShipDepot: 13,
+  /** A company's statue in a town (see town actions): owner = the company, town = the town. */
+  Statue: 14,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 

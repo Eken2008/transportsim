@@ -42,6 +42,8 @@ export interface Station {
   lastVehicleAge?: number;
   /** Fraction of the catchment's residents this station draws from (0..1), after competition. */
   share?: number;
+  /** An advertising campaign raises the rating by `bonus` until this day. */
+  advert?: { bonus: number; until: number };
 }
 
 /** Catchment radius around rail station tiles. */

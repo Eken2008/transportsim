@@ -29,7 +29,7 @@ const RECOVERY = 10;
 /** New stations get this many days before they count. */
 const STATION_GRACE_DAYS = 60;
 /** A town speaks for land this far (tiles) beyond the area it builds in. */
-const AUTHORITY_MARGIN = 6;
+export const AUTHORITY_MARGIN = 6;
 
 const BANDS: readonly [number, string][] = [
   [-400, 'Appalling'],

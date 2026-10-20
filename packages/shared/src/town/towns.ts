@@ -36,6 +36,16 @@ export interface Town {
   lastStats?: TownStats;
   /** Each company's reputation with the town council (company id → -1000..1000); missing means the starting value. */
   ratings?: Record<number, number>;
+  /** Companies with a statue in the town. */
+  statues?: number[];
+  /** A company holds exclusive transport rights in the town until this day. */
+  exclusive?: { company: number; until: number };
+  /** Rapid growth paid for by a company, until this day. */
+  funded?: { company: number; until: number };
+  /** Road reconstruction paid for by a company, until this day. */
+  roadWorks?: { company: number; until: number };
+  /** Companies caught bribing the council (company id → the day it deals with them again). */
+  unwanted?: Record<number, number>;
 }
 
 export type TownSize = 'small' | 'medium' | 'large';

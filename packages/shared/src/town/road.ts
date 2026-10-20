@@ -12,6 +12,10 @@ export const ROAD_EDGE_BITS = [ROAD_N, ROAD_E, ROAD_S, ROAD_W] as const;
  */
 export const ROAD_ONE_WAY = 0x10;
 export const ROAD_ONE_WAY_REVERSED = 0x20;
+/** Road tile `data` bit 6: road works (a town's road reconstruction); road vehicles crawl past. */
+export const ROAD_WORKS = 0x40;
+/** Top speed (km/h) of road vehicles through road works. */
+export const ROAD_WORKS_KMH = 15;
 /** Road stop tiles: `track` bit 4 marks a truck stop (otherwise a bus stop); bits 0-3 are road bits. */
 export const ROADSTOP_TRUCK = 0x10;
 

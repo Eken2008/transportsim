@@ -3,6 +3,7 @@ import type { Station } from '../rail/station.ts';
 import { emptyTownStats, generateTowns, type Town } from '../town/towns.ts';
 import { growTown } from '../town/growth.ts';
 import { monthlyReputation } from '../town/reputation.ts';
+import { FUNDED_GROWTH, forgetCompanyInTowns, townActionsDaily } from '../town/actions.ts';
 import { industryMonthly } from '../economy/industryChanges.ts';
 import { Random } from '../util/random.ts';
 import { CargoSystem } from '../economy/cargoSystem.ts';
@@ -80,6 +81,10 @@ export class GameState {
   /** Towns changed since the last sync flush. */
   readonly dirtyTowns = new Set<number>();
   private townRng: Random;
+  /** Chance in town actions: bribes found out, where road works start. */
+  councilRng: Random;
+  /** Street tiles under road works (a town's road reconstruction) → the day they finish. */
+  readonly roadWorks = new Map<number, number>();
   nextIndustryId = 0;
   /** Industries changed/removed since the last sync flush. */
   readonly dirtyIndustries = new Set<number>();
@@ -145,6 +150,7 @@ export class GameState {
     this.map = map;
     this.date = date ?? daysFromYmd(settings.startYear, 0, 1);
     this.townRng = new Random(settings.seed ^ 0x70e115);
+    this.councilRng = new Random(settings.seed ^ 0xc0c111);
     this.industryRng = new Random(settings.seed ^ 0x1dc4a9);
     for (let o = 0; o < 256; o++) this.joins[o * 257] = 1;
     this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
@@ -218,6 +224,7 @@ export class GameState {
     this.maintenance.daily();
     this.rail.clearWrecks();
     this.growTowns();
+    townActionsDaily(this);
     this.billSharing();
     // Running costs for vehicles out of the depot, charged daily.
     for (const t of this.trains.values()) {
@@ -280,7 +287,8 @@ export class GameState {
 
   /**
    * Towns grow a little on their own and much faster with good service: each well-served
-   * station (picked up within 20 days, rated over 50%) adds growth, as do goods and food.
+   * station (picked up within 20 days, rated over 50%) adds growth, as do goods and food, and
+   * a company funding new buildings.
    */
   private growTowns(): void {
     const served = new Map<number, number>();
@@ -292,7 +300,8 @@ export class GameState {
     for (const t of this.towns.values()) {
       const n = Math.min(4, served.get(t.id) ?? 0);
       const last = t.lastStats ?? emptyTownStats();
-      const rate = 1 / 150 + n / 30 + (last.goods >= 30 ? 1 / 40 : 0) + (last.food >= 30 ? 1 / 40 : 0);
+      const funded = t.funded && t.funded.until > this.date ? FUNDED_GROWTH : 0;
+      const rate = 1 / 150 + n / 30 + (last.goods >= 30 ? 1 / 40 : 0) + (last.food >= 30 ? 1 / 40 : 0) + funded;
       if (t.served !== n || t.growthRate !== rate) {
         t.served = n;
         t.growthRate = rate;
@@ -432,6 +441,7 @@ export class GameState {
     for (let i = 0; i < type.length; i++) if (owner[i] === id && type[i] === TileType.Road) owner[i] = OWNER_NONE;
     refreshStations(this, stations);
     this.onTrackChanged();
+    forgetCompanyInTowns(this, id);
     this.companies.delete(id);
     for (const t of this.towns.values()) {
       if (t.ratings?.[id] === undefined) continue;

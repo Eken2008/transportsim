@@ -61,6 +61,8 @@ export function GameInfoWindow({ w }: { w: GameWindow & { kind: 'game' } }) {
         </span>
         <span>Breakdowns</span>
         <span>{s.breakdowns ? 'On' : 'Off'}</span>
+        <span>Bribery</span>
+        <span>{s.bribery ? 'Town councils can be bribed' : 'Off'}</span>
         <span>Inflation</span>
         <span>{s.inflation ? 'On: costs +3% and payments +2.5% a year' : 'Off'}</span>
         <span>Date</span>

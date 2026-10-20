@@ -2,6 +2,7 @@ import { TICKS_PER_DAY } from '../sim/date.ts';
 import { STATION_CATCHMENT, type Station } from '../rail/station.ts';
 import type { GameState } from '../sim/state.ts';
 import { houseType } from '../town/houses.ts';
+import { exclusionBarred } from '../town/actions.ts';
 import { TileType } from '../world/constants.ts';
 import { Random } from '../util/random.ts';
 import { cargoCount, type Train } from '../vehicles/train.ts';
@@ -66,6 +67,8 @@ export const FOOD_RESIDENTS = 100;
  */
 export class CargoSystem {
   private catch = new Map<number, Catchment>();
+  /** Stations that get no new cargo: another company holds exclusive transport rights in their town. */
+  private barred = new Set<number>();
   /** cargo → station → stations reachable by a direct train service carrying that cargo. */
   private links = new Map<CargoId, Map<number, number[]>>();
   /** cargo → link "from>to" → capacity: consecutive stops of trains carrying the cargo. */
@@ -242,10 +245,12 @@ export class CargoSystem {
   /**
    * Recompute catchments, acceptance, service links and shares (cheap enough to do daily). A
    * house covered by several served stations splits its residents between them in proportion
-   * to their ratings; stations no train serves yet don't compete.
+   * to their ratings; stations no train serves yet don't compete, nor do stations barred by
+   * another company's exclusive transport rights.
    */
   refresh(): void {
     const map = this.state.map;
+    this.barred = exclusionBarred(this.state);
     const cover = new Map<number, number[]>();
     for (const st of this.state.stations.values()) {
       const x0 = Math.max(0, st.x0 - STATION_CATCHMENT);
@@ -324,7 +329,7 @@ export class CargoSystem {
 
     const served = (id: number) => (this.links.get('passengers')?.get(id)?.length ?? 0) > 0 || (this.links.get('mail')?.get(id)?.length ?? 0) > 0;
     for (const [i, ids] of cover) {
-      const competing = ids.filter(served);
+      const competing = ids.filter((id) => served(id) && !this.barred.has(id));
       const total = competing.reduce((s, id) => s + Math.max(1, this.state.stations.get(id)!.rating), 0);
       if (total === 0) continue;
       const pop = houseType(map.layers.data[i]!).population;
@@ -333,7 +338,7 @@ export class CargoSystem {
     for (const st of this.state.stations.values()) {
       // Only served stations with residents compete; anything else counts as a full share.
       const c = this.catch.get(st.id)!;
-      const share = c.residents > 0 && served(st.id) ? Math.round((c.share / c.residents) * 100) / 100 : 1;
+      const share = this.barred.has(st.id) ? 0 : c.residents > 0 && served(st.id) ? Math.round((c.share / c.residents) * 100) / 100 : 1;
       if (st.share !== share) {
         st.share = share;
         this.state.markStationDirty(st.id);
@@ -416,7 +421,10 @@ export class CargoSystem {
       for (const [cargo, n] of out) {
         if (n <= 0) continue;
         ind.produced[cargo] = (ind.produced[cargo] ?? 0) + n;
-        const stations = (near.get(ind.id) ?? []).filter((st) => this.destinations(cargo, st.id).length > 0).sort((a, b) => b.rating - a.rating).slice(0, 2);
+        const stations = (near.get(ind.id) ?? [])
+          .filter((st) => !this.barred.has(st.id) && this.destinations(cargo, st.id).length > 0)
+          .sort((a, b) => b.rating - a.rating)
+          .slice(0, 2);
         if (stations.length === 0) continue;
         const moved = Math.floor(n * (stations[0]!.rating / 255));
         const total = stations.reduce((s, st) => s + st.rating, 0);
@@ -471,7 +479,7 @@ export class CargoSystem {
   }
 
   private updateRating(st: Station): void {
-    const { target } = ratingParts(st, this.state.date);
+    const { target } = ratingParts(st, this.state.date, st.townId === null ? undefined : this.state.towns.get(st.townId));
     const before = st.rating;
     st.rating += Math.sign(target - st.rating) * Math.min(RATING_STEP, Math.abs(target - st.rating));
     if (Math.round(before) !== Math.round(st.rating)) this.state.markStationDirty(st.id);

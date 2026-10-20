@@ -14,7 +14,7 @@ import {
 import { TICKS_PER_DAY, TICKS_PER_SECOND } from '../sim/date.ts';
 import type { GameState } from '../sim/state.ts';
 import { TileType } from '../world/constants.ts';
-import { ROADSTOP_TRUCK } from '../town/road.ts';
+import { ROADSTOP_TRUCK, ROAD_WORKS, ROAD_WORKS_KMH } from '../town/road.ts';
 import { isBus } from './catalog.ts';
 import { advanceOrder, needsService } from './orders.ts';
 import { BRAKE_KMH_PER_S, DWELL_TICKS, KMH_PER_TILE_PER_S, brakingDistance, speedForDistance } from './railSystem.ts';
@@ -316,6 +316,7 @@ export class RoadSystem {
     const stats = this.state.rail.statsOf(t);
     const stopAt = this.stopDistance(t, brakingDistance(t.speed) + 2);
     let limit = Math.min(stats.maxSpeed, Math.max(speedForDistance(stopAt), stopAt > 0.01 ? CREEP_KMH : 0));
+    limit = Math.min(limit, this.worksLimit(t, brakingDistance(t.speed) + 2));
     if (t.brokenDown) {
       if (--t.brokenDown <= 0) {
         t.brokenDown = 0;
@@ -360,6 +361,20 @@ export class RoadSystem {
     t.departedAt = this.state.tick;
     this.occupy(t, s);
     this.state.dirtyTrains.add(t.id);
+  }
+
+  /** Top speed for road works on the vehicle's tile or ahead of it, braking in time to reach them at ROAD_WORKS_KMH. */
+  private worksLimit(t: Train, horizon: number): number {
+    const { type, data } = this.state.map.layers;
+    const works = (tile: number) => type[tile] === TileType.Road && (data[tile]! & ROAD_WORKS) !== 0;
+    if (works(rsTile(t.path[0]!))) return ROAD_WORKS_KMH;
+    let d = rsLength(t.path[0]!) - t.pos;
+    for (const s of t.route) {
+      if (d > horizon) break;
+      if (works(rsTile(s))) return Math.hypot(ROAD_WORKS_KMH, speedForDistance(d));
+      d += rsLength(s);
+    }
+    return Infinity;
   }
 
   /** Distance to the first place the vehicle must stop: a vehicle ahead, a closed crossing, or the end of its route. */

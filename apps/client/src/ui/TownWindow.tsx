@@ -1,7 +1,20 @@
-import { COMPANY_COLORS, REPUTATION_NEW_STATION, reputationLabel, reputationOf } from '@transportsim/shared';
+import { useState } from 'react';
+import {
+  COMPANY_COLORS,
+  REPUTATION_NEW_STATION,
+  TOWN_ACTIONS,
+  TOWN_ACTION_INFO,
+  formatDate,
+  reputationLabel,
+  reputationOf,
+  townActionCost,
+  type Town,
+  type TownAction,
+} from '@transportsim/shared';
 import { client } from '../net/client.ts';
 import { useApp, type GameWindow } from '../store.ts';
-import { Win, focusOn, useTick } from './windows.tsx';
+import { formatMoney } from './format.ts';
+import { Win, act, focusOn, useTick } from './windows.tsx';
 
 /** A town: size, how fast it grows, what its stations handled last month, and what its council thinks of each company. */
 export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
@@ -20,8 +33,19 @@ export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
   const last = town.lastStats;
   const every = town.growthRate ? Math.round(1 / town.growthRate) : null;
   const served = town.served ?? 0;
+  const date = client.world?.state.date ?? 0;
+  const nameOf = (id: number) => companies.find((c) => c.id === id)?.name ?? 'A former company';
+  const running = (g: { until: number } | undefined): g is { company: number; until: number } => g !== undefined && g.until > date;
+  const shunned = myCompany === null ? undefined : town.unwanted?.[myCompany];
+  const effects = [
+    town.statues?.length ? `Statue${town.statues.length === 1 ? '' : 's'} of ${town.statues.map(nameOf).join(', ')}` : null,
+    running(town.exclusive) ? `${nameOf(town.exclusive.company)} holds exclusive transport rights until ${formatDate(town.exclusive.until)}` : null,
+    running(town.funded) ? `New buildings funded by ${nameOf(town.funded.company)} until ${formatDate(town.funded.until)}` : null,
+    running(town.roadWorks) ? `Road reconstruction funded by ${nameOf(town.roadWorks.company)} until ${formatDate(town.roadWorks.until)}` : null,
+    shunned !== undefined && shunned > date ? `After the bribery scandal the council won’t deal with you until ${formatDate(shunned)}` : null,
+  ].filter((e): e is string => e !== null);
   return (
-    <Win w={w} title={town.name} width={330}>
+    <Win w={w} title={town.name} width={360}>
       <div className="kv">
         <span>Population</span>
         <b className="mono">{town.population.toLocaleString('en-GB')}</b>
@@ -64,12 +88,23 @@ export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
               })}
           </div>
           <p className="muted small">
-            Demolishing the town's buildings and streets costs reputation; stations that vehicles call at often win it back.
-            At Poor or worse the council allows no new stations, and it refuses demolition that would leave a company Very
-            poor.
+            Demolishing the town's buildings and streets costs reputation; stations that vehicles call at often win it back,
+            as do statues and bribes. At Poor or worse the council allows no new stations, and it refuses demolition that
+            would leave a company Very poor.
           </p>
         </>
       )}
+      {effects.length > 0 && (
+        <>
+          <h4>In effect</h4>
+          <ul className="small" style={{ margin: '0 0 8px', paddingLeft: 18 }}>
+            {effects.map((e) => (
+              <li key={e}>{e}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {myCompany !== null && <CouncilActions town={town} />}
       <p className="muted small">
         Towns grow faster with stations that trains call at often and that are well rated, and with at least 30 crates of
         goods and 30 tonnes of food delivered a month.
@@ -78,5 +113,52 @@ export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
         ⌖ Locate
       </button>
     </Win>
+  );
+}
+
+/** What the player's company can pay the council for; the dry run gives each action's cost or why it can't be had. */
+function CouncilActions({ town }: { town: Town }) {
+  const [open, setOpen] = useState<TownAction | null>(null);
+  const state = client.world?.state;
+  if (!state) return null;
+  const actions = TOWN_ACTIONS.filter((a) => a !== 'bribe' || state.settings.bribery);
+  return (
+    <>
+      <h4>Town council</h4>
+      {actions.map((a) => {
+        const cmd = { type: 'townAction', town: town.id, action: a } as const;
+        const r = client.preview(cmd);
+        const ok = r?.ok === true;
+        const info = TOWN_ACTION_INFO[a];
+        return (
+          <div key={a}>
+            <div className="list-row" style={{ cursor: 'pointer' }} onClick={() => setOpen(open === a ? null : a)} title={ok ? info.about : r?.error}>
+              <span style={{ flex: 1 }} className={ok ? undefined : 'muted'}>
+                {open === a ? '▾' : '▸'} {info.name}
+              </span>
+              <span className="mono small">{formatMoney(townActionCost(state, a))}</span>
+            </div>
+            {open === a && (
+              <div className="small" style={{ padding: '6px 0 8px 14px' }}>
+                <p style={{ margin: '0 0 6px' }}>{info.about}</p>
+                {ok ? (
+                  <button
+                    className="primary"
+                    onClick={() => {
+                      act(cmd);
+                      setOpen(null);
+                    }}
+                  >
+                    Pay {formatMoney(r.cost)}
+                  </button>
+                ) : (
+                  <span className="neg">{r?.error ?? 'Not available'}</span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }
