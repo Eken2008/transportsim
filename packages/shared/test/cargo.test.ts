@@ -58,8 +58,31 @@ function world(startYear = 1940) {
 describe('cargo', () => {
   test('payment depends on cargo: mail pays well but hates waiting, coal is patient', () => {
     expect(cargoPayment('mail', 10, 40, 3)).toBeGreaterThan(cargoPayment('passengers', 10, 40, 3));
-    expect(cargoPayment('coal', 10, 40, 15)).toBe(cargoPayment('coal', 10, 40, 1));
+    expect(cargoPayment('coal', 10, 40, 15)).toBeGreaterThan(cargoPayment('coal', 10, 40, 1) * 0.97);
     expect(cargoPayment('mail', 10, 40, 20)).toBeLessThan(cargoPayment('mail', 10, 40, 1));
+  });
+
+  test('late deliveries pay steadily less, with no cliff, towards a floor', () => {
+    // Passengers over 20 tiles are prompt within 4 days.
+    const pay = Array.from({ length: 61 }, (_, d) => cargoPayment('passengers', 1000, 20, d));
+    for (let d = 1; d <= 60; d++) {
+      expect(pay[d]!).toBeLessThanOrEqual(pay[d - 1]!);
+      // Never more than 10% of the full pay lost in a single day
+      expect(pay[d - 1]! - pay[d]!).toBeLessThanOrEqual(pay[0]! * 0.1);
+    }
+    // Starts off like 1 − 0.02t², t in prompt-times
+    for (const d of [4, 8, 12]) expect(pay[d]! / pay[0]!).toBeCloseTo(1 - 0.02 * (d / 4) ** 2, 1);
+    expect(pay[24]! / pay[0]!).toBeCloseTo(0.53, 2);
+    expect(pay[60]!).toBeGreaterThan(pay[0]! * 0.2);
+  });
+
+  test('more processed freight pays more', () => {
+    const wagonload = (c: Parameters<typeof cargoPayment>[0], n: number) => cargoPayment(c, n, 100, 0);
+    expect(wagonload('coal', 20)).toBeLessThan(wagonload('grain', 20));
+    expect(wagonload('iron_ore', 20)).toBeLessThan(wagonload('steel', 20));
+    expect(wagonload('steel', 20)).toBeLessThan(wagonload('goods', 16));
+    expect(wagonload('grain', 16)).toBeLessThan(wagonload('food', 16));
+    expect(wagonload('food', 16)).toBeLessThan(wagonload('goods', 16));
   });
 
   test('wagons refit to cargoes they can carry; capacity and weight follow the cargo', () => {

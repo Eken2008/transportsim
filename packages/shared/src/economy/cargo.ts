@@ -8,11 +8,14 @@ export interface CargoType {
   unit: string;
   /** Map and UI colour. */
   color: string;
-  /** £ per unit per tile for a prompt delivery. */
+  /**
+   * £ per unit per tile for a prompt delivery. Freight rates step up evenly by what a typical
+   * wagonload earns (about 12% a step), from raw bulk to finished goods.
+   */
   rate: number;
   /**
-   * How long the cargo keeps its value: a delivery is prompt within (2 + distance/10) × patience
-   * days, and pays less the longer it takes after that (down to 30%).
+   * How long the cargo keeps its value: a delivery taking (2 + distance/10) × patience days (its
+   * prompt time) still earns 98%, and pays gradually less the longer it takes (towards 20%).
    */
   patience: number;
   /** Tonnes per unit (adds to the train's mass). */
@@ -22,16 +25,19 @@ export interface CargoType {
 export const CARGOS: Record<CargoId, CargoType> = {
   passengers: { id: 'passengers', name: 'Passengers', unit: 'passengers', color: '#58a6ff', rate: 0.45, patience: 1, weight: 0.08 },
   mail: { id: 'mail', name: 'Mail', unit: 'bags', color: '#e3c565', rate: 0.6, patience: 0.8, weight: 0.05 },
-  coal: { id: 'coal', name: 'Coal', unit: 'tonnes', color: '#3b3b3b', rate: 0.32, patience: 3, weight: 1 },
-  iron_ore: { id: 'iron_ore', name: 'Iron ore', unit: 'tonnes', color: '#a0522d', rate: 0.3, patience: 3, weight: 1 },
-  steel: { id: 'steel', name: 'Steel', unit: 'tonnes', color: '#8fa3b8', rate: 0.42, patience: 2, weight: 1 },
-  wood: { id: 'wood', name: 'Wood', unit: 'tonnes', color: '#8b5a2b', rate: 0.3, patience: 3, weight: 1 },
-  goods: { id: 'goods', name: 'Goods', unit: 'crates', color: '#d97b4a', rate: 0.6, patience: 1.5, weight: 0.5 },
-  grain: { id: 'grain', name: 'Grain', unit: 'tonnes', color: '#e8c547', rate: 0.34, patience: 2, weight: 1 },
-  livestock: { id: 'livestock', name: 'Livestock', unit: 'head', color: '#b5835a', rate: 0.46, patience: 1.2, weight: 0.6 },
-  food: { id: 'food', name: 'Food', unit: 'tonnes', color: '#6abf69', rate: 0.52, patience: 1, weight: 1 },
-  oil: { id: 'oil', name: 'Oil', unit: 'kilolitres', color: '#2f2f4f', rate: 0.36, patience: 2.5, weight: 0.9 },
+  coal: { id: 'coal', name: 'Coal', unit: 'tonnes', color: '#3b3b3b', rate: 0.28, patience: 3, weight: 1 },
+  iron_ore: { id: 'iron_ore', name: 'Iron ore', unit: 'tonnes', color: '#a0522d', rate: 0.31, patience: 3, weight: 1 },
+  steel: { id: 'steel', name: 'Steel', unit: 'tonnes', color: '#8fa3b8', rate: 0.54, patience: 2, weight: 1 },
+  wood: { id: 'wood', name: 'Wood', unit: 'tonnes', color: '#8b5a2b', rate: 0.35, patience: 3, weight: 1 },
+  goods: { id: 'goods', name: 'Goods', unit: 'crates', color: '#d97b4a', rate: 0.85, patience: 1.5, weight: 0.5 },
+  grain: { id: 'grain', name: 'Grain', unit: 'tonnes', color: '#e8c547', rate: 0.39, patience: 2, weight: 1 },
+  livestock: { id: 'livestock', name: 'Livestock', unit: 'head', color: '#b5835a', rate: 0.7, patience: 1.2, weight: 0.6 },
+  food: { id: 'food', name: 'Food', unit: 'tonnes', color: '#6abf69', rate: 0.76, patience: 1, weight: 1 },
+  oil: { id: 'oil', name: 'Oil', unit: 'kilolitres', color: '#2f2f4f', rate: 0.48, patience: 2.5, weight: 0.9 },
 };
+
+/** Share of the rate a very late delivery still earns. */
+const LATE_FLOOR = 0.2;
 
 export const isCargo = (c: unknown): c is CargoId => typeof c === 'string' && (CARGO_IDS as readonly string[]).includes(c);
 
@@ -39,7 +45,10 @@ export const isCargo = (c: unknown): c is CargoId => typeof c === 'string' && (C
 export function cargoPayment(cargo: CargoId, n: number, dist: number, days: number): number {
   const c = CARGOS[cargo];
   const prompt = (2 + dist / 10) * c.patience;
-  const factor = days <= prompt ? 1 : Math.max(0.3, 1 - ((days - prompt) / (prompt * 2)) * 0.7);
+  // The pay eases off smoothly from the start, like 1 − 0.02t² for t prompt-times taken
+  // (98% at 1, 92% at 2, 84% at 3), then levels out towards the floor (53% at 6, 27% at 10).
+  const t = days / prompt;
+  const factor = LATE_FLOOR + (1 - LATE_FLOOR) * Math.exp(-0.025 * t * t);
   return Math.round(n * dist * c.rate * factor);
 }
 

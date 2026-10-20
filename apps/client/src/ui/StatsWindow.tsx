@@ -24,8 +24,24 @@ const W = 560;
 const H = 240;
 const PAD = { l: 64, r: 12, t: 12, b: 26 };
 
-/** A plain SVG line chart: x is a game date (days) or any number, y is formatted by `fmt`. */
+/** The series' value at `x`, interpolated between its points (null outside them). */
+function valueAt(points: [number, number][], x: number): number | null {
+  if (!points.length || x < points[0]![0] || x > points[points.length - 1]![0]) return null;
+  for (let i = 1; i < points.length; i++) {
+    const [xa, ya] = points[i - 1]!;
+    const [xb, yb] = points[i]!;
+    if (x <= xb) return xb === xa ? yb : ya + ((yb - ya) * (x - xa)) / (xb - xa);
+  }
+  return points[points.length - 1]![1];
+}
+
+/**
+ * A plain SVG line chart with its legend: x is a game date (days) or any number, y is formatted
+ * by `fmt`. Hovering the chart picks out the line nearest the pointer; hovering the legend, its line.
+ */
 function LineChart({ series, fmt, xFmt }: { series: Series[]; fmt: (v: number) => string; xFmt: (v: number) => string }) {
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+  const [legendHl, setLegendHl] = useState<string | null>(null);
   const pts = series.flatMap((s) => s.points);
   if (pts.length < 2) return <p className="muted">Not enough history yet: figures are recorded at the end of each month.</p>;
   let [x0, x1, y0, y1] = [Infinity, -Infinity, 0, -Infinity];
@@ -48,42 +64,98 @@ function LineChart({ series, fmt, xFmt }: { series: Series[]; fmt: (v: number) =
   const ticks: number[] = [];
   for (let y = y0; y <= y1 + step / 2; y += step) ticks.push(y);
   const xticks = [x0, x0 + (x1 - x0) / 2, x1];
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Chart" style={{ display: 'block' }}>
-      {ticks.map((y) => (
-        <g key={y}>
-          <line x1={PAD.l} x2={W - PAD.r} y1={sy(y)} y2={sy(y)} stroke="var(--line)" strokeWidth={y === 0 ? 1.5 : 1} />
-          <text x={PAD.l - 6} y={sy(y) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">
-            {fmt(y)}
-          </text>
-        </g>
-      ))}
-      {xticks.map((x, k) => (
-        <text key={k} x={sx(x)} y={H - 8} textAnchor={k === 0 ? 'start' : k === 2 ? 'end' : 'middle'} fontSize="11" fill="var(--muted)">
-          {xFmt(x)}
-        </text>
-      ))}
-      {series.map((s) =>
-        s.points.length > 1 ? (
-          <polyline key={s.name} fill="none" stroke={s.color} strokeWidth={2} strokeLinejoin="round" points={s.points.map(([x, y]) => `${sx(x)},${sy(y)}`).join(' ')}>
-            <title>{s.name}</title>
-          </polyline>
-        ) : null,
-      )}
-    </svg>
-  );
-}
 
-function Legend({ series }: { series: Series[] }) {
+  // The line nearest the pointer (vertically, at the pointer's x), and its closest actual point.
+  let hit: { s: Series; x: number; y: number } | null = null;
+  if (pointer) {
+    const dx = x0 + ((pointer.x - PAD.l) / (W - PAD.l - PAD.r)) * (x1 - x0);
+    let best = Infinity;
+    for (const s of series) {
+      const v = valueAt(s.points, dx);
+      if (v === null || Math.abs(sy(v) - pointer.y) >= best) continue;
+      best = Math.abs(sy(v) - pointer.y);
+      const [px, py] = s.points.reduce((a, p) => (Math.abs(p[0] - dx) < Math.abs(a[0] - dx) ? p : a));
+      hit = { s, x: px, y: py };
+    }
+  }
+  const hl = hit?.s.name ?? legendHl;
+  const ordered = hl ? [...series.filter((s) => s.name !== hl), ...series.filter((s) => s.name === hl)] : series;
+  const label = hit ? `${hit.s.name}: ${fmt(hit.y)} · ${xFmt(hit.x)}` : '';
+  const labelW = label.length * 6.4 + 14;
+  const labelX = hit ? (sx(hit.x) + 10 + labelW > W - PAD.r ? sx(hit.x) - 10 - labelW : sx(hit.x) + 10) : 0;
+  const labelY = hit ? Math.min(Math.max(sy(hit.y) - 11, PAD.t), H - PAD.b - 22) : 0;
+
+  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * W;
+    const y = ((e.clientY - r.top) / r.height) * H;
+    setPointer(x >= PAD.l && x <= W - PAD.r && y >= PAD.t && y <= H - PAD.b ? { x, y } : null);
+  };
+
   return (
-    <div className="row wrap small" style={{ gap: 12, marginTop: 6 }}>
-      {series.map((s) => (
-        <span key={s.name} className="row" style={{ gap: 4 }}>
-          <span className="company-swatch" style={{ background: s.color }} />
-          {s.name}
-        </span>
-      ))}
-    </div>
+    <>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        role="img"
+        aria-label="Chart"
+        style={{ display: 'block', cursor: hit ? 'crosshair' : undefined }}
+        onPointerMove={onMove}
+        onPointerLeave={() => setPointer(null)}
+      >
+        {ticks.map((y) => (
+          <g key={y}>
+            <line x1={PAD.l} x2={W - PAD.r} y1={sy(y)} y2={sy(y)} stroke="var(--line)" strokeWidth={y === 0 ? 1.5 : 1} />
+            <text x={PAD.l - 6} y={sy(y) + 4} textAnchor="end" fontSize="11" fill="var(--muted)">
+              {fmt(y)}
+            </text>
+          </g>
+        ))}
+        {xticks.map((x, k) => (
+          <text key={k} x={sx(x)} y={H - 8} textAnchor={k === 0 ? 'start' : k === 2 ? 'end' : 'middle'} fontSize="11" fill="var(--muted)">
+            {xFmt(x)}
+          </text>
+        ))}
+        {ordered.map((s) =>
+          s.points.length > 1 ? (
+            <polyline
+              key={s.name}
+              fill="none"
+              stroke={s.color}
+              strokeWidth={s.name === hl ? 3 : 2}
+              strokeOpacity={hl && s.name !== hl ? 0.2 : 1}
+              strokeLinejoin="round"
+              pointerEvents="none"
+              points={s.points.map(([x, y]) => `${sx(x)},${sy(y)}`).join(' ')}
+            />
+          ) : null,
+        )}
+        {hit && (
+          <g pointerEvents="none">
+            <line x1={sx(hit.x)} x2={sx(hit.x)} y1={PAD.t} y2={H - PAD.b} stroke="var(--line-strong)" />
+            <circle cx={sx(hit.x)} cy={sy(hit.y)} r={4} fill={hit.s.color} stroke="var(--text)" strokeWidth={1.5} />
+            <rect x={labelX} y={labelY} width={labelW} height={22} rx={5} fill="var(--panel-solid)" stroke={hit.s.color} />
+            <text x={labelX + 7} y={labelY + 15} fontSize="11" fill="var(--text)">
+              {label}
+            </text>
+          </g>
+        )}
+      </svg>
+      <div className="row wrap small" style={{ gap: 12, marginTop: 6 }}>
+        {series.map((s) => (
+          <span
+            key={s.name}
+            className="row"
+            style={{ gap: 4, opacity: hl && s.name !== hl ? 0.45 : 1, fontWeight: s.name === hl ? 600 : undefined }}
+            onPointerEnter={() => setLegendHl(s.name)}
+            onPointerLeave={() => setLegendHl(null)}
+          >
+            <span className="company-swatch" style={{ background: s.color }} />
+            {s.name}
+          </span>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -135,7 +207,6 @@ export function StatsWindow({ w }: { w: GameWindow & { kind: 'stats' } }) {
           Payment for 10 units carried 20 tiles, by days on the way. Slow deliveries pay less, sooner for impatient cargo.
         </p>
         <LineChart series={series} fmt={short} xFmt={(d) => `${Math.round(d)} days`} />
-        <Legend series={series} />
       </>
     );
   } else if (tab === 'cargo') {
@@ -160,7 +231,6 @@ export function StatsWindow({ w }: { w: GameWindow & { kind: 'stats' } }) {
         {series.length ? (
           <>
             <LineChart series={series} fmt={(v) => Math.round(v).toLocaleString('en-GB')} xFmt={monthLabel} />
-            <Legend series={series} />
           </>
         ) : (
           <p className="muted">Nothing delivered yet.</p>
@@ -181,7 +251,6 @@ export function StatsWindow({ w }: { w: GameWindow & { kind: 'stats' } }) {
         {tab === 'money' && <p className="muted small" style={{ marginTop: 0 }}>Money less the loan, at the end of each month.</p>}
         {tab === 'profit' && <p className="muted small" style={{ marginTop: 0 }}>Income less running costs, maintenance, interest and accidents (building and buying left out).</p>}
         <LineChart series={series} fmt={tab === 'vehicles' ? (v) => String(Math.round(v)) : short} xFmt={monthLabel} />
-        <Legend series={series} />
       </>
     );
   }
