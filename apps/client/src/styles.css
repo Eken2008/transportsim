@@ -859,12 +859,22 @@ ol.consist .grip {
 }
 
 /* News */
-.news-ticker {
+.news-stack {
   position: absolute;
   top: 64px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: min(640px, calc(100% - 20px));
+  left: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.news-stack > * {
+  pointer-events: auto;
+}
+.news-ticker {
+  max-width: min(640px, 100%);
   padding: 8px 14px;
   font: inherit;
   color: var(--text);
@@ -876,8 +886,49 @@ ol.consist .grip {
 @keyframes ticker-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -6px);
+    transform: translateY(-6px);
   }
+}
+.news-headline {
+  width: min(380px, 100%);
+  padding: 8px 10px 10px;
+  border-color: rgba(88, 166, 255, 0.5);
+  animation: ticker-in 0.25s ease-out;
+}
+.news-headline.accident {
+  border-color: rgba(255, 90, 31, 0.7);
+}
+.news-headline .head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.news-headline .head .muted {
+  flex: 1;
+}
+.news-headline .view-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.news-headline .view-btn:hover:not(:disabled) {
+  background: none;
+}
+.news-view {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--bg);
 }
 .news-list {
   max-height: 420px;

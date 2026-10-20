@@ -1,6 +1,7 @@
 import { COMPANY_COLORS, formatDate, type NewsItem } from '@transportsim/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
+import { placeViews } from '../render/vehicleViews.ts';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { Win, focusOn, useMyRole } from './windows.tsx';
 
@@ -75,30 +76,88 @@ export function NewsWindow({ w }: { w: GameWindow & { kind: 'news' } }) {
 }
 
 const TICKER_MS = 8000;
+const HEADLINE_MS = 20000;
 
-/** The latest news item, shown under the date for a few seconds. */
-export function NewsTicker() {
-  const item = useApp((s) => s.ticker);
-  const [visible, setVisible] = useState<NewsItem | null>(null);
+/** News worth a look at where it happened: accidents anywhere, and firsts at one's own stations. */
+function isHeadline(n: NewsItem, mine: number | null): boolean {
+  return n.tile !== undefined && (n.kind === 'accident' || (n.kind === 'station' && mine !== null && n.company === mine));
+}
+
+/** Opens the vehicle a news item is about, else looks at where it happened, else opens the news. */
+function show(n: NewsItem): void {
+  const v = vehicleOf(n);
+  if (v !== undefined) openWindow({ kind: 'train', id: v });
+  else if (n.tile !== undefined) look(n);
+  else openWindow({ kind: 'news', id: 0 });
+}
+
+/** A live view of a place, drawn by the game renderer. */
+function PlaceView({ tile }: { tile: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current!;
+    placeViews.set(canvas, tile);
+    return () => void placeViews.delete(canvas);
+  }, [tile]);
+  return <canvas ref={ref} className="news-view" aria-hidden />;
+}
+
+/** Hides an item a while after it was set. */
+function useFor(ms: number): [NewsItem | null, (n: NewsItem | null) => void] {
+  const [item, setItem] = useState<NewsItem | null>(null);
   useEffect(() => {
     if (!item) return;
-    setVisible(item);
-    const id = setTimeout(() => setVisible(null), TICKER_MS);
+    const id = setTimeout(() => setItem(null), ms);
     return () => clearTimeout(id);
-  }, [item]);
-  if (!visible) return null;
+  }, [item, ms]);
+  return [item, setItem];
+}
+
+/**
+ * The latest news, shown under the date for a few seconds; headlines get a card with a live view
+ * of where they happened, kept for longer.
+ */
+export function NewsTicker() {
+  const fresh = useApp((s) => s.fresh);
+  const mine = useMyRole().companyId;
+  const [line, setLine] = useFor(TICKER_MS);
+  const [headline, setHeadline] = useFor(HEADLINE_MS);
+  useEffect(() => {
+    const big = fresh.filter((n) => isHeadline(n, mine));
+    const small = fresh.filter((n) => !isHeadline(n, mine));
+    if (big.length) setHeadline(big[big.length - 1]!);
+    if (small.length) setLine(small[small.length - 1]!);
+    // Only new arrivals; a change of company doesn't replay them.
+  }, [fresh]);
+  if (!line && !headline) return null;
   return (
-    <button
-      className="panel news-ticker"
-      onClick={() => {
-        const v = vehicleOf(visible);
-        if (v !== undefined) openWindow({ kind: 'train', id: v });
-        else if (visible.tile !== undefined) look(visible);
-        else openWindow({ kind: 'news', id: 0 });
-      }}
-      title={`${visible.detail ? `Why: ${visible.detail}\n` : ''}Click to see ${visible.vehicle !== undefined ? 'the vehicle' : 'where'}; all news in 📰 News`}
-    >
-      <span aria-hidden>{ICONS[visible.kind]}</span> {visible.text}
-    </button>
+    <div className="news-stack">
+      {line && (
+        <button
+          key={line.id}
+          className="panel news-ticker"
+          onClick={() => show(line)}
+          title={`${line.detail ? `Why: ${line.detail}\n` : ''}Click to see ${line.vehicle !== undefined ? 'the vehicle' : 'where'}; all news in 📰 News`}
+        >
+          <span aria-hidden>{ICONS[line.kind]}</span> {line.text}
+        </button>
+      )}
+      {headline && (
+        <div key={headline.id} className={`panel news-headline ${headline.kind}`} role="status">
+          <div className="head">
+            <span aria-hidden>{ICONS[headline.kind]}</span>
+            <span className="muted small">{formatDate(headline.date)}</span>
+            <button className="ghost small" title="Close" aria-label="Close" onClick={() => setHeadline(null)}>
+              ✕
+            </button>
+          </div>
+          <button className="view-btn" onClick={() => look(headline)} title="Click to look there; all news in 📰 News">
+            <PlaceView tile={headline.tile!} />
+            <div>{headline.text}</div>
+            {headline.detail && <div className="small muted">Why: {headline.detail}</div>}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

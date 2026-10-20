@@ -56,8 +56,8 @@ export interface AppState {
   chat: ChatLine[];
   /** News history, oldest first. */
   news: NewsItem[];
-  /** The latest news item, shown briefly in the ticker. */
-  ticker: NewsItem | null;
+  /** The news that just arrived, shown briefly in the ticker. */
+  fresh: NewsItem[];
   toasts: Toast[];
   tool: ToolId | null;
   hover: HoverInfo | null;
@@ -160,7 +160,7 @@ export const useApp = create<AppState>(() => ({
   autosavePrompt: false,
   chat: [],
   news: [],
-  ticker: null,
+  fresh: [],
   toasts: [],
   tool: null,
   hover: null,

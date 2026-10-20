@@ -219,7 +219,7 @@ class AppClient {
           else if (!m.full && fresh.length) sound.chime();
           return {
             news: [...(m.full ? [] : s.news), ...fresh].slice(-100),
-            ticker: !m.full && fresh.length > 0 ? fresh[fresh.length - 1]! : s.ticker,
+            fresh: !m.full && fresh.length > 0 ? fresh : s.fresh,
           };
         });
         return;
@@ -272,7 +272,7 @@ class AppClient {
     this.setWorld(null);
     for (const p of this.pending.values()) p({ ok: false, error: 'Left game' });
     this.pending.clear();
-    useApp.setState({ room: null, global: null, news: [], ticker: null, closedReason: reason, tool: null, hover: null, autosavePrompt: false, windows: [], ordersFor: null });
+    useApp.setState({ room: null, global: null, news: [], fresh: [], closedReason: reason, tool: null, hover: null, autosavePrompt: false, windows: [], ordersFor: null });
     this.conn.send({ t: 'listRooms' });
   }
 

@@ -16,7 +16,7 @@ import { LabelLayer } from './labels.ts';
 import { pickTerrain, type TerrainHit } from './picking.ts';
 import { TrackGhost } from './trackGhost.ts';
 import { motionPoint, TrainRenderer } from './trainRenderer.ts';
-import { vehicleViews } from './vehicleViews.ts';
+import { placeViews, vehicleViews } from './vehicleViews.ts';
 import { SignalLights } from './signalLights.ts';
 import { IndustryRenderer } from './industryMesh.ts';
 import { FloatingText } from './floatingText.ts';
@@ -35,6 +35,8 @@ const SKY = new THREE.Color('#a8c8e6');
 /** Camera distance and tilt of the vehicle views in vehicle windows. */
 const VIEW_DISTANCE = 6;
 const VIEW_PITCH = 0.75;
+/** Camera distance of the place views in news previews: far enough to see what happened around. */
+const PLACE_VIEW_DISTANCE = 16;
 
 /** Draw a shared material normally, see-through or not at all. */
 function applyViewMode(mat: THREE.Material, mode: ViewMode, opacity: number): void {
@@ -81,6 +83,8 @@ export class GameRenderer {
   private readonly viewCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
   /** Where each viewed vehicle roughly is: its tiles stay loaded and it is drawn even when far away. */
   private viewPoints = new Map<number, { x: number; z: number }>();
+  /** The places shown in place views: their tiles stay loaded. */
+  private placePoints: { x: number; z: number }[] = [];
 
   private readonly canvas: HTMLCanvasElement;
   private readonly world: ClientWorld;
@@ -238,8 +242,8 @@ export class GameRenderer {
     }
   }
 
-  /** Rough positions of the vehicles shown in vehicle windows: on their way, or in their depot. */
-  private locateViewedVehicles(): void {
+  /** Rough positions of the vehicles shown in vehicle windows (on their way, or in their depot), and the places in place views. */
+  private locateViews(): void {
     this.viewPoints.clear();
     const map = this.world.map;
     for (const id of vehicleViews.values()) {
@@ -249,14 +253,15 @@ export class GameRenderer {
       if (p) this.viewPoints.set(id, { x: p.x + 0.5, z: p.y + 0.5 });
       else if (t && t.status === 'depot' && t.depot >= 0) this.viewPoints.set(id, { x: (t.depot % map.width) + 0.5, z: Math.floor(t.depot / map.width) + 0.5 });
     }
+    this.placePoints = [...placeViews.values()].map((tile) => ({ x: (tile % map.width) + 0.5, z: Math.floor(tile / map.width) + 0.5 }));
   }
 
   /**
-   * Draws each vehicle view into a corner of the main canvas and copies it to the view's own
-   * canvas, before the main frame is drawn over it.
+   * Draws each vehicle and place view into a corner of the main canvas and copies it to the
+   * view's own canvas, before the main frame is drawn over it.
    */
-  private drawVehicleViews(): void {
-    if (vehicleViews.size === 0) return;
+  private drawViews(): void {
+    if (vehicleViews.size === 0 && placeViews.size === 0) return;
     const r = this.renderer;
     const ratio = r.getPixelRatio();
     const fullW = this.canvas.clientWidth;
@@ -267,37 +272,42 @@ export class GameRenderer {
     const cp = Math.cos(VIEW_PITCH);
     const fog = this.scene.fog as THREE.Fog;
     const { near, far } = fog;
-    fog.near = VIEW_DISTANCE * 2.5;
-    fog.far = VIEW_DISTANCE * 9 + 300;
-    r.setScissorTest(true);
-    for (const [canvas, id] of vehicleViews) {
+    const draw = (canvas: HTMLCanvasElement, at: { x: number; y: number; z: number } | undefined, distance: number) => {
       const ctx = canvas.getContext('2d');
       const w = Math.min(canvas.clientWidth, fullW);
       const h = Math.min(canvas.clientHeight, fullH);
-      if (!ctx || w === 0 || h === 0) continue;
+      if (!ctx || w === 0 || h === 0) return;
       const bw = Math.round(w * ratio);
       const bh = Math.round(h * ratio);
       if (canvas.width !== bw) canvas.width = bw;
       if (canvas.height !== bh) canvas.height = bh;
-      // The lead unit as drawn this frame, else roughly where the vehicle is.
-      const pick = this.trains.picks.find((q) => q.trainId === id);
-      const at = pick?.pos ?? this.viewPoints.get(id);
       if (!at) {
         ctx.fillStyle = '#1b2430';
         ctx.fillRect(0, 0, bw, bh);
-        continue;
+        return;
       }
-      const y = pick ? pick.pos.y : this.world.map.heightAt(at.x, at.z) * HEIGHT_SCALE;
+      fog.near = distance * 2.5;
+      fog.far = distance * 9 + 300;
       cam.aspect = w / h;
-      cam.position.set(at.x + Math.sin(yaw) * cp * VIEW_DISTANCE, y + Math.sin(VIEW_PITCH) * VIEW_DISTANCE, at.z + Math.cos(yaw) * cp * VIEW_DISTANCE);
-      cam.lookAt(at.x, y, at.z);
+      cam.position.set(at.x + Math.sin(yaw) * cp * distance, at.y + Math.sin(VIEW_PITCH) * distance, at.z + Math.cos(yaw) * cp * distance);
+      cam.lookAt(at.x, at.y, at.z);
       cam.updateProjectionMatrix();
       r.setViewport(0, 0, w, h);
       r.setScissor(0, 0, w, h);
       r.render(this.scene, cam);
       // The drawing buffer's origin is at the bottom left, the image's at the top left.
       ctx.drawImage(this.canvas, 0, bufferH - bh, bw, bh, 0, 0, bw, bh);
+    };
+    const ground = (p: { x: number; z: number }) => ({ x: p.x, y: this.world.map.heightAt(p.x, p.z) * HEIGHT_SCALE, z: p.z });
+    r.setScissorTest(true);
+    for (const [canvas, id] of vehicleViews) {
+      // The lead unit as drawn this frame, else roughly where the vehicle is.
+      const pick = this.trains.picks.find((q) => q.trainId === id);
+      const p = this.viewPoints.get(id);
+      draw(canvas, pick ? pick.pos : p && ground(p), VIEW_DISTANCE);
     }
+    const w = this.world.map.width;
+    for (const [canvas, tile] of placeViews) draw(canvas, ground({ x: (tile % w) + 0.5, z: Math.floor(tile / w) + 0.5 }), PLACE_VIEW_DISTANCE);
     r.setScissorTest(false);
     r.setViewport(0, 0, fullW, fullH);
     fog.near = near;
@@ -495,7 +505,7 @@ export class GameRenderer {
     this.lastTime = now;
 
     this.controller.update(dt);
-    this.locateViewedVehicles();
+    this.locateViews();
     this.trains.update(now, useApp.getState().global?.speed ?? 1, this.controller.target, this.controller.distance, new Set(this.viewPoints.keys()));
     this.followVehicle(now);
     // Ambient rumble: louder with more vehicles near the focus, and when zoomed in.
@@ -512,7 +522,7 @@ export class GameRenderer {
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;
     fog.far = this.controller.distance * 9 + 300;
-    this.chunks.update(this.camera, this.controller.target, this.controller.distance, [...this.viewPoints.values()]);
+    this.chunks.update(this.camera, this.controller.target, this.controller.distance, [...this.viewPoints.values(), ...this.placePoints]);
 
     if (this.hoverDirty && this.tool) {
       this.hoverDirty = false;
@@ -522,7 +532,7 @@ export class GameRenderer {
       );
     }
 
-    this.drawVehicleViews();
+    this.drawViews();
     this.renderer.render(this.scene, this.camera);
     this.labels.update(this.camera, this.canvas.clientWidth, this.canvas.clientHeight, this.controller.distance);
     this.floaters.update(this.camera, this.canvas.clientWidth, this.canvas.clientHeight);
