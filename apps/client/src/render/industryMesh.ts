@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { buildingMaterial } from './buildings.ts';
 import { GeoBuilder, lin } from './geoBuilder.ts';
+import { tileHash } from './terrainMesh.ts';
 
 const C = {
   gravel: lin('#7d7a74'),
@@ -78,10 +79,20 @@ function build(g: GeoBuilder, ind: Industry, model: IndustryModel, y: number): v
     case 'forest': {
       const tropical = ind.type === 'lumber_camp';
       pad(g, ind, y, tropical ? C.jungleFloor : C.forestFloor);
-      for (let i = 0; i < w * h * 3; i++) {
-        const tx = x + 0.25 + ((i * 0.618) % 1) * (w - 0.5);
-        const tz = z + 0.25 + ((i * 0.377 + 0.13) % 1) * (h - 0.5);
-        const s = 0.7 + ((i * 0.29) % 1) * 0.5;
+      // The R2 low-discrepancy sequence spreads trees evenly over the pad; a per-tree jitter
+      // and a per-forest start keep it from reading as a grid.
+      const n = w * h * 3;
+      const jitter = 0.3 / Math.sqrt(n);
+      const u0 = tileHash(x, z, 101);
+      const v0 = tileHash(x, z, 102);
+      for (let i = 0; i < n; i++) {
+        const u = (u0 + i * 0.7548776662466927) % 1;
+        const v = (v0 + i * 0.5698402909980532) % 1;
+        const ju = Math.min(1, Math.max(0, u + (tileHash(x, z, 200 + i * 2) - 0.5) * jitter));
+        const jv = Math.min(1, Math.max(0, v + (tileHash(x, z, 201 + i * 2) - 0.5) * jitter));
+        const tx = x + 0.25 + ju * (w - 0.5);
+        const tz = z + 0.25 + jv * (h - 0.5);
+        const s = 0.7 + tileHash(x, z, 300 + i) * 0.5;
         g.color(C.trunk).aabb(tx - 0.02, top, tz - 0.02, tx + 0.02, top + 0.12 * s, tz + 0.02);
         g.color(tropical ? C.jungle : C.pine);
         cone(g, tx, tz, top + 0.08 * s, 0.55 * s, 0.17 * s);
