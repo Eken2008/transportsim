@@ -48,7 +48,7 @@ export class RoadTool implements Tool {
     this.lastKey = key;
     const r = this.start ? client.preview(cmd) : null;
     const remove = cmd.type === 'removeRoad';
-    this.ghost.show(tiles, !this.start || r?.ok ? (remove ? REMOVE : OK) : BAD);
+    this.ghost.show(tiles, !this.start || r?.ok ? (remove ? REMOVE : OK) : BAD, undefined, r?.ok ? r.foundations : undefined);
     useApp.setState({
       hover: {
         x: hit.tileX,
@@ -159,7 +159,7 @@ export class RoadPlaceTool implements Tool {
     if (key === this.lastKey) return;
     this.lastKey = key;
     const r = client.preview(cmd);
-    this.ghost.show(this.footprint(hit), r?.ok ? OK : BAD, arrow);
+    this.ghost.show(this.footprint(hit), r?.ok ? OK : BAD, arrow, r?.ok ? r.foundations : undefined);
     useApp.setState({
       hover: {
         x: hit.tileX,

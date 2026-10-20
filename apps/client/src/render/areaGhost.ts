@@ -1,4 +1,4 @@
-import { EDGE_MID_X, EDGE_MID_Y, HEIGHT_SCALE, type GameMap } from '@transportsim/shared';
+import { EDGE_MID_X, EDGE_MID_Y, HEIGHT_SCALE, foundationCorners, type GameMap } from '@transportsim/shared';
 import * as THREE from 'three';
 import { GeoBuilder } from './geoBuilder.ts';
 
@@ -21,15 +21,19 @@ export class AreaGhost {
     this.mesh.visible = false;
   }
 
-  show(tiles: { x: number; y: number }[], color: string, arrow?: { x: number; y: number; edge: number }): void {
+  /** `foundations` (tile → Foundation) are those a build would lay, so the highlight sits on the built surface. */
+  show(tiles: { x: number; y: number }[], color: string, arrow?: { x: number; y: number; edge: number }, foundations?: ReadonlyMap<number, number>): void {
+    const map = this.map;
     const g = new GeoBuilder().color(WHITE);
-    const v = (x: number, y: number) => new THREE.Vector3(x, this.map.cornerHeight(x, y) * HEIGHT_SCALE + LIFT, y);
     for (const { x, y } of tiles) {
-      if (!this.map.inBounds(x, y)) continue;
-      g.quad(v(x, y), v(x, y + 1), v(x + 1, y + 1), v(x + 1, y));
+      if (!map.inBounds(x, y)) continue;
+      const kind = foundations?.get(map.tileIndex(x, y));
+      const [nw, ne, se, sw] = kind === undefined ? map.tileCorners(x, y) : foundationCorners(map.rawCorners(x, y), kind);
+      const v = (cx: number, cy: number, h: number) => new THREE.Vector3(cx, h * HEIGHT_SCALE + LIFT, cy);
+      g.quad(v(x, y, nw), v(x, y + 1, sw), v(x + 1, y + 1, se), v(x + 1, y, ne));
     }
-    if (arrow && this.map.inBounds(arrow.x, arrow.y)) {
-      const h = this.map.tileMaxHeight(arrow.x, arrow.y) * HEIGHT_SCALE + LIFT + 0.02;
+    if (arrow && map.inBounds(arrow.x, arrow.y)) {
+      const h = map.tileMaxHeight(arrow.x, arrow.y) * HEIGHT_SCALE + LIFT + 0.02;
       const cx = arrow.x + 0.5;
       const cz = arrow.y + 0.5;
       const ex = arrow.x + EDGE_MID_X[arrow.edge as 0]!;

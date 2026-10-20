@@ -8,6 +8,7 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Towns:** each town council keeps a reputation for every company. Bulldozing the town's houses and streets costs it, and busy, well-rated stations win it back. With a poor reputation the council refuses new stations, and it refuses demolition that would leave the company very poor.
 > - **Rail building:** OpenTTD-style track with autorail dragging, bridges (four types by era) and tunnels; standard, electrified and high-speed track with speed limits.
 > - **Stations and depots:** multi-platform stations and depots.
+> - **Foundations:** as in OpenTTD, track, roads, stations, depots and airports can go on gentle slopes, raised on foundations with a cliff down to the land beside them. Straight track and roads ramp over a raised corner, a corner piece of track sits on the raised half of its tile with the cliff running diagonally beside it, and stations and depots are levelled. Track and roads don't cross a cliff.
 > - **Signals:** block signals, pre-signals (entry, exit, combo) and path signals with route reservation.
 > - **Trains:** an 1850–2050 vehicle catalogue; physics with power, tractive effort, gradients and curve, bridge and track speed limits; pathfinding and reversing at termini.
 > - **Upkeep:** reliability that decays between services, breakdowns (a game setting), automatic service trips, ageing, autorenew and replacement rules.

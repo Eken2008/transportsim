@@ -123,8 +123,11 @@ describe('track commands', () => {
     map.setWater(map.tileIndex(7, 7));
     expect(executeCommand(state, A, { type: 'buildTrack', pieces: [7, 7, Piece.X] }).ok).toBe(false);
     map.heights[map.cornerIndex(11, 10)] = 3; // NE corner of tile (10,10)
-    expect(executeCommand(state, A, { type: 'buildTrack', pieces: [10, 10, Piece.X] }).ok).toBe(false);
     expect(executeCommand(state, A, { type: 'buildTrack', pieces: [10, 10, Piece.SW] }).ok).toBe(true);
+    // A steep slope (two opposite corners a level up and down) can't even be levelled.
+    map.heights[map.cornerIndex(21, 20)] = 3;
+    map.heights[map.cornerIndex(20, 21)] = 1;
+    expect(executeCommand(state, A, { type: 'buildTrack', pieces: [20, 20, Piece.X] }).ok).toBe(false);
   });
 
   test('terraforming is blocked by track', () => {

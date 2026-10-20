@@ -4,6 +4,8 @@ import type { GameMap } from '../world/map.ts';
 /** Base construction costs (before economy difficulty scaling). */
 export const COSTS = {
   terraformCorner: 400,
+  /** Levelling a sloped tile to build on it (see Foundation). */
+  foundation: 300,
   clearTree: 60,
   /** Buying up a piece of a farm's field to build on it. */
   clearField: 700,

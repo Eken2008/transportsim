@@ -2,6 +2,7 @@ import { CROSSING_FLAG } from '../commands/track.ts';
 import { ROAD_E, ROAD_N, ROAD_S, ROAD_W } from '../town/road.ts';
 import { TileType } from '../world/constants.ts';
 import type { GameMap } from '../world/map.ts';
+import { foundationEdge, trackFoundation } from '../world/foundation.ts';
 import { HEAD_BRIDGE, HEAD_TUNNEL } from './structures.ts';
 import { linkCandidates } from './links.ts';
 import {
@@ -38,8 +39,24 @@ const LOOSE_START_COST = 1.5;
 const ALIGN_COST = 0.6;
 /** Building over a tile that already has track (it is crossed, not joined): only a tie-breaker. */
 const DIAMOND_COST = 0.02;
+/**
+ * A foundation for a piece that doesn't fit the slope: only a tie-breaker. Routes go over slopes
+ * on foundations (with cliffs beside them) rather than detouring around them.
+ */
+const FOUNDATION_COST = 0.02;
 
-type Build = 'existing' | 'new' | null;
+/** 'level': a new piece that needs a foundation under its tile (see trackFoundation). */
+type Build = 'existing' | 'new' | 'level' | null;
+
+/** The pieces on a tile. */
+const piecesOf = (bits: number) => [0, 1, 2, 3, 4, 5].filter((p) => hasPiece(bits, p));
+
+/** The foundation `piece` would have under it once built on bare land or plain track (-1: can't be built). */
+function plannedFoundation(map: GameMap, x: number, y: number, piece: number): number {
+  const i = map.tileIndex(x, y);
+  const keep = map.layers.type[i] === TileType.Rail ? piecesOf(map.layers.track[i]!) : [];
+  return trackFoundation(map.rawCorners(x, y), map.layers.foundation[i]!, [piece], keep);
+}
 
 /** Can `piece` be on this tile for `owner` (already there, or buildable)? */
 function pieceStatus(map: GameMap, x: number, y: number, piece: number, owner: number): Build {
@@ -53,9 +70,11 @@ function pieceStatus(map: GameMap, x: number, y: number, piece: number, owner: n
     if (type !== TileType.Rail) return null;
     const data = map.layers.data[i]!;
     if (data & (CROSSING_FLAG | HEAD_BRIDGE | HEAD_TUNNEL) || map.layers.signals[i]) return null;
-    return pieceFitsSlope(map.tileCorners(x, y), piece) ? 'new' : null;
   }
-  if (type === TileType.Clear) return pieceFitsSlope(map.tileCorners(x, y), piece) ? 'new' : null;
+  if (type === TileType.Rail || type === TileType.Clear) {
+    const f = plannedFoundation(map, x, y, piece);
+    return f < 0 ? null : f === map.layers.foundation[i] ? 'new' : 'level';
+  }
   if (type === TileType.Road) {
     const road = map.layers.data[i]! & 0xf;
     const ok = (piece === 0 && road === (ROAD_N | ROAD_S)) || (piece === 1 && road === (ROAD_E | ROAD_W));
@@ -121,7 +140,14 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
   // The route should start and end heading the way the player dragged.
   const dragHeading = (Math.round(Math.atan2(y1 - y0, x1 - x0) / (Math.PI / 4)) + 8) % 8;
   const misalign = (td: number) => (x0 === x1 && y0 === y1 ? 0 : turnSteps(TD_HEADING[td]!, dragHeading) * ALIGN_COST);
-  const pieceCost = (status: Build, piece: number) => pieceLength(piece) * (status === 'existing' ? EXISTING_FACTOR : 1);
+  const pieceCost = (status: Build, piece: number) =>
+    pieceLength(piece) * (status === 'existing' ? EXISTING_FACTOR : 1) + (status === 'level' ? FOUNDATION_COST : 0);
+  /** Height where a piece meets the edge `e` of its tile, once built (on any foundation it needs). */
+  const edgeLevel = (x: number, y: number, piece: number, e: number) => {
+    if (pieceStatus(map, x, y, piece, opts.owner) !== 'level') return map.edgeLevel(x, y, e);
+    const [a, b] = foundationEdge(map.rawCorners(x, y), plannedFoundation(map, x, y, piece), e);
+    return a === b ? a : -1;
+  };
 
   // Start: any piece on the start tile. The planner doesn't steer towards connections; pieces
   // built together connect, and loose ends connect to track they touch (see rail/links.ts).
@@ -131,7 +157,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
     let cost = pieceCost(status, tdPiece(td)) + misalign(td);
     // Starting on a tile with track: a new first piece should begin where that track comes in
     // (branching off it), not sit beside it unconnected — otherwise continue the existing piece.
-    if (status === 'new' && map.layers.track[map.tileIndex(x0, y0)]) {
+    if (status !== 'existing' && map.layers.track[map.tileIndex(x0, y0)]) {
       if (linkCandidates(map, map.tileIndex(x0, y0), tdPiece(td), tdEntry(td)).length === 0) cost += LOOSE_START_COST;
     }
     const k = key(x0, y0, td, status === 'existing');
@@ -160,6 +186,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
     const ny = y + EDGE_DY[exit];
     if (nx < bx0 || ny < by0 || nx > bx1 || ny > by1) continue;
     const entry = OPPOSITE_EDGE[exit];
+    const exitLevel = edgeLevel(x, y, tdPiece(td), exit);
     for (let p = 0; p < 6; p++) {
       const [e0, e1] = PIECE_EDGES[p]!;
       if (e0 !== entry && e1 !== entry) continue;
@@ -167,7 +194,7 @@ export function planTrack(map: GameMap, x0: number, y0: number, x1: number, y1: 
       const turn = turnSteps(TD_HEADING[td]!, TD_HEADING[ntd]!);
       if (turn > 1) continue;
       const status = pieceStatus(map, nx, ny, p, opts.owner);
-      if (!status) continue;
+      if (!status || edgeLevel(nx, ny, p, entry) !== exitLevel) continue; // no track down a cliff
       const atEnd = nx === x1 && ny === y1;
       // A route connects to other track only where the drag starts and ends. In between it may
       // keep following track it started on, or cross track at right angles — never join it.

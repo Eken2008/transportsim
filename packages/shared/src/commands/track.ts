@@ -1,5 +1,5 @@
 import { COSTS, clearCost } from '../economy/costs.ts';
-import { PIECE_COUNT, Piece, hasPiece, isDiagonal, pieceFitsSlope } from '../rail/track.ts';
+import { PIECE_COUNT, Piece, hasPiece, isDiagonal } from '../rail/track.ts';
 import { RAIL_TYPES, railTypeError } from '../rail/railTypes.ts';
 import { WAYPOINT_FLAG } from '../rail/waypoint.ts';
 import type { GameState } from '../sim/state.ts';
@@ -7,6 +7,7 @@ import { HEAD_BRIDGE, HEAD_TUNNEL, structuresAt } from '../rail/structures.ts';
 import { linkPlaced, pendingLinks, unlinkPieces } from '../rail/links.ts';
 import { ROAD_E, ROAD_N, ROAD_S, ROAD_W } from '../town/road.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
+import { pieceFitsSurface, trackFoundation } from '../world/foundation.ts';
 import { fail, isInt, type CommandHandler, type CommandContext, type PlanResult } from './types.ts';
 
 /** On Rail tiles, data bit 8 marks a level crossing (road bits stay in bits 0-3). */
@@ -64,11 +65,33 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
     // Accumulate new bits per tile so several pieces on one tile validate together.
     const add = new Map<number, number>();
     let cost = 0;
+    // Each tile's surface must carry all its pieces: bare land and plain track may get a
+    // foundation for pieces that don't fit the slope (see trackFoundation).
+    const byTile = new Map<number, number[]>();
+    for (const { x, y, p } of parsed) {
+      const i = map.tileIndex(x, y);
+      byTile.set(i, [...(byTile.get(i) ?? []), p]);
+    }
+    const foundations = new Map<number, number>();
+    for (const [i, ps] of byTile) {
+      const x = i % map.width;
+      const y = (i - x) / map.width;
+      const type = map.layers.type[i];
+      const raw = map.rawCorners(x, y);
+      const current = map.layers.foundation[i]!;
+      const plain = type === TileType.Clear || (type === TileType.Rail && !(map.layers.data[i]! & (CROSSING_FLAG | HEAD_BRIDGE | HEAD_TUNNEL)));
+      const bits = type === TileType.Rail ? map.layers.track[i]! : 0;
+      const keep = [0, 1, 2, 3, 4, 5].filter((p) => hasPiece(bits, p));
+      const kind = plain ? trackFoundation(raw, current, ps, keep) : ps.every((p) => pieceFitsSurface(raw, current, p)) ? current : -1;
+      if (kind < 0) return fail(`Track can't go on that slope ${at(x, y)}`);
+      if (kind !== current) {
+        foundations.set(i, kind);
+        cost += COSTS.foundation;
+      }
+    }
     for (const { x, y, p } of parsed) {
       const i = map.tileIndex(x, y);
       const type = map.layers.type[i];
-      const corners = map.tileCorners(x, y);
-      if (!pieceFitsSlope(corners, p)) return fail(`Track can't go on that slope ${at(x, y)}`);
       if (type === TileType.Rail && map.layers.data[i]! & (HEAD_BRIDGE | HEAD_TUNNEL)) return fail(`Object in the way ${at(x, y)}`);
       for (const s of structuresAt(map, i)) {
         if (s.kind === 'bridge' && map.tileMaxHeight(x, y) > s.level - 2) return fail(`Not enough clearance under the bridge ${at(x, y)}`);
@@ -107,6 +130,7 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
     return {
       ok: true,
       cost: state.cost(cost),
+      foundations,
       commit() {
         const dirtyChunks = new Set<number>();
         let roads = false;
@@ -121,6 +145,7 @@ export const buildTrackHandler: CommandHandler<BuildTrackCommand> = {
             map.layers.data[i] = 0;
           }
           if (type !== TileType.Rail) map.layers.railType[i] = railType;
+          if (foundations.has(i)) map.layers.foundation[i] = foundations.get(i)!;
           map.layers.type[i] = TileType.Rail;
           map.layers.owner[i] = company;
           map.layers.track[i] = map.layers.track[i]! | bits;

@@ -48,7 +48,7 @@ abstract class PreviewTool implements Tool {
     if (key === this.lastKey) return;
     this.lastKey = key;
     const r = client.preview(d.cmd);
-    this.ghost.show(d.tiles, r?.ok ? (d.color ?? OK) : BAD, d.arrow);
+    this.ghost.show(d.tiles, r?.ok ? (d.color ?? OK) : BAD, d.arrow, r?.ok ? r.foundations : undefined);
     const height = client.world?.map.cornerHeight(hit.cornerX, hit.cornerY) ?? 0;
     useApp.setState({
       hover: { x: hit.tileX, y: hit.tileY, height, cost: r?.ok ? r.cost : undefined, error: r && !r.ok ? r.error : undefined, info: r?.ok ? r.note : undefined },

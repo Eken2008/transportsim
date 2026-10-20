@@ -1,4 +1,5 @@
 import { CHUNK_SIZE, Ground, MAX_TREES, OWNER_NONE, TileType } from './constants.ts';
+import { foundationCorners, foundationEdge, halfCorner, isGentleSlope } from './foundation.ts';
 
 type TypedArrayCtor =
   | Uint8ArrayConstructor
@@ -29,6 +30,8 @@ export const TILE_LAYERS = {
   town: Uint16Array,
   /** Track type of Rail, Station and Depot tiles (see rail/railTypes.ts). */
   railType: Uint8Array,
+  /** Foundation under a built tile on a slope (see Foundation). */
+  foundation: Uint8Array,
 } satisfies Record<string, TypedArrayCtor>;
 
 export type LayerName = keyof typeof TILE_LAYERS;
@@ -90,12 +93,57 @@ export class GameMap {
     return this.heights[y * (this.width + 1) + x]!;
   }
 
-  /** Corner heights of a tile in order NW, NE, SE, SW. */
-  tileCorners(x: number, y: number): [number, number, number, number] {
+  /** Terrain corner heights of a tile in order NW, NE, SE, SW, ignoring any foundation. */
+  rawCorners(x: number, y: number): [number, number, number, number] {
     const w = this.width + 1;
     const i = y * w + x;
     const h = this.heights;
     return [h[i]!, h[i + 1]!, h[i + w + 1]!, h[i + w]!];
+  }
+
+  /**
+   * Surface corner heights of a tile in order NW, NE, SE, SW: the terrain, or the top of its
+   * foundation. A half-tile foundation has no single surface (its raw corners are returned):
+   * ask edgeCorners() for edges.
+   */
+  tileCorners(x: number, y: number): [number, number, number, number] {
+    const c = this.rawCorners(x, y);
+    const f = this.layers.foundation[y * this.width + x]!;
+    return f ? foundationCorners(c, f) : c;
+  }
+
+  /** Surface heights at the two corners of edge `e` (in EDGE_CORNERS order), foundations included. */
+  edgeCorners(x: number, y: number, e: number): [number, number] {
+    return foundationEdge(this.rawCorners(x, y), this.layers.foundation[y * this.width + x]!, e);
+  }
+
+  /** Height of edge `e` of a tile's surface, or -1 if the edge is not level. */
+  edgeLevel(x: number, y: number, e: number): number {
+    const [a, b] = this.edgeCorners(x, y, e);
+    return a === b ? a : -1;
+  }
+
+  /** Height of a flat tile's surface (a levelled tile's foundation top); the NW corner otherwise. */
+  surfaceHeight(x: number, y: number): number {
+    return this.layers.foundation[y * this.width + x] ? this.tileMaxHeight(x, y) : this.cornerHeight(x, y);
+  }
+
+  /** Could a foundation level this bare tile: a gentle slope (not flat, not steep)? */
+  canLevel(x: number, y: number): boolean {
+    return isGentleSlope(this.rawCorners(x, y));
+  }
+
+  /**
+   * Do the surfaces of `tile` and its neighbour `n` across edge `e` meet without a cliff?
+   * Neighbours share terrain corners, so only foundations can part them.
+   */
+  surfacesMeet(tile: number, e: number, n: number): boolean {
+    const f = this.layers.foundation;
+    if (!f[tile] && !f[n]) return true;
+    const w = this.width;
+    const [a0, a1] = this.edgeCorners(tile % w, Math.floor(tile / w), e);
+    const [b0, b1] = this.edgeCorners(n % w, Math.floor(n / w), (e + 2) & 3);
+    return a0 === b0 && a1 === b1;
   }
 
   tileMinHeight(x: number, y: number): number {
@@ -118,6 +166,10 @@ export class GameMap {
     const fx = Math.min(Math.max(wx - x, 0), 1);
     const fy = Math.min(Math.max(wz - y, 0), 1);
     const [nw, ne, se, sw] = this.tileCorners(x, y);
+    const k = halfCorner(this.layers.foundation[y * this.width + x]!);
+    if (k >= 0 && (k === 0 ? fx + fy < 1 : k === 1 ? fx > fy : k === 2 ? fx + fy > 1 : fx < fy)) {
+      return Math.max(nw, ne, se, sw); // on the raised half of a half-tile foundation
+    }
     // Matches the triangle split used by the terrain mesh (see tileSplitsNWSE).
     if (tileSplitsNWSE(nw, ne, se, sw)) {
       // Diagonal NW-SE: triangles (nw, ne, se) and (nw, se, sw)
@@ -148,6 +200,7 @@ export class GameMap {
     this.layers.signals[i] = 0;
     this.layers.links[i] = 0;
     this.layers.railType[i] = 0;
+    this.layers.foundation[i] = 0;
   }
 
   setWater(i: number): void {
@@ -159,6 +212,7 @@ export class GameMap {
     this.layers.signals[i] = 0;
     this.layers.links[i] = 0;
     this.layers.railType[i] = 0;
+    this.layers.foundation[i] = 0;
   }
 
   chunkIndex(cx: number, cy: number): number {

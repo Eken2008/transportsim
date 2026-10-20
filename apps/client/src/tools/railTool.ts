@@ -69,7 +69,7 @@ export class RailTool implements Tool {
     if (key === this.lastKey) return;
     this.lastKey = key;
     const r = client.preview(this.command(pieces, remove));
-    this.ghost.show(pieces, r?.ok ? (remove ? REMOVE_OK : BUILD_OK) : BAD);
+    this.ghost.show(pieces, r?.ok ? (remove ? REMOVE_OK : BUILD_OK) : BAD, r?.ok ? r.foundations : undefined);
     const height = client.world?.map.cornerHeight(hit.cornerX, hit.cornerY) ?? 0;
     useApp.setState({
       hover: { x: hit.tileX, y: hit.tileY, height, cost: r?.ok ? r.cost : undefined, error: r && !r.ok ? r.error : undefined },

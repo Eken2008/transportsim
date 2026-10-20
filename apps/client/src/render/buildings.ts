@@ -144,7 +144,7 @@ export function buildHouses(map: GameMap, cx: number, cy: number): THREE.Instanc
       const y = (i - x) / map.width;
       const face = (map.layers.data[i]! >> 8) & 3;
       const h = tileHash(x, y, 7);
-      tmp.position.set(x + 0.5, map.cornerHeight(x, y) * HEIGHT_SCALE, y + 0.5);
+      tmp.position.set(x + 0.5, map.surfaceHeight(x, y) * HEIGHT_SCALE, y + 0.5);
       tmp.rotation.set(0, FACE_ROT[face]!, 0);
       const s = 0.92 + h * 0.16;
       tmp.scale.set(s, 0.9 + tileHash(x, y, 9) * 0.25, s);
@@ -259,7 +259,7 @@ const HANGAR = lin('#7f8a93');
 
 /** One airport tile, by its role (runway along the north row, gates and hangar along the south). */
 function addAirportTile(g: GeoBuilder, map: GameMap, x: number, y: number, role: number): void {
-  const h = map.cornerHeight(x, y) * HEIGHT_SCALE + 0.012;
+  const h = map.surfaceHeight(x, y) * HEIGHT_SCALE + 0.012;
   const isRole = (dx: number, r: number) => map.inBounds(x + dx, y) && map.layers.type[map.tileIndex(x + dx, y)] === TileType.Airport && map.layers.track[map.tileIndex(x + dx, y)] === r;
   switch (role) {
     case AirportRole.Runway: {
@@ -424,7 +424,7 @@ function addWaterworks(g: GeoBuilder, map: GameMap, x: number, y: number, i: num
 
 /** A garage with its door to the road at `exit`. */
 function addRoadDepot(g: GeoBuilder, map: GameMap, x: number, y: number, exit: number): void {
-  const h = map.cornerHeight(x, y) * HEIGHT_SCALE;
+  const h = map.surfaceHeight(x, y) * HEIGHT_SCALE;
   const m = 0.1;
   g.color(GARAGE).aabb(x + m, h, y + m, x + 1 - m, h + 0.42, y + 1 - m);
   g.color(STOP_ROOF).gable(x + m, y + m, x + 1 - m, y + 1 - m, h + 0.42, 0.14, 0.04, exit === 1 || exit === 3);

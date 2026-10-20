@@ -1,6 +1,9 @@
 import {
   CHUNK_SIZE,
   EDGE_CORNERS,
+  EDGE_DX,
+  EDGE_DY,
+  halfCorner,
   FIELD_CROP_SHIFT,
   headInfo,
   headLevel,
@@ -37,6 +40,8 @@ export const CROP_RGB: [number, number, number][] = [rgb('#d2b35a'), rgb('#7e5f3
 const HIGH_GRASS = rgb('#73984f');
 const SEABED = rgb('#b3a274');
 const ROCK = rgb('#9c968c');
+/** Stone walls of foundations, where a levelled tile stands above the land beside it. */
+const FOUNDATION = rgb('#a69c8b');
 
 function rgb(hex: string): [number, number, number] {
   const c = new THREE.Color(hex); // ColorManagement converts sRGB hex to linear
@@ -96,6 +101,49 @@ export function groundColor(map: GameMap, x: number, y: number, out: THREE.Color
 /** Tile-local x, z of the NW, NE, SE and SW corners. */
 const CORNER_XZ = [[0, 0], [1, 0], [1, 1], [0, 1]] as const;
 
+/**
+ * Cliff walls of the tiles on foundations in a chunk: x1, z1, x2, z2, then the top and bottom
+ * level at each end, wound to face the lower side. Walls run along tile edges, down from the
+ * foundation to the surface of the tile beside it (or the terrain at the map's edge), and across
+ * half-tile foundations, down from the raised half to the low one.
+ */
+function foundationWalls(map: GameMap, x0: number, y0: number): number[] {
+  const out: number[] = [];
+  const wall = (ax: number, az: number, bx: number, bz: number, ta: number, la: number, tb: number, lb: number, ox: number, oz: number) => {
+    if (la >= ta && lb >= tb) return;
+    // Facing (ox, oz): the normal of (top a, top b, low b) is (bz - az, 0, ax - bx) times the drop.
+    if ((bz - az) * ox + (ax - bx) * oz >= 0) out.push(ax, az, bx, bz, ta, Math.min(ta, la), tb, Math.min(tb, lb));
+    else out.push(bx, bz, ax, az, tb, Math.min(tb, lb), ta, Math.min(ta, la));
+  };
+  const found = map.layers.foundation;
+  for (let ty = y0; ty < y0 + CHUNK_SIZE; ty++) {
+    for (let tx = x0; tx < x0 + CHUNK_SIZE; tx++) {
+      const kind = found[map.tileIndex(tx, ty)]!;
+      if (!kind) continue;
+      const raw = map.rawCorners(tx, ty);
+      for (let e = 0; e < 4; e++) {
+        const nx = tx + EDGE_DX[e]!;
+        const ny = ty + EDGE_DY[e]!;
+        // Both edges list their corners in the same order (west to east, north to south).
+        const [ta, tb] = map.edgeCorners(tx, ty, e);
+        const [la, lb] = map.inBounds(nx, ny) ? map.edgeCorners(nx, ny, (e + 2) & 3) : EDGE_CORNERS[e]!.map((c) => raw[c]!);
+        const [ca, cb] = EDGE_CORNERS[e]!;
+        wall(tx + CORNER_XZ[ca]![0], ty + CORNER_XZ[ca]![1], tx + CORNER_XZ[cb]![0], ty + CORNER_XZ[cb]![1], ta, la!, tb, lb!, EDGE_DX[e]!, EDGE_DY[e]!);
+      }
+      const k = halfCorner(kind);
+      if (k >= 0) {
+        // Across the tile between the corners beside the raised one, facing the low corner.
+        const top = Math.max(...raw);
+        const [a, b, low] = [(k + 1) & 3, (k + 3) & 3, (k + 2) & 3];
+        const [ax, az] = CORNER_XZ[a]!;
+        const [bx, bz] = CORNER_XZ[b]!;
+        wall(tx + ax, ty + az, tx + bx, ty + bz, top, raw[a]!, top, raw[b]!, CORNER_XZ[low]![0] - CORNER_XZ[k]![0], CORNER_XZ[low]![1] - CORNER_XZ[k]![1]);
+      }
+    }
+  }
+  return out;
+}
+
 /** Floor level of a tunnel portal's cutting, or -1 if the tile isn't a portal. */
 function cuttingLevel(map: GameMap, x: number, y: number): number {
   const i = map.tileIndex(x, y);
@@ -120,7 +168,9 @@ export function buildTerrainGeometry(map: GameMap, cx: number, cy: number, lod: 
       for (let tx = x0; tx < x0 + CHUNK_SIZE; tx++) if (cuttingLevel(map, tx, ty) >= 0) cuttings.push(tx, ty);
     }
   }
-  const triCount = cells * cells * 2 + cells * 4 * 2 + (cuttings.length / 2) * 3 * 4;
+  // Levelled tiles (close up) are flat at their foundation's top, with cliff walls around them.
+  const walls = lod === 0 ? foundationWalls(map, x0, y0) : [];
+  const triCount = cells * cells * 2 + cells * 4 * 2 + (cuttings.length / 2) * 3 * 4 + (walls.length / 8) * 2;
   const pos = new Float32Array(triCount * 9);
   const col = new Float32Array(triCount * 9);
   let p = 0;
@@ -151,10 +201,27 @@ export function buildTerrainGeometry(map: GameMap, cx: number, cy: number, lod: 
       const ty = y0 + j * step;
       const ex = tx + step;
       const ey = ty + step;
-      const nw = H(tx, ty), ne = H(ex, ty), se = H(ex, ey), sw = H(tx, ey);
+      let nw = H(tx, ty), ne = H(ex, ty), se = H(ex, ey), sw = H(tx, ey);
       tileColor(map, tx + (step >> 1), ty + (step >> 1), color);
       const cut = lod === 0 ? cuttingLevel(map, tx, ty) : -1;
+      const kind = lod === 0 ? map.layers.foundation[map.tileIndex(tx, ty)]! : 0;
+      const half = halfCorner(kind);
       // Counter-clockwise when seen from above (+Y), with Z pointing "south".
+      if (half >= 0) {
+        // The triangle at the raised corner is level with it; the cliff runs along the diagonal.
+        const top = Math.max(nw, ne, se, sw);
+        if (half === 1 || half === 3) {
+          const up = half === 1;
+          pushTri(tx, up ? top : nw, ty, ex, up ? top : se, ey, ex, up ? top : ne, ty);
+          pushTri(tx, up ? nw : top, ty, tx, up ? sw : top, ey, ex, up ? se : top, ey);
+        } else {
+          const up = half === 0;
+          pushTri(tx, up ? top : nw, ty, tx, up ? top : sw, ey, ex, up ? top : ne, ty);
+          pushTri(ex, up ? ne : top, ty, tx, up ? sw : top, ey, ex, up ? se : top, ey);
+        }
+        continue;
+      }
+      if (kind) [nw, ne, se, sw] = map.tileCorners(tx, ty).map((h) => h * HEIGHT_SCALE) as [number, number, number, number];
       if (cut >= 0) {
         const h = cut * HEIGHT_SCALE;
         pushTri(tx, h, ty, ex, h, ey, ex, h, ty);
@@ -195,6 +262,16 @@ export function buildTerrainGeometry(map: GameMap, cx: number, cy: number, lod: 
       pushTri(tx + ax, f, ty + az, tx + bx, hb, ty + bz, tx + bx, f, ty + bz);
       pushTri(tx + ax, f, ty + az, tx + ax, ha, ty + az, tx + bx, hb, ty + bz);
     }
+  }
+
+  color[0] = FOUNDATION[0];
+  color[1] = FOUNDATION[1];
+  color[2] = FOUNDATION[2];
+  for (let k = 0; k < walls.length; k += 8) {
+    const [ax, az, bx, bz] = [walls[k]!, walls[k + 1]!, walls[k + 2]!, walls[k + 3]!];
+    const [ta, la, tb, lb] = [walls[k + 4]!, walls[k + 5]!, walls[k + 6]!, walls[k + 7]!].map((h) => h * HEIGHT_SCALE) as [number, number, number, number];
+    pushTri(ax, ta, az, bx, tb, bz, bx, lb, bz);
+    pushTri(ax, ta, az, bx, lb, bz, ax, la, az);
   }
 
   // Skirts along the four chunk edges.

@@ -55,7 +55,7 @@ export class AirSystem {
   /** Altitude of an airport's runway. */
   private ground(stationId: number): number {
     const a = this.state.stations.get(stationId)?.airport;
-    return a ? this.state.map.cornerHeight(a.x, a.y) * HEIGHT_SCALE : 0;
+    return a ? this.state.map.surfaceHeight(a.x, a.y) * HEIGHT_SCALE : 0;
   }
 
   private nodes(stationId: number): AirportNodes | null {

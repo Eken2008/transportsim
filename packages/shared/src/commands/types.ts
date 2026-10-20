@@ -14,7 +14,15 @@ export interface CommandEffects {
 }
 
 export type PlanResult =
-  | { ok: true; cost: number; commit: () => CommandEffects; /** Shown with the preview, e.g. what it does to a town's reputation. */ note?: string }
+  | {
+      ok: true;
+      cost: number;
+      commit: () => CommandEffects;
+      /** Shown with the preview, e.g. what it does to a town's reputation. */
+      note?: string;
+      /** Foundations the command would lay (tile → Foundation), so previews show the built surface. */
+      foundations?: ReadonlyMap<number, number>;
+    }
   | { ok: false; error: string };
 
 export interface CommandHandler<C> {

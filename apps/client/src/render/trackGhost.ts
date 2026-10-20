@@ -1,8 +1,9 @@
-import type { PlacedPiece } from '@transportsim/shared';
+import { EDGE_MID_X, EDGE_MID_Y, HEIGHT_SCALE, PIECE_EDGES, foundationEdge, type PlacedPiece } from '@transportsim/shared';
 import type { GameMap } from '@transportsim/shared';
 import * as THREE from 'three';
 import { GeoBuilder } from './geoBuilder.ts';
 import { pieceEndpoints } from './trackMesh.ts';
+import { TRACK_LIFT } from './trackCurves.ts';
 
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
@@ -25,11 +26,25 @@ export class TrackGhost {
     this.mesh.visible = false;
   }
 
-  show(pieces: PlacedPiece[], color: string): void {
+  /**
+   * `foundations` (tile → Foundation) are those the build would lay, so the preview sits on the
+   * surface the track will have. Elsewhere, an edge that isn't level is shown at its higher corner.
+   */
+  show(pieces: PlacedPiece[], color: string, foundations?: ReadonlyMap<number, number>): void {
+    const map = this.map;
     const g = new GeoBuilder().color(WHITE);
     for (const p of pieces) {
-      if (!this.map.inBounds(p.x, p.y)) continue;
-      pieceEndpoints(this.map, p.x, p.y, p.piece, _a, _b);
+      if (!map.inBounds(p.x, p.y)) continue;
+      const kind = foundations?.get(map.tileIndex(p.x, p.y));
+      const [e1, e2] = PIECE_EDGES[p.piece]!;
+      if (kind === undefined && map.edgeLevel(p.x, p.y, e1) >= 0 && map.edgeLevel(p.x, p.y, e2) >= 0) {
+        pieceEndpoints(map, p.x, p.y, p.piece, _a, _b); // bridge ends and tunnel portals included
+      } else {
+        const raw = map.rawCorners(p.x, p.y);
+        const h = (e: number) => Math.max(...(kind === undefined ? map.edgeCorners(p.x, p.y, e) : foundationEdge(raw, kind, e))) * HEIGHT_SCALE + TRACK_LIFT;
+        _a.set(p.x + EDGE_MID_X[e1], h(e1), p.y + EDGE_MID_Y[e1]);
+        _b.set(p.x + EDGE_MID_X[e2], h(e2), p.y + EDGE_MID_Y[e2]);
+      }
       g.box(_a.setY(_a.y + 0.02), _b.setY(_b.y + 0.02), 0.34, 0.07, false);
     }
     const geo = g.build();

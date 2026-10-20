@@ -151,7 +151,7 @@ export function segHeights(map: GameMap, tile: number, td: number): [number, num
     return [h, h];
   }
   const x = tile % w;
-  const corners = map.tileCorners(x, (tile - x) / w);
+  const y = (tile - x) / w;
   const entry = tdEntry(td);
   const exit = tdExit(td);
   const info = headInfo(map, tile);
@@ -159,8 +159,9 @@ export function segHeights(map: GameMap, tile: number, td: number): [number, num
     // Tunnel portals are level; bridge ends meet the deck at the span edge.
     const level = headLevel(map, tile, info);
     if (info.kind === 'tunnel') return [level, level];
-    const h = (e: number) => (e === info.dir ? level : Math.max(0, edgeHeight(corners, e as Edge)));
+    const h = (e: number) => (e === info.dir ? level : Math.max(0, map.edgeLevel(x, y, e)));
     return [h(entry), h(exit)];
   }
-  return [Math.max(0, edgeHeight(corners, entry)), Math.max(0, edgeHeight(corners, exit))];
+  // Edges of the surface: foundations included.
+  return [Math.max(0, map.edgeLevel(x, y, entry)), Math.max(0, map.edgeLevel(x, y, exit))];
 }

@@ -38,9 +38,9 @@ const countBits = (b: number) => (b & 1) + ((b >> 1) & 1) + ((b >> 2) & 1) + ((b
 export const isJunction = (map: GameMap, tile: number) => countBits(roadBits(map, tile)) >= 3;
 
 /**
- * Segments a road vehicle can continue onto after `s`. From the next tile: on to any road edge
- * except back the way it came (a U-turn only at a dead end), respecting one-way roads. Into a
- * road depot only through its door.
+ * Segments a road vehicle can continue onto after `s`. From the next tile (unless a cliff parts
+ * the two): on to any road edge except back the way it came (a U-turn only at a dead end),
+ * respecting one-way roads. Into a road depot only through its door.
  */
 export function roadNext(map: GameMap, s: number, out: number[] = []): number[] {
   out.length = 0;
@@ -53,7 +53,7 @@ export function roadNext(map: GameMap, s: number, out: number[] = []): number[] 
   const n = y * w + x;
   const entry = OPPOSITE_EDGE[exit];
   const bits = roadBits(map, n);
-  if (!(bits & ROAD_EDGE_BITS[entry]!)) return out;
+  if (!(bits & ROAD_EDGE_BITS[entry]!) || !map.surfacesMeet(tile, exit, n)) return out; // no road, or a cliff
   const type = map.layers.type[n]!;
   if (type === TileType.RoadDepot) {
     out.push(roadSeg(n, entry, entry)); // drive in and turn round inside

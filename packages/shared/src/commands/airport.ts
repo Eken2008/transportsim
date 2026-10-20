@@ -5,6 +5,7 @@ import { structuresAt } from '../rail/structures.ts';
 import type { GameState } from '../sim/state.ts';
 import { stationRefusal } from '../town/reputation.ts';
 import { Ground, TileType } from '../world/constants.ts';
+import { Foundation } from '../world/foundation.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
 /** Build an airport with its north-west corner at (x, y), joining a station of ours next to it. */
@@ -26,13 +27,22 @@ export const buildAirportHandler: CommandHandler<BuildAirportCommand> = {
     if (!isInt(x) || !isInt(y)) return fail('Invalid airport');
     const t = AIRPORT_TYPES[kind];
     if (!map.inBounds(x, y) || !map.inBounds(x + t.w - 1, y + t.h - 1)) return fail('Out of bounds');
-    const level = map.cornerHeight(x, y);
+    // Level at the highest ground; gentle slopes below it are levelled up.
+    let level = 0;
+    for (let ty = y; ty < y + t.h; ty++) for (let tx = x; tx < x + t.w; tx++) level = Math.max(level, map.tileMaxHeight(tx, ty));
     let cost = t.cost;
+    const levelled = new Set<number>();
     for (let ty = y; ty < y + t.h; ty++) {
       for (let tx = x; tx < x + t.w; tx++) {
         const i = map.tileIndex(tx, ty);
         if (map.layers.type[i] !== TileType.Clear) return fail(`Object in the way (${tx},${ty})`);
-        if (!map.isFlat(tx, ty) || map.cornerHeight(tx, ty) !== level || level < 1) return fail(`Airports need flat, level land (${tx},${ty})`);
+        if (level < 1) return fail(`Airports need dry land (${tx},${ty})`);
+        if (!map.isFlat(tx, ty) && map.canLevel(tx, ty) && map.tileMaxHeight(tx, ty) === level) {
+          levelled.add(i);
+          cost += COSTS.foundation;
+        } else if (!map.isFlat(tx, ty) || map.cornerHeight(tx, ty) !== level) {
+          return fail(`Airports need level land (${tx},${ty})`);
+        }
         if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail(`A bridge is in the way (${tx},${ty})`);
         cost += clearCost(map, tx, ty);
       }
@@ -45,6 +55,7 @@ export const buildAirportHandler: CommandHandler<BuildAirportCommand> = {
     return {
       ok: true,
       cost: state.cost(cost),
+      foundations: new Map([...levelled].map((i) => [i, Foundation.Level])),
       commit() {
         let st = join;
         if (!st) {
@@ -57,6 +68,7 @@ export const buildAirportHandler: CommandHandler<BuildAirportCommand> = {
         for (let ty = y; ty < y + t.h; ty++) {
           for (let tx = x; tx < x + t.w; tx++) {
             const i = map.tileIndex(tx, ty);
+            if (levelled.has(i)) map.layers.foundation[i] = Foundation.Level;
             map.layers.type[i] = TileType.Airport;
             map.layers.owner[i] = company;
             map.layers.data[i] = st.id;

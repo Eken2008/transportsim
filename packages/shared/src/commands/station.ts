@@ -10,6 +10,7 @@ import { headInfo, otherHead, structuresAt } from '../rail/structures.ts';
 import { linkPlaced, unlinkPieces } from '../rail/links.ts';
 import { EDGE_DX, EDGE_DY, Piece, hasPiece } from '../rail/track.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
+import { Foundation } from '../world/foundation.ts';
 import { CROSSING_FLAG } from './track.ts';
 import type { GameState } from '../sim/state.ts';
 import { removeRoadStop, roadTileClearCost } from './road.ts';
@@ -70,14 +71,22 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
     const h = axis === 0 ? platforms : length;
     if (!map.inBounds(x, y) || !map.inBounds(x + w - 1, y + h - 1)) return fail('Out of bounds');
     const piece = axis === 0 ? Piece.X : Piece.Y;
-    const height = map.cornerHeight(x, y);
+    // The platforms are level at the highest ground; gentle slopes below it are levelled up.
+    let height = 0;
+    for (let ty = y; ty < y + h; ty++) for (let tx = x; tx < x + w; tx++) height = Math.max(height, map.tileMaxHeight(tx, ty));
     const tiles: number[] = [];
+    const level = new Set<number>();
     let cost = 0;
     for (let ty = y; ty < y + h; ty++) {
       for (let tx = x; tx < x + w; tx++) {
         const i = map.tileIndex(tx, ty);
         const type = map.layers.type[i];
-        if (!map.isFlat(tx, ty) || map.cornerHeight(tx, ty) !== height) return fail(`Stations need flat, level ground (${tx},${ty})`);
+        if (!map.isFlat(tx, ty) && type === TileType.Clear && map.canLevel(tx, ty) && map.tileMaxHeight(tx, ty) === height) {
+          level.add(i);
+          cost += COSTS.foundation;
+        } else if (!map.isFlat(tx, ty) || map.surfaceHeight(tx, ty) !== height) {
+          return fail(`Stations need level ground (${tx},${ty})`);
+        }
         if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail(`Stations can't go under a bridge (${tx},${ty})`);
         if (type === TileType.Rail && map.layers.data[i]! & 0x600) return fail(`Object in the way (${tx},${ty})`);
         if (type === TileType.Clear) {
@@ -107,6 +116,7 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
     return {
       ok: true,
       cost: state.cost(cost),
+      foundations: new Map([...level].map((i) => [i, Foundation.Level])),
       commit() {
         let st = join;
         if (!st) {
@@ -128,6 +138,7 @@ export const buildStationHandler: CommandHandler<BuildStationCommand> = {
         const dirtyChunks = new Set<number>();
         for (const i of tiles) {
           if (map.layers.type[i] !== TileType.Rail) map.layers.railType[i] = railType;
+          if (level.has(i)) map.layers.foundation[i] = Foundation.Level;
           map.layers.type[i] = TileType.Station;
           map.layers.owner[i] = company;
           map.layers.data[i] = st.id;
@@ -163,16 +174,19 @@ export const buildDepotHandler: CommandHandler<BuildDepotCommand> = {
     if (!map.inBounds(x, y)) return fail('Out of bounds');
     const i = map.tileIndex(x, y);
     if (map.layers.type[i] !== TileType.Clear) return fail('Object in the way');
-    if (!map.isFlat(x, y)) return fail('Depots need flat ground');
+    const levelled = !map.isFlat(x, y);
+    if (levelled && !map.canLevel(x, y)) return fail('Depots need flat ground or a gentle slope');
     if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail("Depots can't go under a bridge");
     const railType = cmd.railType ?? 0;
     const typeErr = railTypeError(state, railType);
     if (typeErr) return fail(typeErr);
-    const cost = Math.round(COSTS.depot * RAIL_TYPES[railType]!.costFactor) + clearCost(map, x, y);
+    const cost = Math.round(COSTS.depot * RAIL_TYPES[railType]!.costFactor) + clearCost(map, x, y) + (levelled ? COSTS.foundation : 0);
     return {
       ok: true,
       cost: state.cost(cost),
+      foundations: new Map(levelled ? [[i, Foundation.Level]] : []),
       commit() {
+        if (levelled) map.layers.foundation[i] = Foundation.Level;
         map.layers.type[i] = TileType.Depot;
         map.layers.railType[i] = railType;
         map.layers.owner[i] = ctx.companyId!;

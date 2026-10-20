@@ -300,7 +300,7 @@ export function addTrack(
 
 /** Waypoint: a post with a black-and-white board on each side of the track. */
 function addWaypointMarker(g: GeoBuilder, map: GameMap, x: number, y: number, alongX: boolean): void {
-  const h = map.cornerHeight(x, y) * HEIGHT_SCALE;
+  const h = map.surfaceHeight(x, y) * HEIGHT_SCALE;
   for (const side of [-1, 1]) {
     const px = alongX ? x + 0.5 : x + 0.5 + side * 0.33;
     const pz = alongX ? y + 0.5 + side * 0.33 : y + 0.5;
@@ -318,7 +318,7 @@ function addWaypointMarker(g: GeoBuilder, map: GameMap, x: number, y: number, al
  */
 function addPlatform(g: GeoBuilder, map: GameMap, x: number, y: number, bits: number, lod: Lod): void {
   const alongX = hasPiece(bits, 0);
-  const h = map.cornerHeight(x, y) * HEIGHT_SCALE;
+  const h = map.surfaceHeight(x, y) * HEIGHT_SCALE;
   const row = alongX ? y : x;
   const side = row % 2 === 0 ? 1 : -1; // +1: platform on the +Z (or +X) side
   const inner = 0.25;
@@ -349,7 +349,7 @@ function addPlatform(g: GeoBuilder, map: GameMap, x: number, y: number, bits: nu
 
 /** Engine shed open towards its exit edge, roof in the owner's colour. */
 function addDepot(g: GeoBuilder, map: GameMap, x: number, y: number, exit: number, roof: THREE.Color): void {
-  const h = map.cornerHeight(x, y) * HEIGHT_SCALE;
+  const h = map.surfaceHeight(x, y) * HEIGHT_SCALE;
   const alongX = exit === 1 || exit === 3;
   const wallH = h + 0.55;
   const m = 0.08;

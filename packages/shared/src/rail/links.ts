@@ -92,7 +92,8 @@ export function headingIn(q: number, e: Edge): number {
 const isTrack = (t: number) => t === TileType.Rail || t === TileType.Station || t === TileType.Depot;
 
 /**
- * Could track cross this edge at all? Bridge/tunnel span sides and depot walls are closed.
+ * Could track cross this edge at all? Bridge/tunnel span sides, depot walls and cliffs (a
+ * foundation beside lower or higher ground) are closed.
  * Track of different owners links too; whether trains may cross is decided by access
  * (sharing agreements) when they run, not here.
  */
@@ -103,7 +104,7 @@ export function edgeLinkable(map: GameMap, tile: number, e: Edge): number {
   if (info && info.dir === e) return -1;
   if (type[tile] === TileType.Depot && depotExit(data[tile]!) !== e) return -1;
   const n = neighbourTile(map, tile, e);
-  if (n < 0 || !isTrack(type[n]!)) return -1;
+  if (n < 0 || !isTrack(type[n]!) || !map.surfacesMeet(tile, e, n)) return -1;
   const opp = OPPOSITE_EDGE[e];
   const ninfo = headInfo(map, n);
   if (ninfo && ninfo.dir === opp) return -1;

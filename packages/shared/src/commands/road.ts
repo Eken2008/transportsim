@@ -1,12 +1,13 @@
 import { COSTS, clearCost } from '../economy/costs.ts';
 import { findJoinStation, recomputeStationExtent, stationName } from '../rail/station.ts';
 import { structuresAt } from '../rail/structures.ts';
-import { EDGE_DX, EDGE_DY, Edge, OPPOSITE_EDGE, Piece, edgeHeight } from '../rail/track.ts';
+import { EDGE_DX, EDGE_DY, Edge, OPPOSITE_EDGE, Piece } from '../rail/track.ts';
 import { WAYPOINT_FLAG } from '../rail/waypoint.ts';
 import type { GameState } from '../sim/state.ts';
 import { REPUTATION_ROAD_LOSS, applyDemolition, demolitionVerdict, stationRefusal } from '../town/reputation.ts';
 import { ROADSTOP_TRUCK, ROAD_EDGE_BITS, ROAD_ONE_WAY, ROAD_ONE_WAY_REVERSED, isStraightRoad } from '../town/road.ts';
 import { Ground, OWNER_NONE, TileType } from '../world/constants.ts';
+import { Foundation, foundationEdge, roadFoundation } from '../world/foundation.ts';
 import type { GameMap } from '../world/map.ts';
 import { CROSSING_FLAG } from './track.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
@@ -53,14 +54,15 @@ export interface BuildRoadStopCommand {
 
 const MAX_ROAD = 128;
 
-/** Could a straight road run along `axis` over this tile (flat, or a gentle slope along it)? */
-export function roadFitsTile(map: GameMap, x: number, y: number, axis: 0 | 1): boolean {
-  if (map.isFlat(x, y)) return true;
-  const c = map.tileCorners(x, y);
-  const [e1, e2] = axis === 0 ? [Edge.W, Edge.E] : [Edge.N, Edge.S];
-  const h1 = edgeHeight(c, e1);
-  const h2 = edgeHeight(c, e2);
-  return h1 >= 0 && h2 >= 0 && Math.abs(h1 - h2) <= 1;
+/**
+ * Do tile `a` (on foundation `fa`) and its neighbour `b` (on `fb`) meet across `a`'s edge `e`
+ * at the same height, not at a cliff? Foundations default to what the tiles have now.
+ */
+function edgesMeet(map: GameMap, a: number, e: Edge, b: number, fa = map.layers.foundation[a]!, fb = map.layers.foundation[b]!): boolean {
+  const w = map.width;
+  const [a0, a1] = foundationEdge(map.rawCorners(a % w, Math.floor(a / w)), fa, e);
+  const [b0, b1] = foundationEdge(map.rawCorners(b % w, Math.floor(b / w)), fb, OPPOSITE_EDGE[e]);
+  return a0 === b0 && a1 === b1;
 }
 
 /** Tiles of a straight line and the edge pointing along it. */
@@ -91,6 +93,8 @@ export const buildRoadHandler: CommandHandler<BuildRoadCommand> = {
     const axis = edge === Edge.E || edge === Edge.W ? 0 : 1;
     const axisBits = axis === 0 ? ROAD_EDGE_BITS[Edge.E] | ROAD_EDGE_BITS[Edge.W] : ROAD_EDGE_BITS[Edge.N] | ROAD_EDGE_BITS[Edge.S];
     const jobs: { i: number; bits: number; kind: 'new' | 'add' | 'crossing' | 'none' }[] = [];
+    /** Foundations under new road: ramps up slopes it can't climb as they are, else level (also on the shore). */
+    const foundations = new Map<number, number>();
     let cost = 0;
     for (let k = 0; k < tiles.length; k++) {
       const i = tiles[k]!;
@@ -100,7 +104,12 @@ export const buildRoadHandler: CommandHandler<BuildRoadCommand> = {
       const type = map.layers.type[i];
       const where = at(map, i);
       if (type === TileType.Clear) {
-        if (map.tileMinHeight(x, y) < 1 || !roadFitsTile(map, x, y, axis)) return fail(`Roads can't go on that slope ${where}`);
+        const f = roadFoundation(map.rawCorners(x, y), axis);
+        if (f < 0) return fail(`Roads can't go on that slope ${where}`);
+        if (f !== Foundation.None) {
+          foundations.set(i, f);
+          cost += COSTS.foundation;
+        }
         cost += COSTS.road + clearCost(map, x, y);
         jobs.push({ i, bits, kind: 'new' });
       } else if (type === TileType.Road) {
@@ -131,13 +140,22 @@ export const buildRoadHandler: CommandHandler<BuildRoadCommand> = {
       }
     }
     if (jobs.every((j) => j.kind === 'none')) return fail('Already built');
+    // Each step of the road must meet the next tile at the same height, not at a cliff.
+    const surface = (i: number) => foundations.get(i) ?? map.layers.foundation[i]!;
+    for (let k = 1; k < tiles.length; k++) {
+      const a = tiles[k - 1]!;
+      const b = tiles[k]!;
+      if (!edgesMeet(map, a, edge, b, surface(a), surface(b))) return fail(`Roads can't climb a cliff ${at(map, b)}`);
+    }
     return {
       ok: true,
       cost: state.cost(cost),
+      foundations,
       commit() {
         const dirtyChunks = new Set<number>();
         for (const { i, bits, kind } of jobs) {
           if (kind === 'new') {
+            map.layers.foundation[i] = foundations.get(i) ?? Foundation.None;
             map.layers.type[i] = TileType.Road;
             map.layers.owner[i] = ctx.companyId!;
             map.layers.data[i] = bits;
@@ -254,16 +272,21 @@ export const buildRoadDepotHandler: CommandHandler<BuildRoadDepotCommand> = {
     const map = state.map;
     if (![x, y, exit].every(isInt) || exit < 0 || exit > 3 || !map.inBounds(x, y)) return fail('Invalid depot');
     const i = map.tileIndex(x, y);
-    if (map.layers.type[i] !== TileType.Clear || !map.isFlat(x, y) || map.tileMinHeight(x, y) < 1) return fail('Road depots need clear, flat land');
+    if (map.layers.type[i] !== TileType.Clear) return fail('Road depots need clear land');
+    // On a slope, or on the shore, the depot stands on a foundation.
+    const levelled = !map.isFlat(x, y) || map.tileMinHeight(x, y) < 1;
+    if (levelled && !map.canLevel(x, y)) return fail('Road depots need flat land or a gentle slope');
     if (structuresAt(map, i).some((s) => s.kind === 'bridge')) return fail("Depots can't go under a bridge");
     const nx = x + EDGE_DX[exit as Edge];
     const ny = y + EDGE_DY[exit as Edge];
     const n = map.inBounds(nx, ny) ? map.tileIndex(nx, ny) : -1;
-    const connect = n >= 0 && map.layers.type[n] === TileType.Road;
+    const connect = n >= 0 && map.layers.type[n] === TileType.Road && edgesMeet(map, i, exit as Edge, n, levelled ? Foundation.Level : Foundation.None);
     return {
       ok: true,
-      cost: state.cost(COSTS.roadDepot + clearCost(map, x, y)),
+      cost: state.cost(COSTS.roadDepot + clearCost(map, x, y) + (levelled ? COSTS.foundation : 0)),
+      foundations: new Map(levelled ? [[i, Foundation.Level]] : []),
       commit() {
+        if (levelled) map.layers.foundation[i] = Foundation.Level;
         map.layers.type[i] = TileType.RoadDepot;
         map.layers.owner[i] = ctx.companyId!;
         map.layers.data[i] = exit;

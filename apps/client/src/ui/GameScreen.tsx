@@ -250,7 +250,7 @@ const TOOLS: ToolDef[] = [
   { id: 'roadStop', icon: '🚏', label: 'Bus or truck stop (on straight road)', key: 'H', menu: 'road' },
   { id: 'roadDepot', icon: '🅿', label: 'Road vehicle depot', key: 'J', menu: 'road' },
   { id: 'oneWay', icon: '⬆', label: 'One-way road (click to cycle)', key: 'K', menu: 'road' },
-  { id: 'airport', icon: '🛫', label: 'Airport (needs flat land; click its north-west corner)', key: 'Y', menu: 'air' },
+  { id: 'airport', icon: '🛫', label: 'Airport (flat land or gentle slopes; click its north-west corner)', key: 'Y', menu: 'air' },
   { id: 'canal', icon: '〰', label: 'Canal (drag over flat land)', key: 'U', menu: 'water' },
   { id: 'lock', icon: '🪜', label: 'Lock (on a straight slope between two water levels)', key: 'I', menu: 'water' },
   { id: 'dock', icon: '⚓', label: 'Dock (on the shore; faces the water nearest the cursor)', key: 'O', menu: 'water' },
