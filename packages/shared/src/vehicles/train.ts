@@ -51,7 +51,7 @@ export interface CargoPacket {
 
 export type AirPhase = 'taxi' | 'gate' | 'hold' | 'takeoff' | 'flying' | 'holding' | 'landing';
 
-/** An aircraft's position (tiles; z in tiles above the ground) and what it is doing. */
+/** An aircraft's position (x, y in tiles; z its altitude in world units) and what it is doing. */
 export interface AirState {
   phase: AirPhase;
   x: number;
@@ -252,8 +252,8 @@ export interface TrainMotion {
   speed: number;
   /** Next few planned segments, so clients can extrapolate past the head segment. */
   ahead: number[];
-  /** Aircraft: x, y, z (tiles), heading (radians), speed (tiles per second). */
-  air?: [number, number, number, number, number];
+  /** Aircraft: x, y (tiles), altitude (world units), heading (radians), speed (tiles per second), climb rate (altitude per second). */
+  air?: [number, number, number, number, number, number];
   /** Ships: [x, y, water level (height units), heading, speed tiles/s]. */
   ship?: [number, number, number, number, number];
 }

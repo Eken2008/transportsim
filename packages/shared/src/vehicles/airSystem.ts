@@ -1,6 +1,7 @@
 import { AIRPORT_TYPES, airportNodes, hangarTile, taxiRoute, type AirportNodes, type Point } from '../air/airports.ts';
 import type { Station } from '../rail/station.ts';
 import { TICKS_PER_DAY, TICKS_PER_SECOND } from '../sim/date.ts';
+import { HEIGHT_SCALE } from '../world/constants.ts';
 import type { GameState } from '../sim/state.ts';
 import { railVehicle } from './catalog.ts';
 import { advanceOrder, needsService } from './orders.ts';
@@ -12,9 +13,20 @@ const DT = 1 / TICKS_PER_SECOND;
 const TAXI = 1.2;
 /** Aircraft fly at a quarter of their real speed, so flights take a few days, not minutes. */
 const FLIGHT_SCALE = 0.25;
-/** Cruise height (tiles above the ground) and the height aircraft descend to before landing. */
-const CRUISE_Z = 3;
-const APPROACH_Z = 1.2;
+/**
+ * Heights are altitudes (world units, like the renderer's Y). Aircraft cruise this far above
+ * the higher of the two airports, and at least CLEARANCE above any ground on the way.
+ */
+const CRUISE_HEIGHT = 6;
+const CLEARANCE = 3;
+/** Height above its airport at which an aircraft lines up to land, and when it leaves the runway. */
+const APPROACH_HEIGHT = 1.4;
+const LIFTOFF_HEIGHT = 0.5;
+/** Steepest climb and descent (height per tile): where climbs start and descents end. */
+const CLIMB_SLOPE = 0.3;
+const DESCENT_SLOPE = APPROACH_HEIGHT / 6;
+/** Longest straight leg while climbing or descending (tiles); the profile is a smooth curve. */
+const PROFILE_STEP = 2;
 const HOLD_RADIUS = 3;
 
 /** Does this aircraft type need a large airport? */
@@ -39,6 +51,12 @@ export class AirSystem {
   onLanded: ((t: Train, airport: Station) => void) | null = null;
 
   constructor(private readonly state: GameState) {}
+
+  /** Altitude of an airport's runway. */
+  private ground(stationId: number): number {
+    const a = this.state.stations.get(stationId)?.airport;
+    return a ? this.state.map.cornerHeight(a.x, a.y) * HEIGHT_SCALE : 0;
+  }
 
   private nodes(stationId: number): AirportNodes | null {
     const a = this.state.stations.get(stationId)?.airport;
@@ -105,7 +123,7 @@ export class AirSystem {
     t.status = 'running';
     t.depot = -1;
     t.speed = 0;
-    t.air = { phase: 'taxi', x: n.hangarDoor.x, y: n.hangarDoor.y, z: 0, heading: 0, airport: home, legs: [] };
+    t.air = { phase: 'taxi', x: n.hangarDoor.x, y: n.hangarDoor.y, z: this.ground(home), heading: 0, airport: home, legs: [] };
     t.departedAt = this.state.tick;
     this.leaveGround(t);
   }
@@ -179,7 +197,8 @@ export class AirSystem {
   private taxi(t: Train, n: AirportNodes, to: Point, goal: 'gate' | 'hold' | 'hangar'): void {
     const a = t.air!;
     a.phase = 'taxi';
-    a.legs = taxiRoute(n, { x: a.x, y: a.y }, to).map((p) => [p.x, p.y, 0]);
+    const z = this.ground(a.airport);
+    a.legs = taxiRoute(n, { x: a.x, y: a.y }, to).map((p) => [p.x, p.y, z]);
     a.goal = goal;
   }
 
@@ -286,10 +305,11 @@ export class AirSystem {
         if (!this.runwayFree(a.airport, t.id)) return;
         this.runway.set(a.airport, t.id);
         a.phase = 'takeoff';
+        const g = this.ground(a.airport);
         a.legs = [
-          [n.runwayStart.x, n.runwayStart.y, 0],
-          [n.runwayStart.x + (n.runwayEnd.x - n.runwayStart.x) * 0.6, n.runwayEnd.y, 0],
-          [n.runwayEnd.x, n.runwayEnd.y, 0.6],
+          [n.runwayStart.x, n.runwayStart.y, g],
+          [n.runwayStart.x + (n.runwayEnd.x - n.runwayStart.x) * 0.6, n.runwayEnd.y, g],
+          [n.runwayEnd.x, n.runwayEnd.y, g + LIFTOFF_HEIGHT],
         ];
         return;
       case 'takeoff':
@@ -300,9 +320,13 @@ export class AirSystem {
         if (this.runwayFree(a.airport, t.id)) {
           this.runway.set(a.airport, t.id);
           a.phase = 'landing';
+          const g = this.ground(a.airport);
+          // Glide down, flare over the threshold and roll out.
           a.legs = [
-            [n.runwayStart.x + 0.4, n.runwayStart.y, 0],
-            [n.runwayEnd.x - 0.3, n.runwayEnd.y, 0],
+            [n.runwayStart.x - 1.5, n.runwayStart.y, g + 0.3],
+            [n.runwayStart.x - 0.4, n.runwayStart.y, g + 0.06],
+            [n.runwayStart.x + 0.4, n.runwayStart.y, g],
+            [n.runwayEnd.x - 0.3, n.runwayEnd.y, g],
           ];
           return;
         }
@@ -311,9 +335,10 @@ export class AirSystem {
         // Kept on the map, even for airports by its edge.
         const cx = Math.max(HOLD_RADIUS, n.approach.x);
         const cy = Math.max(HOLD_RADIUS, n.approach.y - HOLD_RADIUS);
-        a.legs = [0, 1, 2, 3, 4].map((k) => {
-          const ang = Math.PI / 2 - (k * Math.PI) / 2;
-          return [cx + Math.cos(ang) * HOLD_RADIUS, cy + Math.sin(ang) * HOLD_RADIUS, APPROACH_Z] as [number, number, number];
+        const z = this.ground(a.airport) + APPROACH_HEIGHT;
+        a.legs = Array.from({ length: 13 }, (_, k) => {
+          const ang = Math.PI / 2 - (k * Math.PI) / 6;
+          return [cx + Math.cos(ang) * HOLD_RADIUS, cy + Math.sin(ang) * HOLD_RADIUS, z] as [number, number, number];
         });
         return;
       }
@@ -324,9 +349,10 @@ export class AirSystem {
         if (!this.state.trains.has(t.id)) return; // crashed
         t.speed = TAXI * KMH_PER_TILE_PER_S;
         a.phase = 'taxi';
-        a.legs = [[n.exit.x, n.exit.y, 0]];
+        const g = this.ground(a.airport);
+        a.legs = [[n.exit.x, n.exit.y, g]];
         a.goal = a.toHangar ? 'hangar' : 'gate';
-        if (a.toHangar) a.legs.push(...taxiRoute(n, n.exit, n.hangarDoor).map((p) => [p.x, p.y, 0] as [number, number, number]));
+        if (a.toHangar) a.legs.push(...taxiRoute(n, n.exit, n.hangarDoor).map((p) => [p.x, p.y, g] as [number, number, number]));
         else a.goal = 'waitGate';
         return;
       }
@@ -340,16 +366,64 @@ export class AirSystem {
     if (!dest) {
       // Nowhere to go: come back down here.
       a.phase = 'flying';
-      const n = this.nodes(a.airport)!;
-      a.legs = [[n.approach.x, n.approach.y, APPROACH_Z]];
+      a.legs = this.route(a, a.airport);
       return;
     }
-    const n = this.nodes(dest.station)!;
     a.airport = dest.station;
     a.toHangar = dest.hangar;
     a.phase = 'flying';
-    const mid: [number, number, number] = [(a.x + n.approach.x) / 2, (a.y + n.approach.y) / 2, CRUISE_Z];
-    a.legs = [mid, [n.approach.x, n.approach.y, APPROACH_Z]];
+    a.legs = this.route(a, dest.station);
+  }
+
+  /**
+   * The flight from where the aircraft is to the approach point of `station`: a climb that
+   * levels off at cruise height, then a descent that steepens into the glide path. Short hops
+   * turn back down before reaching cruise height.
+   */
+  private route(a: AirState, station: number): [number, number, number][] {
+    const n = this.nodes(station)!;
+    const map = this.state.map;
+    const x0 = a.x;
+    const y0 = a.y;
+    const z0 = a.z;
+    const x1 = n.approach.x;
+    const y1 = n.approach.y;
+    const z1 = this.ground(station) + APPROACH_HEIGHT;
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const at = (s: number): [number, number] => (dist > 0 ? [x0 + ((x1 - x0) * s) / dist, y0 + ((y1 - y0) * s) / dist] : [x1, y1]);
+    let terrain = 0;
+    for (let s = 0; s <= dist; s += 1) {
+      const [x, y] = at(s);
+      if (map.inBounds(Math.floor(x), Math.floor(y))) terrain = Math.max(terrain, map.tileMaxHeight(Math.floor(x), Math.floor(y)));
+    }
+    let cruise = Math.max(Math.max(z0, z1) - APPROACH_HEIGHT + CRUISE_HEIGHT, terrain * HEIGHT_SCALE + CLEARANCE);
+    // Both ramps are quadratic: steepest at the bottom, level at the top. Shrink them to fit.
+    const climb = (c: number) => (2 * Math.max(0, c - z0)) / CLIMB_SLOPE;
+    const descent = (c: number) => (2 * Math.max(0, c - z1)) / DESCENT_SLOPE;
+    if (climb(cruise) + descent(cruise) > dist) {
+      cruise = (dist + (2 * z0) / CLIMB_SLOPE + (2 * z1) / DESCENT_SLOPE) / (2 / CLIMB_SLOPE + 2 / DESCENT_SLOPE);
+      cruise = Math.max(cruise, Math.min(z0, z1));
+    }
+    const lc = Math.min(dist, climb(cruise));
+    const ld = Math.min(dist - lc, descent(cruise));
+    const height = (s: number) => {
+      if (s < lc) {
+        const u = 1 - s / lc;
+        return cruise - (cruise - z0) * u * u;
+      }
+      if (s > dist - ld) {
+        const u = 1 - (dist - s) / ld;
+        return cruise - (cruise - z1) * u * u;
+      }
+      return cruise;
+    };
+    const legs: [number, number, number][] = [];
+    const push = (s: number) => legs.push([...at(s), height(s)]);
+    for (let s = PROFILE_STEP; s < lc; s += PROFILE_STEP) push(s);
+    if (lc > 0 && lc < dist) push(lc);
+    for (let s = dist - ld; s < dist - 1e-6; s += PROFILE_STEP) if (s > lc) push(s);
+    legs.push([x1, y1, z1]);
+    return legs;
   }
 
   /** The destination airport disappeared: fly somewhere sensible instead. */
@@ -418,7 +492,15 @@ export class AirSystem {
       pos: 0,
       speed: t.speed,
       ahead: [],
-      air: a ? [a.x, a.y, a.z, a.heading, t.status === 'running' ? speed : 0] : undefined,
+      air: a ? [a.x, a.y, a.z, a.heading, t.status === 'running' ? speed : 0, t.status === 'running' ? climbRate(a, speed) : 0] : undefined,
     };
   }
+}
+
+/** Height gained per second along the current leg at this speed (tiles per second). */
+function climbRate(a: AirState, speed: number): number {
+  const l = a.legs[0];
+  if (!l) return 0;
+  const d = Math.hypot(l[0] - a.x, l[1] - a.y, l[2] - a.z);
+  return d > 1e-6 ? ((l[2] - a.z) / d) * speed : 0;
 }

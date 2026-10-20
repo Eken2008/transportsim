@@ -3,7 +3,7 @@ import type { Station } from '../rail/station.ts';
 import { railVehicle } from '../vehicles/catalog.ts';
 import { linkAllByGeometry } from '../rail/links.ts';
 import type { Train } from '../vehicles/train.ts';
-import { TileType, WATER_BUOY } from '../world/constants.ts';
+import { HEIGHT_SCALE, TileType, WATER_BUOY } from '../world/constants.ts';
 import { recountTowns, type Town, type TownStats } from '../town/towns.ts';
 import { decode, encode } from '../protocol/codec.ts';
 import { sanitizeNews, type NewsItem } from '../news/news.ts';
@@ -20,7 +20,7 @@ import { TICKS_PER_DAY, daysFromYmd } from '../sim/date.ts';
 import { GameMap, LAYER_NAMES, TILE_LAYERS, type LayerArray, type LayerName } from '../world/map.ts';
 
 export const SAVE_FORMAT = 'transportsim-save';
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export interface Snapshot {
   format: typeof SAVE_FORMAT;
@@ -229,7 +229,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
     if (map.layers.signals[i]) state.signalTiles.add(i);
   }
   for (const t of Array.isArray(snap.trains) ? snap.trains : []) {
-    const train = sanitizeTrain(t, state);
+    const train = sanitizeTrain(t, state, snap.version);
     if (train) state.trains.set(train.id, train);
   }
   state.nextTrainId = Math.max(num(snap.nextTrainId, 0), ...[...state.trains.keys()].map((k) => k + 1));
@@ -287,16 +287,24 @@ function townStats(v: unknown): TownStats | undefined {
 
 const PHASES: AirPhase[] = ['taxi', 'gate', 'hold', 'takeoff', 'flying', 'holding', 'landing'];
 
-function sanitizeAir(a: AirState | undefined): AirState | undefined {
+function sanitizeAir(a: AirState | undefined, map: GameMap, version: number): AirState | undefined {
   if (!a || !PHASES.includes(a.phase)) return undefined;
+  // Before version 3 heights were tiles above the ground below (0.9 world units each).
+  const altitude = (x: number, y: number, z: number) =>
+    version >= 3 ? z : map.heightAt(Math.max(0, Math.min(map.width - 0.01, x)), Math.max(0, Math.min(map.height - 0.01, y))) * HEIGHT_SCALE + z * 0.9;
+  const x = num(a.x, 0);
+  const y = num(a.y, 0);
   return {
     phase: a.phase,
-    x: num(a.x, 0),
-    y: num(a.y, 0),
-    z: num(a.z, 0),
+    x,
+    y,
+    z: altitude(x, y, num(a.z, 0)),
     heading: num(a.heading, 0),
     airport: num(a.airport, -1),
-    legs: (Array.isArray(a.legs) ? a.legs : []).filter((l) => Array.isArray(l) && l.length === 3 && l.every((n) => typeof n === 'number')).slice(0, 16),
+    legs: (Array.isArray(a.legs) ? a.legs : [])
+      .filter((l) => Array.isArray(l) && l.length === 3 && l.every((n) => typeof n === 'number' && Number.isFinite(n)))
+      .slice(0, 256)
+      .map(([lx, ly, lz]) => [lx, ly, altitude(lx, ly, lz)] as [number, number, number]),
     gate: typeof a.gate === 'number' ? a.gate : undefined,
     toHangar: a.toHangar === true || undefined,
     goal: a.goal === 'gate' || a.goal === 'hold' || a.goal === 'hangar' || a.goal === 'waitGate' ? a.goal : undefined,
@@ -323,7 +331,7 @@ const num = (v: unknown, fallback: number) => (typeof v === 'number' && Number.i
 
 const STATUSES = ['depot', 'running', 'stopped', 'loading'] as const;
 
-function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): Train | null {
+function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState, version: number): Train | null {
   if (!t || typeof t.id !== 'number' || !Array.isArray(t.units)) return null;
   const units = t.units
     .filter((u) => u && typeof u.type === 'string' && railVehicle(u.type))
@@ -333,7 +341,7 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState): 
   const status = STATUSES.includes(t.status as never) ? t.status! : 'stopped';
   const free = t.mode === 'air' || t.mode === 'water';
   const path = status === 'depot' || free ? [] : ints(t.path);
-  const air = t.mode === 'air' && status !== 'depot' ? sanitizeAir(t.air) : undefined;
+  const air = t.mode === 'air' && status !== 'depot' ? sanitizeAir(t.air, state.map, version) : undefined;
   const ship = t.mode === 'water' && status !== 'depot' ? sanitizeShip(t.ship, state) : undefined;
   // An aircraft or ship out of its depot is wherever its state says; without one it is lost.
   if (free && status !== 'depot' && !air && !ship) return null;

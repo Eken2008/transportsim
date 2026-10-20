@@ -94,6 +94,37 @@ describe('airports', () => {
     expect(buy(hangar(60, 30, 'large'), 'jetliner').mode).toBe('air');
   });
 
+  test('aircraft climb and descend smoothly, well above the ground', () => {
+    const { map, run, days, airport, hangar, buy } = world();
+    const a = airport(5, 4);
+    const b = airport(67, 4);
+    const plane = buy(hangar(5, 4), 'skyliner');
+    run({ type: 'setOrders', id: plane.id, orders: [{ kind: 'station', station: a.id }, { kind: 'station', station: b.id }] });
+    run({ type: 'trainAction', id: plane.id, action: 'start' });
+    const ground = map.cornerHeight(5, 4) * 0.3;
+    let top = 0;
+    let lastZ: number | null = null;
+    let lastRate: number | null = null;
+    let worstJerk = 0;
+    days(40, () => {
+      const air = plane.air;
+      if (!air || (air.phase !== 'flying' && air.phase !== 'holding')) {
+        lastZ = lastRate = null;
+        return;
+      }
+      top = Math.max(top, air.z - ground);
+      if (lastZ !== null) {
+        const rate = air.z - lastZ;
+        if (lastRate !== null) worstJerk = Math.max(worstJerk, Math.abs(rate - lastRate));
+        lastRate = rate;
+      }
+      lastZ = air.z;
+    });
+    expect(top).toBeGreaterThan(4);
+    // No steps: the climb rate changes only a little from one tick to the next.
+    expect(worstJerk).toBeLessThan(0.01);
+  });
+
   test('an aircraft carries passengers between two airports', () => {
     const { state, run, days, airport, hangar, buy } = world();
     const a = airport(5, 4);
@@ -114,7 +145,7 @@ describe('airports', () => {
     expect(visits.filter((v) => v === b.id).length).toBeGreaterThanOrEqual(2);
     expect(plane.profitThisYear + plane.profitLastYear).toBeGreaterThan(0);
     // Its position is streamed as an air tuple.
-    expect(state.air.motion(plane).air).toHaveLength(5);
+    expect(state.air.motion(plane).air).toHaveLength(6);
   });
 
   test('one aircraft on a runway at a time; others hold or wait', () => {

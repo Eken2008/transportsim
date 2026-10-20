@@ -27,8 +27,6 @@ import { WATER_Y } from './terrainMesh.ts';
 
 /** Height of the rail head above the terrain surface. */
 const RAIL_TOP = 0.088;
-/** World units per tile of aircraft height. */
-const AIR_HEIGHT = 0.9;
 /** Don't extrapolate further than this past the last update (seconds). */
 const MAX_EXTRAPOLATION = 0.6;
 
@@ -276,33 +274,36 @@ export class TrainRenderer {
     this.picks.push({ trainId: id, pos: new THREE.Vector3((_f.x + _b.x) / 2, (_f.y + _b.y) / 2 + 0.1, (_f.z + _b.z) / 2) });
   }
 
-  /** An aircraft: at its position, height above the ground and heading, climbing or descending. */
+  /** An aircraft: at its position, altitude and heading, nose up or down as it climbs or descends. */
   private placeAircraft(id: number, owner: number, type: string, air: NonNullable<TrainMotion['air']>, dt: number, speedMultiplier: number): void {
     const map = this.world.map;
     const v = railVehicle(type);
     if (!v) return;
-    const [x0, y0, z, heading, speed] = air;
+    const [x0, y0, z0, heading, speed, climb = 0] = air;
     const step = speed * speedMultiplier * dt;
     const x = Math.max(0, Math.min(map.width - 0.01, x0 + Math.cos(heading) * step));
     const y = Math.max(0, Math.min(map.height - 0.01, y0 + Math.sin(heading) * step));
-    const ground = map.heightAt(x, y) * HEIGHT_SCALE + 0.02;
+    // Never below the ground (or the runway, which is flat).
+    const alt = Math.max(z0 + climb * speedMultiplier * dt, map.heightAt(x, y) * HEIGHT_SCALE) + 0.02;
+    const pitch = speed > 0 ? Math.atan2(climb, speed) : 0;
     const len = (v.length / 16) * 0.85;
     const company = this.world.state.companies.get(owner);
     const color = this.colors[(company?.color ?? 0) % this.colors.length]!;
     const mm = this.meshesFor(v.model, 1);
     const k = mm.count;
     if (k >= mm.body.instanceMatrix.count) return;
-    _x.set(Math.cos(heading), 0, Math.sin(heading));
+    const flat = Math.cos(pitch);
+    _x.set(Math.cos(heading) * flat, Math.sin(pitch), Math.sin(heading) * flat);
     _z.crossVectors(_x, UP).normalize();
     _y.crossVectors(_z, _x);
     _m.makeBasis(_x, _y, _z);
     _m.multiply(_s.makeScale(len, len, len));
-    _m.setPosition(x, ground + z * AIR_HEIGHT, y);
+    _m.setPosition(x, alt, y);
     mm.body.setMatrixAt(k, _m);
     mm.detail.setMatrixAt(k, _m);
     mm.body.setColorAt(k, color);
     mm.count++;
-    this.picks.push({ trainId: id, pos: new THREE.Vector3(x, ground + z * AIR_HEIGHT + 0.1, y) });
+    this.picks.push({ trainId: id, pos: new THREE.Vector3(x, alt + 0.1, y) });
   }
 
   /** A ship: on the water surface at its level, heading where it sails. */
