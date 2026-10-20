@@ -187,6 +187,9 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         <button title="Your lines: the stops your vehicles serve" aria-label="〰 Lines" onClick={() => openWindow({ kind: 'lines', id: 0 })}>
           〰<span className="lbl"> Lines</span>
         </button>
+        <button title="Cargo routes: where each industry's cargo comes from and can go" aria-label="⛓ Cargo" onClick={() => openWindow({ kind: 'cargo', id: 0 })}>
+          ⛓<span className="lbl"> Cargo</span>
+        </button>
         <button title="News" aria-label="📰 News" onClick={() => openWindow({ kind: 'news', id: 0 })}>
           📰<span className="lbl"> News</span>
         </button>

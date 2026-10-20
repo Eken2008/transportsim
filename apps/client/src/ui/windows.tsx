@@ -46,6 +46,7 @@ import { FinancesWindow, LeagueWindow } from './FinancesWindow.tsx';
 import { StatsWindow } from './StatsWindow.tsx';
 import { GameInfoWindow } from './GameInfoWindow.tsx';
 import { IndustryWindow } from './IndustryWindow.tsx';
+import { CargoWindow } from './CargoWindow.tsx';
 import { TownWindow } from './TownWindow.tsx';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
@@ -162,6 +163,8 @@ export function WindowLayer() {
             return <IndustryWindow key={key} w={w} />;
           case 'town':
             return <TownWindow key={key} w={w} />;
+          case 'cargo':
+            return <CargoWindow key={key} w={w} />;
           case 'roadDepot':
           case 'hangar':
           case 'shipDepot':

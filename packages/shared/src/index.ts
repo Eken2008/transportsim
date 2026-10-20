@@ -45,6 +45,7 @@ export * from './economy/finance.ts';
 export * from './economy/rating.ts';
 export * from './economy/cargo.ts';
 export * from './economy/cargoSystem.ts';
+export * from './economy/cargoRoutes.ts';
 export * from './economy/industries.ts';
 export * from './economy/industryChanges.ts';
 export * from './economy/linkGraph.ts';

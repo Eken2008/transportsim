@@ -122,7 +122,8 @@ export type GameWindow =
   | { kind: 'roadDepot'; id: number }
   | { kind: 'hangar'; id: number }
   | { kind: 'shipDepot'; id: number }
-  | { kind: 'stats'; id: 0 };
+  | { kind: 'stats'; id: 0 }
+  | { kind: 'cargo'; id: 0 };
 
 export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
 
