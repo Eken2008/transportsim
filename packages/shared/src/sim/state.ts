@@ -228,6 +228,7 @@ export class GameState {
     this.maintenance.daily();
     warnLost(this);
     this.rail.clearWrecks();
+    this.incidents.clearWreckage();
     this.growTowns();
     townActionsDaily(this);
     this.billSharing();

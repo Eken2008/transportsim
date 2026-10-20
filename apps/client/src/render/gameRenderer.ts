@@ -506,6 +506,7 @@ export class GameRenderer {
 
     this.controller.update(dt);
     this.locateViews();
+    this.trains.wreckage = useApp.getState().global?.wreckage ?? [];
     this.trains.update(now, useApp.getState().global?.speed ?? 1, this.controller.target, this.controller.distance, new Set(this.viewPoints.keys()));
     this.followVehicle(now);
     // Ambient rumble: louder with more vehicles near the focus, and when zoomed in.

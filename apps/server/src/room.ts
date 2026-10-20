@@ -86,6 +86,8 @@ export class Room {
   private lastStepAt = 0;
   private stepDebt = 0;
   private globalDirty = true;
+  /** `incidents.wreckageVersion` last sent. */
+  private wreckageSent = -1;
   private lastAutosaveAt = 0;
   private hostClosesAt: number | null = null;
   private lastPosAt = 0;
@@ -409,8 +411,9 @@ export class Room {
 
   /** Send globals if changed and any out-of-date subscribed chunks (bounded per flush). */
   flush(): void {
-    if (this.globalDirty) {
+    if (this.globalDirty || this.wreckageSent !== this.state.incidents.wreckageVersion) {
       this.globalDirty = false;
+      this.wreckageSent = this.state.incidents.wreckageVersion;
       this.broadcast({ t: 'global', global: this.globalState() });
     }
     const st = this.state;
@@ -624,6 +627,7 @@ export class Room {
       agreements: [...this.state.agreements.values()],
       waypoints: [...this.state.waypoints.values()],
       wrecks: this.state.rail.wreckTiles(),
+      wreckage: this.state.incidents.wreckage,
       inflation: { ...this.state.inflation },
     };
   }

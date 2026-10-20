@@ -68,6 +68,10 @@ describe('rail accidents', () => {
       if (severity === 'realistic') {
         expect(state.trains.size).toBe(0);
         expect(state.rail.wreckTiles().length).toBeGreaterThan(0);
+        // Both trains' units (an engine and a coach each) lie on the line where they met.
+        const wreckage = state.incidents.wreckage;
+        expect(wreckage.map((w) => w.type).sort()).toEqual(['atlas', 'atlas', 'coach_steel', 'coach_steel']);
+        for (const w of wreckage) expect(Math.abs(w.y - 10.5)).toBeLessThan(0.01);
         // The report says why: the signal faces one way only.
         expect(state.news.find((n) => n.kind === 'accident')?.detail).toMatch(/met head-on: no signal kept them apart\. .* Signal both directions/);
         expect(company.money).toBeLessThan(money - ACCIDENT_RULES.realistic.base);
@@ -75,6 +79,7 @@ describe('rail accidents', () => {
         // Wreckage is cleared after the cleanup period
         days(ACCIDENT_RULES.realistic.cleanupDays + 1);
         expect(state.rail.wreckTiles()).toEqual([]);
+        expect(state.incidents.wreckage).toEqual([]);
       } else {
         expect(state.trains.size).toBe(2);
       }

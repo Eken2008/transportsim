@@ -1,9 +1,13 @@
-import { pieceKey, segTile } from '../rail/network.ts';
+import { pieceKey, segLength, segPoint, segTd, segTile } from '../rail/network.ts';
+import { segHeights, spanOver } from '../rail/structures.ts';
+import { isSpanTd } from '../rail/track.ts';
+import { roadSegPoint, rsLength } from '../road/roadNetwork.ts';
+import { waterLevelAtPoint } from '../water/waterways.ts';
 import { TICKS_PER_DAY } from '../sim/date.ts';
 import type { AccidentSeverity } from '../sim/settings.ts';
 import type { GameState } from '../sim/state.ts';
 import { Random } from '../util/random.ts';
-import { cargoCount, isRailVehicle, type Train } from '../vehicles/train.ts';
+import { cargoCount, isRailVehicle, UNIT_GAP, type Train } from '../vehicles/train.ts';
 import { vehicleMode, type VehicleMode } from '../vehicles/lines.ts';
 import { isHeavy } from '../vehicles/airSystem.ts';
 import { railVehicle } from '../vehicles/catalog.ts';
@@ -32,6 +36,21 @@ export const ACCIDENT_RULES: Record<Exclude<AccidentSeverity, 'off'>, AccidentRu
   realistic: { sight: 4, collideAbove: 10, brakeFailChance: 0.2, derail: true, base: 60_000, perPassenger: 2_000, ratingHit: 70, cleanupDays: 15 },
 };
 
+/** One wrecked vehicle unit, lying where its accident left it until the wreckage is cleared. */
+export interface Wreck {
+  type: string;
+  owner: number;
+  mode: 'rail' | 'road' | 'air' | 'water';
+  /** Tile-space centre, and its height in map levels. */
+  x: number;
+  y: number;
+  z: number;
+  /** Direction it was heading (radians, map x towards map y). */
+  heading: number;
+  /** Tick the wreckage is cleared. */
+  until: number;
+}
+
 /** Derailment threshold: this much over the curve limit. */
 export const DERAIL_OVERSPEED = 1.3;
 
@@ -43,6 +62,10 @@ export const DERAIL_OVERSPEED = 1.3;
  */
 export class IncidentSystem {
   private rng: Random;
+  /** Wrecked vehicles still lying where they crashed. */
+  readonly wreckage: Wreck[] = [];
+  /** Bumped whenever `wreckage` changes. */
+  wreckageVersion = 0;
 
   constructor(private readonly state: GameState) {
     this.rng = new Random(state.settings.seed ^ 0xacc1de);
@@ -114,6 +137,58 @@ export class IncidentSystem {
   }
 
   /** Reliability and servicing, behind a breakdown. */
+  /** Clear wreckage whose cleanup time has passed. */
+  clearWreckage(): void {
+    const tick = this.state.tick;
+    const left = this.wreckage.filter((w) => w.until > tick);
+    if (left.length === this.wreckage.length) return;
+    this.wreckage.splice(0, this.wreckage.length, ...left);
+    this.wreckageVersion++;
+  }
+
+  /** Where each unit of `t` is now (as wreckage lasting until `until`). */
+  private wreckOf(t: Train, until: number): Wreck[] {
+    const map = this.state.map;
+    const mode = t.mode ?? 'rail';
+    const type = t.units[0]!.type;
+    const at = (x: number, y: number, z: number, heading: number, type: string): Wreck => ({ type, owner: t.owner, mode, x, y, z, heading, until });
+    if (t.air) return [at(t.air.x, t.air.y, map.heightAt(t.air.x, t.air.y), t.air.heading, type)];
+    if (t.ship) return [at(t.ship.x, t.ship.y, waterLevelAtPoint(map, t.ship.x, t.ship.y), t.ship.heading, type)];
+    if (!t.path.length) return [];
+    const road = mode === 'road';
+    const len = road ? rsLength : segLength;
+    /** Point `back` tiles behind the head, or null past the end of the path (or inside a tunnel). */
+    const point = (back: number): { x: number; y: number; z: number } | null => {
+      let i = 0;
+      let d = t.pos - back;
+      while (d < 0 && i < t.path.length - 1) d += len(t.path[++i]!);
+      if (d < 0) return null;
+      const s = t.path[i]!;
+      if (road) {
+        const p = roadSegPoint(map, s, d);
+        return { x: p.x, y: p.y, z: map.heightAt(p.x, p.y) };
+      }
+      const td = segTd(s);
+      if (isSpanTd(td) && spanOver(map, segTile(s), td < 14 ? 0 : 1)?.kind === 'tunnel') return null;
+      const p = segPoint(map, s, d);
+      const [ha, hb] = segHeights(map, segTile(s), td);
+      return { x: p.x, y: p.y, z: ha + ((hb - ha) * d) / len(s) };
+    };
+    const out: Wreck[] = [];
+    let offset = 0;
+    for (const u of t.units) {
+      const v = railVehicle(u.type);
+      if (!v) continue;
+      const l = v.length / 16;
+      const f = point(offset);
+      const b = point(offset + l);
+      offset += l + UNIT_GAP;
+      if (!f || !b) continue;
+      out.push(at((f.x + b.x) / 2, (f.y + b.y) / 2, (f.z + b.z) / 2, Math.atan2(f.y - b.y, f.x - b.x), u.type));
+    }
+    return out;
+  }
+
   private upkeep(t: Train): string {
     const r = Math.round((t.reliability ?? 1) * 100);
     const since = this.state.date - (t.lastService ?? t.builtDays);
@@ -149,8 +224,10 @@ export class IncidentSystem {
       byOwner.set(t.owner, (byOwner.get(t.owner) ?? 0) + n);
       if (!modeOf.has(t.owner)) modeOf.set(t.owner, vehicleMode(t));
       if (isRailVehicle(t)) for (const s of t.path) pieces.push(pieceKey(s));
+      this.wreckage.push(...this.wreckOf(t, until));
       state.removeVehicle(t);
     }
+    this.wreckageVersion++;
     if (blockTrack) for (const k of pieces) state.rail.addWreck(k, until);
     for (const [owner, n] of byOwner) {
       state.addMoney(owner, -state.cost(rules.base + rules.perPassenger * n), 'incidents', modeOf.get(owner));

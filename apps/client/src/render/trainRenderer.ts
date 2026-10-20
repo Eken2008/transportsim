@@ -18,6 +18,7 @@ import {
   type GameMap,
   type TrainMotion,
   type UnitModel,
+  type Wreck,
 } from '@transportsim/shared';
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
@@ -37,6 +38,9 @@ const _y = new THREE.Vector3();
 const _z = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const _s = new THREE.Matrix4();
+const _r = new THREE.Matrix4();
+const _c = new THREE.Color();
+const CHARRED = new THREE.Color('#2b2522');
 const UP = new THREE.Vector3(0, 1, 0);
 
 let curves: TrackCurves | null = null;
@@ -121,6 +125,8 @@ export class TrainRenderer {
   private readonly detailMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
   private readonly colors = COMPANY_COLORS.map((c) => new THREE.Color(c));
   private segs: number[] = [];
+  /** Crashed vehicles to draw where they lie. */
+  wreckage: readonly Wreck[] = [];
 
   constructor(
     private readonly world: ClientWorld,
@@ -216,6 +222,12 @@ export class TrainRenderer {
         mm.count++;
         this.picks.push({ trainId: id, pos: new THREE.Vector3((_f.x + _b.x) / 2, (_f.y + _b.y) / 2 + 0.15, (_f.z + _b.z) / 2) });
       }
+    }
+
+    for (let i = 0; i < this.wreckage.length; i++) {
+      const w = this.wreckage[i]!;
+      if (focus && (Math.abs(w.x - focus.x) >= far || Math.abs(w.y - focus.z) >= far)) continue;
+      this.placeWreck(w, i);
     }
 
     for (const [model, mm] of this.meshes) {
@@ -333,6 +345,70 @@ export class TrainRenderer {
     mm.body.setColorAt(k, color);
     mm.count++;
     this.picks.push({ trainId: id, pos: new THREE.Vector3(x, surface + 0.15, y) });
+  }
+
+  /**
+   * A crashed unit: knocked off its line, tipped over or onto its side, scorched; a ship
+   * sinking with a list, an aircraft broken on the ground. Each wreck's pose is fixed by
+   * where it lies, so it doesn't change from frame to frame.
+   */
+  private placeWreck(w: Wreck, i: number): void {
+    const v = railVehicle(w.type);
+    if (!v) return;
+    const r = (k: number) => {
+      const h = Math.sin(w.x * 12.9898 + w.y * 78.233 + i * 37.719 + k * 4.581) * 43758.5453;
+      return h - Math.floor(h);
+    };
+    const side = r(0) < 0.5 ? -1 : 1;
+    let yaw = w.heading;
+    let pitch = 0;
+    let roll = 0;
+    let lift = 0;
+    let len = v.length / 16;
+    let uniform = false;
+    let y = w.z * HEIGHT_SCALE;
+    if (w.mode === 'water') {
+      // Down by the bow or the stern, listing, half under the surface.
+      len *= 0.9;
+      uniform = true;
+      pitch = (r(1) < 0.5 ? -1 : 1) * (0.12 + r(2) * 0.15);
+      roll = side * (0.35 + r(3) * 0.4);
+      y += WATER_Y - 0.03 - len * 0.12;
+    } else if (w.mode === 'air') {
+      // On the ground, slewed round, a wing dug in and the nose down.
+      len *= 0.85;
+      uniform = true;
+      yaw += (r(1) - 0.5) * 1.2;
+      pitch = -0.08 - r(2) * 0.12;
+      roll = side * (0.25 + r(3) * 0.3);
+      y += 0.02 + len * 0.05;
+    } else {
+      // Off the rails (or road): skewed across the line, many on their side.
+      yaw += (r(1) - 0.5) * 1.1;
+      pitch = (r(2) - 0.5) * 0.25;
+      roll = side * (r(3) < 0.55 ? 1.45 + r(4) * 0.15 : 0.2 + r(4) * 0.3);
+      lift = 0.135 * Math.abs(Math.sin(roll));
+      y += (w.mode === 'road' ? 0.03 : RAIL_TOP * 0.4) + lift;
+    }
+    const mm = this.meshesFor(v.model, 1);
+    const k = mm.count;
+    if (k >= mm.body.instanceMatrix.count) return;
+    _x.set(Math.cos(yaw), 0, Math.sin(yaw));
+    _z.crossVectors(_x, UP).normalize();
+    _y.crossVectors(_z, _x);
+    // Thrown a little to one side of where it was running.
+    const shove = w.mode === 'rail' || w.mode === 'road' ? (r(5) - 0.5) * 0.3 : 0;
+    _m.makeBasis(_x, _y, _z);
+    _m.multiply(_r.makeRotationZ(pitch));
+    _m.multiply(_r.makeRotationX(roll));
+    _m.multiply(uniform ? _s.makeScale(len, len, len) : _s.makeScale(len, 1, 1));
+    _m.setPosition(w.x + _z.x * shove, y, w.y + _z.z * shove);
+    mm.body.setMatrixAt(k, _m);
+    mm.detail.setMatrixAt(k, _m);
+    const company = this.world.state.companies.get(w.owner);
+    _c.copy(this.colors[(company?.color ?? 0) % this.colors.length]!).lerp(CHARRED, 0.86 + r(6) * 0.1);
+    mm.body.setColorAt(k, _c);
+    mm.count++;
   }
 
   dispose(): void {

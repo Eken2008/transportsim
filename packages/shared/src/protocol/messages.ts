@@ -2,6 +2,7 @@ import type { Command } from '../commands/index.ts';
 import type { Company } from '../company/company.ts';
 import type { MonthRecord, QuarterRecord } from '../economy/finance.ts';
 import type { Agreement } from '../company/sharing.ts';
+import type { Wreck } from '../incidents/rail.ts';
 import type { Waypoint } from '../rail/waypoint.ts';
 import type { GameSettings, ServerLimits } from '../sim/settings.ts';
 import type { Player } from '../sim/state.ts';
@@ -44,6 +45,8 @@ export interface GlobalState {
   waypoints: Waypoint[];
   /** Tiles blocked by wreckage after an accident. */
   wrecks: number[];
+  /** Wrecked vehicles lying where they crashed, until cleared. */
+  wreckage: Wreck[];
   /** Price levels (inflation). */
   inflation: { costs: number; payments: number };
 }
