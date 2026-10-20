@@ -587,10 +587,16 @@ export class Room {
         const chunk = Math.floor((tile - x) / map.width / CHUNK_SIZE) * map.chunksX + Math.floor(x / CHUNK_SIZE);
         if (s.subscribed.has(chunk)) reserved.push(k);
       }
-      const key = tiles.join(',') + '|' + red.join(',') + '|' + reserved.join(',');
+      const crossings: number[] = [];
+      for (const tile of rail.closedCrossings) {
+        const x = tile % map.width;
+        const chunk = Math.floor((tile - x) / map.width / CHUNK_SIZE) * map.chunksX + Math.floor(x / CHUNK_SIZE);
+        if (s.subscribed.has(chunk)) crossings.push(tile);
+      }
+      const key = tiles.join(',') + '|' + red.join(',') + '|' + reserved.join(',') + '|' + crossings.join(',');
       if (key === s.lastSignals) continue;
       s.lastSignals = key;
-      this.send(s, { t: 'signals', tiles, red, reserved });
+      this.send(s, { t: 'signals', tiles, red, reserved, crossings });
     }
   }
 

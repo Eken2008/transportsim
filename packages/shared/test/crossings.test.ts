@@ -64,6 +64,24 @@ describe('level crossings', () => {
     expect(waited).toBe(true);
   });
 
+  test('barriers that come down too late to brake still stop a road vehicle', () => {
+    const { state, bus, crossing } = world();
+    const tileOf = (s: number) => Math.floor(s / 16);
+    let closedAt = -1;
+    for (let i = 0; i < TICKS_PER_DAY * 60 && closedAt < 0; i++) {
+      state.step();
+      // Bus at speed on the tile next to the crossing, heading for it: drop the barriers now.
+      if (bus.speed > 20 && bus.route.length && tileOf(bus.route[0]!) === crossing && !bus.path.some((s) => tileOf(s) === crossing)) closedAt = i;
+    }
+    expect(closedAt).toBeGreaterThanOrEqual(0);
+    state.road.crossingClosed = (tile) => tile === crossing;
+    for (let i = 0; i < TICKS_PER_DAY * 2; i++) {
+      state.step();
+      expect(bus.path.some((s) => tileOf(s) === crossing)).toBe(false);
+    }
+    expect(bus.speed).toBe(0);
+  });
+
   test('a road vehicle stuck on the crossing is hit by the train', () => {
     const { state, bus, crossing } = world();
     let stopped = false;

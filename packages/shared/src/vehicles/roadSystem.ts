@@ -386,7 +386,9 @@ export class RoadSystem {
       const next = t.route[0];
       const pass = this.passing.has(t.id);
       const box = next === undefined ? null : pass ? [] : this.boxLanes(t, 0);
-      if (next === undefined || !roadNext(this.state.map, head).includes(next) || (!pass && this.occupiedByOther(next, t.id)) || !box) {
+      // Never drive under lowered barriers, even if they came down too late to brake gently.
+      const barred = next !== undefined && rsTile(next) !== rsTile(head) && this.crossingClosed?.(rsTile(next)) === true;
+      if (next === undefined || !roadNext(this.state.map, head).includes(next) || (!pass && this.occupiedByOther(next, t.id)) || !box || barred) {
         t.pos = rsLength(head);
         t.speed = 0;
         break;

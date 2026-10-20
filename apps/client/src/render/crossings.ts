@@ -1,4 +1,4 @@
-import { CROSSING_FLAG, HEIGHT_SCALE, TileType, hasPiece, segTile, type GameMap } from '@transportsim/shared';
+import { CROSSING_FLAG, HEIGHT_SCALE, TileType, hasPiece, type GameMap } from '@transportsim/shared';
 import * as THREE from 'three';
 import type { ClientWorld } from '../game/clientWorld.ts';
 import { GeoBuilder, lin } from './geoBuilder.ts';
@@ -90,12 +90,8 @@ export class CrossingBooms {
 
   update(dt: number, now: number, focus: THREE.Vector3): void {
     const map = this.world.map;
-    // Tiles a train is on or about to reach.
-    const busy = new Set<number>();
-    for (const { m } of this.world.motions.values()) {
-      for (const s of m.path) busy.add(segTile(s));
-      for (const s of m.ahead.slice(0, 5)) busy.add(segTile(s));
-    }
+    // Crossings the server has closed to road traffic (a train is on them or about to arrive).
+    const busy = this.world.closedCrossings;
     const barriers: Barrier[] = [];
     for (const tile of this.world.crossings) {
       const x = tile % map.width;

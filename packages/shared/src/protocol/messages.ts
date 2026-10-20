@@ -117,9 +117,10 @@ export type ServerMessage =
   | { t: 'trainPos'; trains: TrainMotion[] }
   /**
    * Aspects of signals in subscribed chunks: `red[i]` is the red-trackdir mask of `tiles[i]`.
-   * `reserved` lists path-reserved pieces (tile * 8 + piece) in those chunks.
+   * `reserved` lists path-reserved pieces (tile * 8 + piece) in those chunks, and `crossings`
+   * the level crossings there that are closed to road traffic.
    */
-  | { t: 'signals'; tiles: number[]; red: number[]; reserved: number[] }
+  | { t: 'signals'; tiles: number[]; red: number[]; reserved: number[]; crossings?: number[] }
   /** A train was paid at a station (floating "+£" label). */
   | { t: 'income'; tile: number; amount: number }
   | { t: 'global'; global: GlobalState }

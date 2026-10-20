@@ -159,7 +159,7 @@ class AppClient {
         this.world?.applyTrainPositions(m.trains);
         return;
       case 'signals':
-        this.world?.applySignals(m.tiles, m.red, m.reserved ?? []);
+        this.world?.applySignals(m.tiles, m.red, m.reserved ?? [], m.crossings ?? []);
         return;
       case 'income':
         this.world?.onIncome?.(m.tile, m.amount);

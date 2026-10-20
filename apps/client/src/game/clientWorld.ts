@@ -47,6 +47,8 @@ export class ClientWorld {
   /** Level crossing tiles in received chunks (for barrier animation). */
   readonly crossings = new Set<number>();
   private chunkCrossings = new Map<number, number[]>();
+  /** Level crossings near our view that are closed to road traffic (barriers down). */
+  closedCrossings = new Set<number>();
   /** Hook for transient effects (income labels); set by the renderer. */
   onIncome: ((tile: number, amount: number) => void) | null = null;
 
@@ -167,10 +169,11 @@ export class ClientWorld {
     for (const [id, v] of this.motions) if (!seen.has(id) && now - v.at > 1500) this.motions.delete(id);
   }
 
-  applySignals(tiles: number[], red: number[], reserved: number[]): void {
+  applySignals(tiles: number[], red: number[], reserved: number[], closedCrossings: number[]): void {
     this.signalRed.clear();
     tiles.forEach((t, i) => this.signalRed.set(t, red[i]!));
     this.reserved = reserved;
+    this.closedCrossings = new Set(closedCrossings);
     this.signalsRev++;
   }
 
