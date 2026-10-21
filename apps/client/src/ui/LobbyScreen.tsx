@@ -259,20 +259,24 @@ function HostCard({ disabled, onBeforeHost, busy }: { disabled: boolean; onBefor
           </div>
         </label>
       </div>
-      <div className="row" style={{ marginBottom: 14, gap: 16 }}>
-        <label className="row">
+      <div className="row wrap" style={{ marginBottom: 14, gap: '8px 16px' }}>
+        <label className="row" style={{ whiteSpace: 'nowrap' }}>
           <input type="checkbox" checked={s.breakdowns} onChange={(e) => set('breakdowns', e.target.checked)} />
           Vehicle breakdowns
         </label>
-        <label className="row" title="Costs rise 3% and payments 2.5% a year">
+        <label className="row" style={{ whiteSpace: 'nowrap' }} title="Costs rise 3% and payments 2.5% a year">
           <input type="checkbox" checked={s.inflation} onChange={(e) => set('inflation', e.target.checked)} />
           Inflation
         </label>
-        <label className="row" title="Companies can bribe town councils (and may be caught)">
+        <label className="row" style={{ whiteSpace: 'nowrap' }} title="Cargo pays less when the world is flooded with it, more when it is scarce or in demand, and world events move prices">
+          <input type="checkbox" checked={s.dynamicPrices} onChange={(e) => set('dynamicPrices', e.target.checked)} />
+          Market prices
+        </label>
+        <label className="row" style={{ whiteSpace: 'nowrap' }} title="Companies can bribe town councils (and may be caught)">
           <input type="checkbox" checked={s.bribery} onChange={(e) => set('bribery', e.target.checked)} />
           Bribery
         </label>
-        <label className="row">
+        <label className="row" style={{ whiteSpace: 'nowrap' }}>
           <input type="checkbox" checked={s.isPublic} onChange={(e) => set('isPublic', e.target.checked)} />
           List publicly
         </label>

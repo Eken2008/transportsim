@@ -5,7 +5,7 @@ import { placeViews } from '../render/vehicleViews.ts';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
 import { Win, focusOn, useMyRole } from './windows.tsx';
 
-const ICONS: Record<NewsItem['kind'], string> = { company: '🏢', station: '🚉', finance: '💰', agreement: '🤝', vehicle: '🔧', accident: '💥', town: '🏛️' };
+const ICONS: Record<NewsItem['kind'], string> = { company: '🏢', station: '🚉', finance: '💰', agreement: '🤝', vehicle: '🔧', accident: '💥', town: '🏛️', market: '🏷️' };
 
 function look(n: NewsItem): void {
   const w = client.world?.map.width;
@@ -88,6 +88,7 @@ function show(n: NewsItem): void {
   const v = vehicleOf(n);
   if (v !== undefined) openWindow({ kind: 'train', id: v });
   else if (n.tile !== undefined) look(n);
+  else if (n.kind === 'market') openWindow({ kind: 'stats', id: 0, tab: 'market' });
   else openWindow({ kind: 'news', id: 0 });
 }
 

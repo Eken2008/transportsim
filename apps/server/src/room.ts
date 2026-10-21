@@ -191,6 +191,7 @@ export class Room {
     this.send(session, { t: 'lines', lines: [...this.state.lines.values()], removed: [], full: true });
     this.send(session, { t: 'news', items: this.state.news.slice(-NEWS_ON_JOIN), full: true });
     this.send(session, { t: 'history', companies: [...this.state.companies.values()].map((c) => ({ id: c.id, finances: c.finances, months: c.history })), full: true });
+    this.send(session, { t: 'market', months: this.state.market.history, full: true });
 
     if (isHost && this.hostCloseTimer) {
       clearTimeout(this.hostCloseTimer);
@@ -477,6 +478,10 @@ export class Room {
       if (companies.length) this.broadcast({ t: 'history', companies, full: false });
       st.historyChanged.clear();
     }
+    if (st.market.historyChanged) {
+      st.market.historyChanged = false;
+      this.broadcast({ t: 'market', months: st.market.history.slice(-1), full: false });
+    }
     if (st.dirtyTrains.size > 0 || st.removedTrains.size > 0) {
       const trains = [...st.dirtyTrains].map((id) => st.trains.get(id)).filter((t) => t !== undefined).map(trainInfo);
       this.broadcast({ t: 'trains', trains, removed: [...st.removedTrains], full: false });
@@ -629,6 +634,7 @@ export class Room {
       wrecks: this.state.rail.wreckTiles(),
       wreckage: this.state.incidents.wreckage,
       inflation: { ...this.state.inflation },
+      market: this.state.market.view(),
     };
   }
 

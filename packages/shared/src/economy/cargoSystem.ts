@@ -533,8 +533,9 @@ export class CargoSystem {
       // Each leg is paid to the company that carried it.
       const from = this.state.stations.get(p.at ?? p.src);
       const dist = from ? Math.abs(from.x - st.x) + Math.abs(from.y - st.y) : 0;
-      income += Math.round(cargoPayment(p.cargo, p.n, dist, this.state.date - p.day) * this.state.inflation.payments);
+      income += Math.round(cargoPayment(p.cargo, p.n, dist, this.state.date - p.day) * this.state.inflation.payments * this.state.cargoPrice(p.cargo));
       if (deliver) {
+        this.state.market.record(p.cargo, p.n);
         const c = this.state.companies.get(t.owner);
         if (c) c.month.delivered[p.cargo] = (c.month.delivered[p.cargo] ?? 0) + p.n;
         this.deliverToIndustry(st, p.cargo, p.n);

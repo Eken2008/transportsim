@@ -74,6 +74,8 @@ export function GameInfoWindow({ w }: { w: GameWindow & { kind: 'game' } }) {
         <span>{s.bribery ? 'Town councils can be bribed' : 'Off'}</span>
         <span>Inflation</span>
         <span>{s.inflation ? 'On: costs +3% and payments +2.5% a year' : 'Off'}</span>
+        <span>Market prices</span>
+        <span>{s.dynamicPrices ? 'On: cargo prices follow supply, demand and world events' : 'Off: every cargo pays its normal rate'}</span>
         <span>Date</span>
         <span className="mono">{global ? formatDate(global.date) : '—'}</span>
       </div>

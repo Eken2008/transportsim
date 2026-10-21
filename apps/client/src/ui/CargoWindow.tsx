@@ -5,6 +5,8 @@ import {
   cargoDestinations,
   cargoSources,
   climateCargos,
+  eventsFor,
+  formatPrice,
   industryType,
   townAcceptsAt,
   transportedShare,
@@ -77,6 +79,24 @@ function describe(g: ChainGraph, key: string, climate: Climate): string {
   return `${who} ${parts.join(', and ')}.${extra}`;
 }
 
+/** What a cargo pays on the market now, and the world events moving its price. */
+function CargoPrice({ cargo }: { cargo: CargoId }) {
+  const m = useApp((s) => s.global?.market);
+  const on = useApp((s) => s.room?.settings.dynamicPrices ?? true);
+  if (!on || !m) return null;
+  const price = m.cargos[cargo]?.price ?? 1;
+  const events = eventsFor(m.events, cargo);
+  return (
+    <p className="small">
+      {CARGOS[cargo].name} pays <b className={price >= 1.005 ? 'pos' : price <= 0.995 ? 'neg' : undefined}>{formatPrice(price)}</b> of its normal rate now.
+      {events.map((e) => ` ${e.text}.`).join('')}{' '}
+      <button className="link" onClick={() => openWindow({ kind: 'stats', id: 0, tab: 'market' })}>
+        Market
+      </button>
+    </p>
+  );
+}
+
 /** The production chain as a diagram, and for the selected part of it, the nearest places to carry cargo between. */
 export function CargoWindow({ w }: { w: GameWindow & { kind: 'cargo' } }) {
   useTick(2000);
@@ -121,6 +141,7 @@ export function CargoWindow({ w }: { w: GameWindow & { kind: 'cargo' } }) {
       </p>
       <ChainDiagram graph={graph} counts={counts} selected={sel} onSelect={setSel} />
       <p className="small">{describe(graph, sel, climate)}</p>
+      {node?.kind === 'cargo' && <CargoPrice cargo={node.cargo} />}
       <h4>Nearest routes, shortest first</h4>
       {rows.length === 0 && <p className="muted small">None of these on the map yet.</p>}
       {rows.map(({ ind, cargo, send, ends }) => {

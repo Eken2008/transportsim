@@ -9,6 +9,7 @@ import type { Player } from '../sim/state.ts';
 import type { NewsItem } from '../news/news.ts';
 import type { Town } from '../town/towns.ts';
 import type { Industry } from '../economy/industries.ts';
+import type { MarketMonth, MarketView } from '../economy/market.ts';
 import type { Station } from '../rail/station.ts';
 import type { TrainInfo, TrainMotion } from '../vehicles/train.ts';
 import type { Line } from '../vehicles/lines.ts';
@@ -49,6 +50,8 @@ export interface GlobalState {
   wreckage: Wreck[];
   /** Price levels (inflation). */
   inflation: { costs: number; payments: number };
+  /** Cargo prices now, and the world events moving them. */
+  market?: MarketView;
 }
 
 export type ChatChannel = 'all' | 'company';
@@ -134,6 +137,8 @@ export type ServerMessage =
    * carries each company's current quarter.)
    */
   | { t: 'history'; companies: CompanyHistory[]; full: boolean }
+  /** Monthly cargo prices; `full` replaces what the client has, otherwise `months` are appended. */
+  | { t: 'market'; months: MarketMonth[]; full: boolean }
   /** Settings changed by the host during the game. */
   | { t: 'settings'; settings: GameSettings }
   | { t: 'commandResult'; seq: number; ok: boolean; error?: string; cost?: number }

@@ -1,4 +1,4 @@
-import type { ChatChannel, GameSettings, GlobalState, NewsItem, RoomSummary, ServerLimits, SignalKind } from '@transportsim/shared';
+import type { ChatChannel, GameSettings, GlobalState, MarketMonth, NewsItem, RoomSummary, ServerLimits, SignalKind } from '@transportsim/shared';
 import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
@@ -58,6 +58,8 @@ export interface AppState {
   news: NewsItem[];
   /** The news that just arrived, shown briefly in the ticker. */
   fresh: NewsItem[];
+  /** Cargo prices at the end of each month, oldest first. */
+  marketHistory: MarketMonth[];
   toasts: Toast[];
   tool: ToolId | null;
   hover: HoverInfo | null;
@@ -129,7 +131,8 @@ export type GameWindow =
   | { kind: 'roadDepot'; id: number }
   | { kind: 'hangar'; id: number }
   | { kind: 'shipDepot'; id: number }
-  | { kind: 'stats'; id: 0 }
+  /** `tab`: the statistics to show first. */
+  | { kind: 'stats'; id: 0; tab?: string }
   /** `select`: the chain node to show (an industry type `t:<id>`, a cargo `c:<id>` or `towns`). */
   | { kind: 'cargo'; id: 0; select?: string };
 
@@ -161,6 +164,7 @@ export const useApp = create<AppState>(() => ({
   chat: [],
   news: [],
   fresh: [],
+  marketHistory: [],
   toasts: [],
   tool: null,
   hover: null,

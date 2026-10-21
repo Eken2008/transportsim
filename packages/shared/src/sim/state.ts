@@ -7,7 +7,9 @@ import { FUNDED_GROWTH, forgetCompanyInTowns, townActionsDaily } from '../town/a
 import { industryMonthly } from '../economy/industryChanges.ts';
 import { Random } from '../util/random.ts';
 import { CargoSystem } from '../economy/cargoSystem.ts';
-import { generateIndustries, type Industry } from '../economy/industries.ts';
+import { climateCargos, generateIndustries, type Industry } from '../economy/industries.ts';
+import { Market } from '../economy/market.ts';
+import type { CargoId } from '../economy/cargo.ts';
 import { warnLost } from '../vehicles/lost.ts';
 import { MaintenanceSystem } from '../vehicles/maintenance.ts';
 import { IncidentSystem } from '../incidents/rail.ts';
@@ -79,6 +81,9 @@ export class GameState {
   readonly industries = new Map<number, Industry>();
   /** Price levels: construction and running costs, and cargo payments (inflation). */
   readonly inflation = { costs: 1, payments: 1 };
+  /** Cargo prices: supply and demand, and world events (see economy/market.ts). */
+  readonly market = new Market();
+  private marketRng: Random;
   private industryRng: Random;
   /** Towns changed since the last sync flush. */
   readonly dirtyTowns = new Set<number>();
@@ -155,6 +160,7 @@ export class GameState {
     this.townRng = new Random(settings.seed ^ 0x70e115);
     this.councilRng = new Random(settings.seed ^ 0xc0c111);
     this.industryRng = new Random(settings.seed ^ 0x1dc4a9);
+    this.marketRng = new Random(settings.seed ^ 0x3a2e7);
     for (let o = 0; o < 256; o++) this.joins[o * 257] = 1;
     this.blockAccess = { uses: new Uint8Array(256).fill(1), joins: this.joins };
     this.rail = new RailSystem(this);
@@ -288,8 +294,24 @@ export class GameState {
       this.historyChanged.add(c.id);
     }
     industryMonthly(this, this.industryRng, ymdFromDays(this.date).year);
+    this.updateMarket();
     monthlyReputation(this);
     if (ymdFromDays(this.date).month % 3 === 0) this.onNewQuarter();
+  }
+
+  /** Move cargo prices for the month that ended, with news of world events. */
+  private updateMarket(): void {
+    if (!this.settings.dynamicPrices) {
+      this.market.reset();
+      return;
+    }
+    const cargos = climateCargos(this.map.climate.id);
+    for (const text of this.market.monthly(this.date, cargos, [...this.industries.values()], this.towns.values(), this.marketRng)) this.addNews('market', text);
+  }
+
+  /** The price level `cargo` pays now (1 = its normal rate). */
+  cargoPrice(cargo: CargoId): number {
+    return this.settings.dynamicPrices ? this.market.price(cargo) : 1;
   }
 
   /**

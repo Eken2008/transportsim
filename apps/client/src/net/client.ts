@@ -14,6 +14,7 @@ import {
   type QuarterRecord,
   type ServerMessage,
   HISTORY_MONTHS,
+  MARKET_HISTORY_MONTHS,
 } from '@transportsim/shared';
 import { ClientWorld } from '../game/clientWorld.ts';
 import { downloadSave, gzip, listSaves, putSave, requestPersistentStorage } from '../saves/saveStore.ts';
@@ -186,6 +187,9 @@ class AppClient {
         }
         return;
       }
+      case 'market':
+        useApp.setState((s) => ({ marketHistory: m.full ? m.months : [...s.marketHistory, ...m.months].slice(-MARKET_HISTORY_MONTHS) }));
+        return;
       case 'commandResult': {
         const p = this.pending.get(m.seq);
         this.pending.delete(m.seq);
@@ -272,7 +276,7 @@ class AppClient {
     this.setWorld(null);
     for (const p of this.pending.values()) p({ ok: false, error: 'Left game' });
     this.pending.clear();
-    useApp.setState({ room: null, global: null, news: [], fresh: [], closedReason: reason, tool: null, hover: null, autosavePrompt: false, windows: [], ordersFor: null });
+    useApp.setState({ room: null, global: null, news: [], fresh: [], marketHistory: [], closedReason: reason, tool: null, hover: null, autosavePrompt: false, windows: [], ordersFor: null });
     this.conn.send({ t: 'listRooms' });
   }
 

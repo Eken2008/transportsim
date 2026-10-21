@@ -4,13 +4,16 @@ import {
   COMPANY_COLORS,
   cargoPayment,
   climateCargos,
+  eventsFor,
+  formatPrice,
   ledgerTotal,
   ymdFromDays,
   type CargoId,
+  type Climate,
   type Company,
   type MonthRecord,
 } from '@transportsim/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
 import { Win } from './windows.tsx';
@@ -38,14 +41,15 @@ function valueAt(points: [number, number][], x: number): number | null {
 
 /**
  * A plain SVG line chart with its legend: x is a game date (days) or any number, y is formatted
- * by `fmt`. Hovering the chart picks out the line nearest the pointer; hovering the legend, its line.
+ * by `fmt`. The y axis starts at 0 unless `fit`, which fits it to the values. Hovering the chart
+ * picks out the line nearest the pointer; hovering the legend, its line.
  */
-function LineChart({ series, fmt, xFmt }: { series: Series[]; fmt: (v: number) => string; xFmt: (v: number) => string }) {
+function LineChart({ series, fmt, xFmt, fit }: { series: Series[]; fmt: (v: number) => string; xFmt: (v: number) => string; fit?: boolean }) {
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
   const [legendHl, setLegendHl] = useState<string | null>(null);
   const pts = series.flatMap((s) => s.points);
   if (pts.length < 2) return <p className="muted">Not enough history yet: figures are recorded at the end of each month.</p>;
-  let [x0, x1, y0, y1] = [Infinity, -Infinity, 0, -Infinity];
+  let [x0, x1, y0, y1] = [Infinity, -Infinity, fit ? Infinity : 0, -Infinity];
   for (const [x, y] of pts) {
     x0 = Math.min(x0, x);
     x1 = Math.max(x1, x);
@@ -163,7 +167,7 @@ function LineChart({ series, fmt, xFmt }: { series: Series[]; fmt: (v: number) =
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const monthLabel = (days: number) => {
   const d = ymdFromDays(days - 1);
-  return `${MONTHS[d.month - 1]} ${d.year}`;
+  return `${MONTHS[d.month]} ${d.year}`;
 };
 const short = (v: number) => {
   const a = Math.abs(v);
@@ -172,7 +176,7 @@ const short = (v: number) => {
   return `£${Math.round(v)}`;
 };
 
-type Tab = 'value' | 'money' | 'profit' | 'income' | 'vehicles' | 'cargo' | 'rates';
+type Tab = 'value' | 'money' | 'profit' | 'income' | 'vehicles' | 'cargo' | 'market' | 'rates';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'value', label: 'Company value' },
   { id: 'money', label: 'Money' },
@@ -180,33 +184,135 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'income', label: 'Monthly income' },
   { id: 'vehicles', label: 'Vehicles' },
   { id: 'cargo', label: 'Cargo delivered' },
+  { id: 'market', label: 'Market' },
   { id: 'rates', label: 'Payment rates' },
 ];
 
 const perCompany = (companies: Company[], pick: (m: MonthRecord) => number): Series[] =>
   companies.map((c) => ({ name: c.name, color: COMPANY_COLORS[c.color % COMPANY_COLORS.length]!, points: c.history.map((m) => [m.date, pick(m)] as [number, number]) }));
 
-/** Company statistics over time, compared across companies, and what each cargo pays. */
+const units = (v: number) => (v >= 1e4 ? `${(v / 1e3).toFixed(0)}k` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(Math.round(v)));
+
+/** A price change in percentage points, coloured by direction. */
+function Change({ now, then }: { now: number; then: number | undefined }) {
+  if (then === undefined) return <span className="muted">—</span>;
+  const d = Math.round((now - then) * 100);
+  if (d === 0) return <span className="muted">±0</span>;
+  return <span className={d > 0 ? 'pos' : 'neg'}>{d > 0 ? `▲ ${d}` : `▼ ${-d}`}</span>;
+}
+
+/** Cargo prices now and over time, and the world events moving them. */
+function MarketTab({ climate }: { climate: Climate }) {
+  const market = useApp((s) => s.global?.market);
+  const history = useApp((s) => s.marketHistory);
+  const on = useApp((s) => s.room?.settings.dynamicPrices ?? true);
+  const [hl, setHl] = useState<CargoId | null>(null);
+  if (!on) return <p className="muted">Market prices are off in this game: every cargo pays its normal rate.</p>;
+  const cargos = climateCargos(climate);
+  const events = market?.events ?? [];
+  // The latest month in the history is today's price; compare with the month and the year before.
+  const lastMonth = history.at(-2)?.prices;
+  const lastYear = history.at(-13)?.prices;
+  const series = cargos
+    .filter((c) => !hl || c === hl)
+    .map((c) => ({ name: CARGOS[c].name, color: CARGOS[c].color, points: history.filter((h) => h.prices[c] !== undefined).map((h) => [h.date, h.prices[c]! * 100] as [number, number]) }));
+  return (
+    <>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Prices change every month. A cargo pays less when more of it is delivered across the world than the world takes, more when it is scarce, and world events push prices up or down for a
+        while. 100% is the normal rate.
+      </p>
+      {events.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          {events.map((e) => (
+            <div key={e.id} className="list-row small">
+              <span aria-hidden>{e.factor > 1 ? '📈' : '📉'}</span>
+              <span style={{ flex: 1 }}>{e.text}</span>
+              <span className="muted">until {monthLabel(e.until)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="table-scroll">
+        <table className="ledger">
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left' }}>Cargo</th>
+              <th>Price</th>
+              <th title="Change since last month, in percentage points">Month</th>
+              <th title="Change since a year ago, in percentage points">Year</th>
+              <th title="Delivered across the world a month, over the last few months">Delivered</th>
+              <th title="What the world takes a month: the industries that accept the cargo, and the people on the map">World takes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cargos.map((c) => {
+              const m = market?.cargos[c];
+              const price = m?.price ?? 1;
+              const ev = eventsFor(events, c);
+              return (
+                <tr key={c} onPointerEnter={() => setHl(c)} onPointerLeave={() => setHl(null)} style={{ background: hl === c ? 'var(--panel-2)' : undefined }}>
+                  <td>
+                    <span className="row" style={{ gap: 6 }}>
+                      <span className="company-swatch tiny" style={{ background: CARGOS[c].color }} />
+                      {CARGOS[c].name}
+                      {ev.length > 0 && (
+                        <span title={ev.map((e) => e.text).join('\n')} aria-label="World event">
+                          {ev.some((e) => e.factor > 1) ? '📈' : '📉'}
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td className={price >= 1.005 ? 'pos' : price <= 0.995 ? 'neg' : undefined} style={{ fontWeight: 600 }}>
+                    {formatPrice(price)}
+                  </td>
+                  <td>
+                    <Change now={price} then={lastMonth?.[c]} />
+                  </td>
+                  <td>
+                    <Change now={price} then={lastYear?.[c]} />
+                  </td>
+                  <td>{units(m?.supply ?? 0)}</td>
+                  <td>{units(m?.demand ?? 0)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <h4>{hl ? `${CARGOS[hl].name} price` : 'Prices'} over time</h4>
+      <LineChart series={series} fmt={(v) => `${Math.round(v)}%`} xFmt={monthLabel} fit />
+    </>
+  );
+}
+
+/** Company statistics over time, compared across companies, cargo prices, and what each cargo pays. */
 export function StatsWindow({ w }: { w: GameWindow & { kind: 'stats' } }) {
   const companies = useApp((s) => s.global?.companies ?? []);
   const myCompany = useApp((s) => s.global?.players.find((p) => p.id === s.room?.playerId)?.companyId ?? null);
   const climate = useApp((s) => s.room?.settings.climate ?? 'temperate');
-  const [tab, setTab] = useState<Tab>('value');
+  const market = useApp((s) => s.global?.market);
+  const [tab, setTab] = useState<Tab>((w.tab as Tab | undefined) ?? 'value');
+  useEffect(() => {
+    if (w.tab) setTab(w.tab as Tab);
+  }, [w.tab]);
   const [cargoOf, setCargoOf] = useState<number | null>(null);
   const focus = companies.find((c) => c.id === (cargoOf ?? myCompany)) ?? companies[0];
 
   let body: React.ReactNode;
-  if (tab === 'rates') {
-    // What a load of 10 units pays over 20 tiles, by days in transit.
+  if (tab === 'market') {
+    body = <MarketTab climate={climate} />;
+  } else if (tab === 'rates') {
+    // What a load of 10 units pays over 20 tiles, by days in transit, at today's prices.
     const series = climateCargos(climate).map((c: CargoId) => ({
       name: CARGOS[c].name,
       color: CARGOS[c].color,
-      points: Array.from({ length: 31 }, (_, d) => [d * 3, cargoPayment(c, 10, 20, d * 3)] as [number, number]),
+      points: Array.from({ length: 31 }, (_, d) => [d * 3, cargoPayment(c, 10, 20, d * 3) * (market?.cargos[c]?.price ?? 1)] as [number, number]),
     }));
     body = (
       <>
         <p className="muted small" style={{ marginTop: 0 }}>
-          Payment for 10 units carried 20 tiles, by days on the way. Slow deliveries pay less, sooner for impatient cargo.
+          Payment for 10 units carried 20 tiles, by days on the way, at today's market prices. Slow deliveries pay less, sooner for impatient cargo.
         </p>
         <LineChart series={series} fmt={short} xFmt={(d) => `${Math.round(d)} days`} />
       </>
@@ -240,7 +346,7 @@ export function StatsWindow({ w }: { w: GameWindow & { kind: 'stats' } }) {
       </>
     );
   } else {
-    const pick: Record<Exclude<Tab, 'rates' | 'cargo'>, (m: MonthRecord) => number> = {
+    const pick: Record<Exclude<Tab, 'rates' | 'cargo' | 'market'>, (m: MonthRecord) => number> = {
       value: (m) => m.value,
       money: (m) => m.money - m.loan,
       profit: (m) => ledgerTotal(m.ledger) - m.ledger.construction - m.ledger.vehicles,
@@ -267,7 +373,7 @@ export function StatsWindow({ w }: { w: GameWindow & { kind: 'stats' } }) {
         ))}
       </div>
       {body}
-      {tab !== 'rates' && companies.length > 0 && (
+      {tab !== 'rates' && tab !== 'market' && companies.length > 0 && (
         <p className="muted small" style={{ marginBottom: 0 }}>
           {companies.length === 1 ? '' : 'Compare companies by colour. '}Latest month: {formatMoney(focus?.history.at(-1)?.value ?? focus?.value ?? 0)} company value for {focus?.name}.
         </p>

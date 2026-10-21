@@ -25,6 +25,8 @@ export interface GameSettings {
   breakdowns: boolean;
   /** Costs rise 3% and payments 2.5% a year. */
   inflation: boolean;
+  /** Cargo prices follow supply, demand and world events (see economy/market.ts). */
+  dynamicPrices: boolean;
   economy: EconomyDifficulty;
   /** Town councils can be bribed (a town action). */
   bribery: boolean;
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   accidents: 'low',
   breakdowns: true,
   inflation: false,
+  dynamicPrices: true,
   economy: 'normal',
   bribery: true,
   maxPlayers: 8,
@@ -90,6 +93,7 @@ export function sanitizeSettings(input: Partial<GameSettings>, limits: ServerLim
     accidents: oneOf(input.accidents, ['off', 'low', 'realistic'] as const, d.accidents),
     breakdowns: typeof input.breakdowns === 'boolean' ? input.breakdowns : d.breakdowns,
     inflation: typeof input.inflation === 'boolean' ? input.inflation : d.inflation,
+    dynamicPrices: typeof input.dynamicPrices === 'boolean' ? input.dynamicPrices : d.dynamicPrices,
     economy: oneOf(input.economy, ['easy', 'normal', 'hard'] as const, d.economy),
     bribery: typeof input.bribery === 'boolean' ? input.bribery : d.bribery,
     maxPlayers: Math.round(clamp(input.maxPlayers, 1, limits.maxPlayers, Math.min(d.maxPlayers, limits.maxPlayers))),

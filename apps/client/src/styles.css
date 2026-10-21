@@ -289,6 +289,9 @@ input[type='range'] {
 .money.neg {
   color: var(--bad);
 }
+.pos {
+  color: var(--ok);
+}
 .speed-group {
   display: flex;
   gap: 2px;

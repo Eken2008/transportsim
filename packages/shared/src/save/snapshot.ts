@@ -55,6 +55,8 @@ export interface Snapshot {
   industries?: Industry[];
   nextIndustryId?: number;
   inflation?: { costs: number; payments: number };
+  /** Cargo prices, world events and price history (see economy/market.ts). */
+  market?: unknown;
   /** Street tiles under road works → the day they finish. */
   roadWorks?: [number, number][];
 }
@@ -90,6 +92,7 @@ export function takeSnapshot(state: GameState): Snapshot {
     industries: [...state.industries.values()],
     nextIndustryId: state.nextIndustryId,
     inflation: state.inflation,
+    market: state.market.save(),
     roadWorks: [...state.roadWorks],
   };
 }
@@ -201,6 +204,7 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
   }
   state.inflation.costs = Math.max(1, Math.min(20, num(snap.inflation?.costs, 1)));
   state.inflation.payments = Math.max(1, Math.min(20, num(snap.inflation?.payments, 1)));
+  state.market.restore(snap.market);
   state.nextIndustryId = Math.max(num(snap.nextIndustryId, 0), ...[...state.industries.keys()].map((k) => k + 1));
   const savedPackets = new Map(Array.isArray(snap.cargoPackets) ? snap.cargoPackets : []);
   for (const s of Array.isArray(snap.stations) ? snap.stations : []) {
