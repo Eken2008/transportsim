@@ -18,10 +18,12 @@ import { curveParamAt, curvePoint, curveTangent, type PieceCurve, type TrackCurv
 /** Fence line offset from the track centre line: outside signals and masts. */
 const FENCE_OFFSET = 0.42;
 /**
- * No fence where another track's centre line is this close to it: tracks that run close
- * together (side by side, or splitting at points) share the land between them.
+ * No fence where another track crosses the line out sideways from the track this far: tracks
+ * that run close together (side by side, or parted at points) share the land between them.
  */
-const NEIGHBOUR_RANGE = 1.05;
+const NEIGHBOUR_REACH = 1.5;
+/** Nor where the fence would come this close to another track's centre line (crossing it). */
+const TRACK_CLEARANCE = 0.3;
 /** Pieces either way along a fence's own track that never count as a neighbour, so fences follow bends. */
 const LINE_DEPTH = 3;
 const FENCE_HEIGHT = 0.13;
@@ -55,18 +57,23 @@ function polyline(curves: TrackCurves, polys: FencePolylines, tile: number, piec
   return line;
 }
 
-function polylineDistance(line: Float32Array, px: number, pz: number): number {
-  let best = Infinity;
-  for (let k = 0; k < POLY_STEPS; k++) {
-    const ax = line[k * 2]!;
-    const az = line[k * 2 + 1]!;
-    const dx = line[k * 2 + 2]! - ax;
-    const dz = line[k * 2 + 3]! - az;
-    const l2 = dx * dx + dz * dz;
-    const s = l2 > 0 ? Math.min(1, Math.max(0, ((px - ax) * dx + (pz - az) * dz) / l2)) : 0;
-    best = Math.min(best, Math.hypot(ax + dx * s - px, az + dz * s - pz));
-  }
-  return best;
+/** Distance from (px, pz) to segment a-b. */
+function segmentDistance(px: number, pz: number, ax: number, az: number, bx: number, bz: number): number {
+  const dx = bx - ax;
+  const dz = bz - az;
+  const l2 = dx * dx + dz * dz;
+  const s = l2 > 0 ? Math.min(1, Math.max(0, ((px - ax) * dx + (pz - az) * dz) / l2)) : 0;
+  return Math.hypot(ax + dx * s - px, az + dz * s - pz);
+}
+
+/** Do segments a-b and c-d cross? */
+function segmentsCross(ax: number, az: number, bx: number, bz: number, cx: number, cz: number, dx: number, dz: number): boolean {
+  const side = (px: number, pz: number, qx: number, qz: number, rx: number, rz: number) => (qx - px) * (rz - pz) - (qz - pz) * (rx - px);
+  const d1 = side(cx, cz, dx, dz, ax, az);
+  const d2 = side(cx, cz, dx, dz, bx, bz);
+  const d3 = side(ax, az, bx, bz, cx, cz);
+  const d4 = side(ax, az, bx, bz, dx, dz);
+  return d1 * d2 <= 0 && d3 * d4 <= 0 && (d1 !== 0 || d2 !== 0);
 }
 
 /** Direction leaving a piece's curve through one of its edges. */
@@ -105,8 +112,23 @@ function ownLine(map: GameMap, curves: TrackCurves, tile: number, piece: number)
   return out;
 }
 
-/** Can a fence stand at (fx, fz): on open ground or plain track, with no other track close by? */
-function fenceFits(map: GameMap, curves: TrackCurves, polys: FencePolylines, line: Set<number>, fx: number, fz: number): boolean {
+/**
+ * Can a fence stand at (fx, fz), beside the track point (cx, cz) whose sideways direction
+ * towards the fence is (nx, nz)? Only on open ground or plain track, never on another track
+ * and not where another track runs on that side close by.
+ */
+function fenceFits(
+  map: GameMap,
+  curves: TrackCurves,
+  polys: FencePolylines,
+  line: Set<number>,
+  fx: number,
+  fz: number,
+  cx: number,
+  cz: number,
+  nx: number,
+  nz: number,
+): boolean {
   const tx = Math.floor(fx);
   const tz = Math.floor(fz);
   if (!map.inBounds(tx, tz)) return false;
@@ -114,18 +136,28 @@ function fenceFits(map: GameMap, curves: TrackCurves, polys: FencePolylines, lin
   const type = map.layers.type[i];
   if (type !== TileType.Clear && type !== TileType.Rail) return false;
   if (type === TileType.Rail && map.layers.data[i]! & CROSSING_FLAG) return false;
-  const r = NEIGHBOUR_RANGE;
-  for (let y = Math.floor(fz - r); y <= Math.floor(fz + r); y++) {
-    for (let x = Math.floor(fx - r); x <= Math.floor(fx + r); x++) {
+  // The line out sideways from the track, starting just off its centre.
+  const r0x = cx + nx * 0.1;
+  const r0z = cz + nz * 0.1;
+  const r1x = cx + nx * NEIGHBOUR_REACH;
+  const r1z = cz + nz * NEIGHBOUR_REACH;
+  for (let y = Math.floor(Math.min(r0z, r1z, fz) - TRACK_CLEARANCE); y <= Math.floor(Math.max(r0z, r1z, fz) + TRACK_CLEARANCE); y++) {
+    for (let x = Math.floor(Math.min(r0x, r1x, fx) - TRACK_CLEARANCE); x <= Math.floor(Math.max(r0x, r1x, fx) + TRACK_CLEARANCE); x++) {
       if (!map.inBounds(x, y)) continue;
       const j = map.tileIndex(x, y);
       if (!isTrack(map.layers.type[j]!)) continue;
-      // Nearest point of the tile to the fence point.
-      if (Math.hypot(fx - Math.min(Math.max(fx, x), x + 1), fz - Math.min(Math.max(fz, y), y + 1)) >= r) continue;
       const bits = map.layers.track[j]!;
       for (let p = 0; p < PIECE_COUNT; p++) {
         if (!hasPiece(bits, p) || line.has(j * 8 + p)) continue;
-        if (polylineDistance(polyline(curves, polys, j, p), fx, fz) < r) return false;
+        const pl = polyline(curves, polys, j, p);
+        for (let k = 0; k < POLY_STEPS; k++) {
+          const ax = pl[k * 2]!;
+          const az = pl[k * 2 + 1]!;
+          const bx = pl[k * 2 + 2]!;
+          const bz = pl[k * 2 + 3]!;
+          if (segmentDistance(fx, fz, ax, az, bx, bz) < TRACK_CLEARANCE) return false;
+          if (segmentsCross(r0x, r0z, r1x, r1z, ax, az, bx, bz)) return false;
+        }
       }
     }
   }
@@ -135,7 +167,7 @@ function fenceFits(map: GameMap, curves: TrackCurves, polys: FencePolylines, lin
 /**
  * Lineside fences along both sides of a piece, rails in the owner's colour. Left out where
  * the ground beside the track is taken (roads, buildings, stations, water) or another track
- * runs close by, so neighbouring tracks have no fence between them.
+ * runs close by on that side, so neighbouring tracks have no fence between them.
  */
 export function addFences(
   g: GeoBuilder,
@@ -150,25 +182,25 @@ export function addFences(
   const c = curves.get(tile, piece);
   const n = Math.max(2, Math.round(c.p0.distanceTo(c.p3) / 0.25));
   const line = ownLine(map, curves, tile, piece);
-  const fits = (fx: number, fz: number) => fenceFits(map, curves, polys, line, fx, fz);
+  // Fence points at every post and halfway between posts; a stretch needs all three to fit.
   const pts: THREE.Vector3[] = [];
   const ok: boolean[] = [];
   for (const side of [1, -1]) {
-    for (let k = 0; k <= n; k++) {
-      const t = curveParamAt(c, k / n);
+    for (let k = 0; k <= 2 * n; k++) {
+      const t = curveParamAt(c, k / (2 * n));
       curvePoint(c, t, _p);
       curveTangent(c, t, _t);
-      _u.set(-_t.z, 0, _t.x).normalize().multiplyScalar(side * FENCE_OFFSET);
-      const fx = _p.x + _u.x;
-      const fz = _p.z + _u.z;
-      pts[k] = (pts[k] ?? new THREE.Vector3()).set(fx, map.heightAt(fx, fz) * HEIGHT_SCALE, fz);
-      ok[k] = fits(fx, fz);
+      _u.set(-_t.z, 0, _t.x).normalize().multiplyScalar(side);
+      const fx = _p.x + _u.x * FENCE_OFFSET;
+      const fz = _p.z + _u.z * FENCE_OFFSET;
+      if (k % 2 === 0) pts[k / 2] = (pts[k / 2] ?? new THREE.Vector3()).set(fx, map.heightAt(fx, fz) * HEIGHT_SCALE, fz);
+      ok[k] = fenceFits(map, curves, polys, line, fx, fz, _p.x, _p.z, _u.x, _u.z);
     }
     let lastPost = -1;
     for (let k = 0; k < n; k++) {
       const a = pts[k]!;
       const b = pts[k + 1]!;
-      if (!ok[k] || !ok[k + 1] || !fits((a.x + b.x) / 2, (a.z + b.z) / 2)) continue;
+      if (!ok[2 * k] || !ok[2 * k + 1] || !ok[2 * k + 2]) continue;
       g.color(FENCE_POST);
       for (const [idx, q] of [[k, a], [k + 1, b]] as const) {
         if (idx === lastPost) continue;
