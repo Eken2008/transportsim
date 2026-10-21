@@ -618,6 +618,19 @@ input[type='range'] {
 .window-title button {
   padding: 2px 8px;
 }
+.window-title .rename-btn {
+  padding: 0 4px;
+  opacity: 0.6;
+}
+.window-title .rename-btn:hover {
+  opacity: 1;
+}
+.title-input {
+  width: 100%;
+  min-width: 0;
+  padding: 1px 6px;
+  font-weight: 600;
+}
 .window-body {
   flex: 1 1 auto;
   min-height: 0;

@@ -122,7 +122,9 @@ export const buyTrainHandler: CommandHandler<BuyTrainCommand> = {
       cost: total,
       commit() {
         const kind = road ? (isBus(parsed[0]!) ? 'Bus' : 'Truck') : hangar ? 'Aircraft' : shipyard ? 'Ship' : 'Train';
-        const n = [...state.trains.values()].filter((t) => t.owner === ctx.companyId && t.name.startsWith(kind)).length + 1;
+        const used = new Set([...state.trains.values()].filter((t) => t.owner === ctx.companyId).map((t) => t.name.toLowerCase()));
+        let n = 1;
+        while (used.has(`${kind} ${n}`.toLowerCase())) n++;
         const t: Train = {
           id: state.nextTrainId++,
           mode: mode === 'rail' ? undefined : mode,

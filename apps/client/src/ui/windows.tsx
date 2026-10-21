@@ -12,6 +12,7 @@ import {
   cargoesIn,
   unitCargoIn,
   isAvailable,
+  MAX_NAME_LENGTH,
   MAX_SERVICE_INTERVAL,
   MIN_SERVICE_INTERVAL,
   SERVICE_INTERVAL_DAYS,
@@ -109,7 +110,8 @@ let zTop = 10;
 const MIN_WIN_W = 240;
 const MIN_WIN_H = 120;
 
-export function Win({ w, title, children, width = 340 }: { w: GameWindow; title: ReactNode; children: ReactNode; width?: number }) {
+/** `label` names the window for screen readers when `title` isn't plain text. */
+export function Win({ w, title, label, children, width = 340 }: { w: GameWindow; title: ReactNode; label?: string; children: ReactNode; width?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(() => {
     const n = useApp.getState().windows.length;
@@ -171,7 +173,7 @@ export function Win({ w, title, children, width = 340 }: { w: GameWindow; title:
       onPointerDown={() => setZ(++zTop)}
       onAnimationEnd={(e) => e.target === e.currentTarget && e.currentTarget.classList.remove('window-flash')}
       role="dialog"
-      aria-label={typeof title === 'string' ? title : undefined}
+      aria-label={label ?? (typeof title === 'string' ? title : undefined)}
     >
       <div
         className="window-title"
@@ -197,6 +199,48 @@ export function Win({ w, title, children, width = 340 }: { w: GameWindow; title:
       {grip(false, true, 's')}
       {grip(true, true, 'se')}
     </div>
+  );
+}
+
+/**
+ * A window title that its owner can rename: ✎ turns it into a text field, Enter or leaving the
+ * field saves, Escape cancels.
+ */
+export function EditableTitle({ name, canEdit, what, onRename }: { name: string; canEdit: boolean; what: string; onRename: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  if (!canEdit) return <>{name}</>;
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        defaultValue={name}
+        maxLength={MAX_NAME_LENGTH}
+        aria-label={`${what} name`}
+        className="title-input"
+        onPointerDown={(e) => e.stopPropagation()}
+        onFocus={(e) => e.target.select()}
+        onBlur={(e) => {
+          setEditing(false);
+          const v = e.target.value.trim();
+          if (v && v !== name) onRename(v);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            (e.target as HTMLInputElement).value = name;
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+      />
+    );
+  }
+  return (
+    <span className="row" style={{ gap: 4, minWidth: 0 }}>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+      <button className="ghost small rename-btn" title={`Rename this ${what.toLowerCase()}`} aria-label={`Rename ${name}`} onPointerDown={(e) => e.stopPropagation()} onClick={() => setEditing(true)}>
+        ✎
+      </button>
+    </span>
   );
 }
 
@@ -307,7 +351,7 @@ function TrainWindow({ w }: { w: GameWindow & { kind: 'train' } }) {
   const moving = !!motion && (motion.path.length > 0 || !!motion.air || !!motion.ship);
 
   return (
-    <Win w={w} title={t.name} width={320}>
+    <Win w={w} title={<EditableTitle name={t.name} canEdit={mine} what="Vehicle" onRename={(name) => act({ type: 'renameVehicle', id: t.id, name })} />} label={t.name} width={320}>
       <VehicleView id={t.id} onClick={locate} onDoubleClick={() => moving && follow(t.id)} />
       <div className="vehicle-status row">
         <b style={{ flex: 1 }} className={t.lost ? 'neg' : undefined}>
@@ -692,6 +736,7 @@ function RoadDepotWindow({ w }: { w: GameWindow & { kind: 'roadDepot' | 'hangar'
 function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
   useTick(1000);
   useApp((s) => s.trainsRev);
+  const my = useMyRole();
   const st = client.world?.state.stations.get(w.id);
   if (!st) {
     return (
@@ -708,8 +753,9 @@ function StationWindow({ w }: { w: GameWindow & { kind: 'station' } }) {
   ).sort((a, b) => b.n - a.n);
   const town = st.townId === null ? undefined : client.world?.state.towns.get(st.townId);
   const barredBy = town?.exclusive && client.world && exclusionBarred(client.world.state).has(st.id) ? client.world.state.companies.get(town.exclusive.company) : undefined;
+  const mine = my.companyId === st.owner && roleAllows(my.role, 'operate');
   return (
-    <Win w={w} title={st.name}>
+    <Win w={w} title={<EditableTitle name={st.name} canEdit={mine} what="Station" onRename={(name) => act({ type: 'renameStation', id: st.id, name })} />} label={st.name}>
       {barredBy && town?.exclusive && (
         <div className="notice warn">
           {barredBy.name} holds exclusive transport rights in {town.name} until {formatDate(town.exclusive.until)}: this station gets no

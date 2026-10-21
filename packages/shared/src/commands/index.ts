@@ -97,6 +97,7 @@ import {
 } from './sharing.ts';
 import { townActionHandler, type TownActionCommand } from './town.ts';
 import { buildHeadquartersHandler, type BuildHeadquartersCommand } from './headquarters.ts';
+import { renameStationHandler, renameVehicleHandler, type RenameStationCommand, type RenameVehicleCommand } from './rename.ts';
 import { roleAllows } from '../company/company.ts';
 import type { CommandContext, CommandHandler, CommandEffects } from './types.ts';
 
@@ -119,6 +120,7 @@ export * from './airport.ts';
 export * from './water.ts';
 export * from './town.ts';
 export * from './headquarters.ts';
+export * from './rename.ts';
 
 export type Command =
   | TerraformCommand
@@ -171,7 +173,9 @@ export type Command =
   | BuildShipDepotCommand
   | BuildBuoyCommand
   | TownActionCommand
-  | BuildHeadquartersCommand;
+  | BuildHeadquartersCommand
+  | RenameStationCommand
+  | RenameVehicleCommand;
 export type CommandType = Command['type'];
 
 const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K }>> } = {
@@ -226,6 +230,8 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   buildBuoy: buildBuoyHandler,
   townAction: townActionHandler,
   buildHeadquarters: buildHeadquartersHandler,
+  renameStation: renameStationHandler,
+  renameVehicle: renameVehicleHandler,
 };
 
 const PERMISSION_ERRORS = {
