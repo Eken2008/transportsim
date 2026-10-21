@@ -19,10 +19,12 @@ import {
   cloneVehicleHandler,
   editConsistHandler,
   trainActionHandler,
+  vehiclesActionHandler,
   type BuyTrainCommand,
   type CloneVehicleCommand,
   type EditConsistCommand,
   type TrainActionCommand,
+  type VehiclesActionCommand,
 } from './trains.ts';
 import {
   assignLineHandler,
@@ -131,6 +133,7 @@ export type Command =
   | ClearAreaCommand
   | BuyTrainCommand
   | TrainActionCommand
+  | VehiclesActionCommand
   | SetOrdersCommand
   | CreateLineCommand
   | EditLineCommand
@@ -187,6 +190,7 @@ const HANDLERS: { [K in CommandType]: CommandHandler<Extract<Command, { type: K 
   clearArea: clearAreaHandler,
   buyTrain: buyTrainHandler,
   trainAction: trainActionHandler,
+  vehiclesAction: vehiclesActionHandler,
   setOrders: setOrdersHandler,
   createLine: createLineHandler,
   editLine: editLineHandler,

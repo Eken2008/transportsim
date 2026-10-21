@@ -47,12 +47,29 @@ export function parseUnits(input: unknown, climate: Climate = 'temperate'): Trai
   return out;
 }
 
-export type TrainActionKind = 'start' | 'stop' | 'toDepot' | 'reverse' | 'sell' | 'skip' | 'autofill';
+/** `service`: visit a depot for a service, then carry on with the line. */
+export type TrainActionKind = 'start' | 'stop' | 'toDepot' | 'service' | 'reverse' | 'sell' | 'skip' | 'autofill';
 
 export interface TrainActionCommand {
   type: 'trainAction';
   id: number;
   action: TrainActionKind;
+}
+
+/** What can be done to many vehicles at once. */
+export type BulkActionKind = 'start' | 'stop' | 'toDepot' | 'service';
+export const BULK_ACTIONS: readonly BulkActionKind[] = ['start', 'stop', 'toDepot', 'service'];
+/** Most vehicles one bulk command acts on. */
+export const MAX_BULK_VEHICLES = 1000;
+
+/**
+ * Do the same to several vehicles. Vehicles it can't apply to (already stopped, already
+ * heading for a depot…) are skipped; it fails only if it applies to none of them.
+ */
+export interface VehiclesActionCommand {
+  type: 'vehiclesAction';
+  ids: number[];
+  action: BulkActionKind;
 }
 
 /**
@@ -180,6 +197,20 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
       case 'toDepot':
         if (t.status === 'depot') return fail('Already in a depot');
         return { ok: true, cost: 0, commit: () => (rail.sendToDepot(t), done(), noEffects()) };
+      case 'service':
+        if (t.status === 'depot') return fail('Already in a depot');
+        if (t.toDepot) return fail('Already heading for a depot');
+        if (t.serviceTrip) return fail('Already heading for a service');
+        return {
+          ok: true,
+          cost: 0,
+          commit() {
+            t.serviceTrip = true;
+            t.routeFor = -1;
+            done();
+            return noEffects();
+          },
+        };
       case 'reverse':
         if (t.status === 'depot') return fail('The train is in a depot');
         if (t.speed > 0.5) return fail('Stop the train first');
@@ -216,6 +247,36 @@ export const trainActionHandler: CommandHandler<TrainActionCommand> = {
     function done() {
       state.dirtyTrains.add(t!.id);
     }
+  },
+};
+
+export const vehiclesActionHandler: CommandHandler<VehiclesActionCommand> = {
+  needsCompany: true,
+  permission: 'operate',
+  plan(state, ctx, cmd): PlanResult {
+    if (!BULK_ACTIONS.includes(cmd.action)) return fail('Unknown action');
+    if (!Array.isArray(cmd.ids) || cmd.ids.length === 0) return fail('Choose some vehicles');
+    if (cmd.ids.length > MAX_BULK_VEHICLES) return fail(`At most ${MAX_BULK_VEHICLES} vehicles at once`);
+    const commits: (() => unknown)[] = [];
+    let firstError: string | null = null;
+    for (const id of new Set(cmd.ids)) {
+      const t = isInt(id) ? state.trains.get(id) : undefined;
+      // Sending to a depot toggles; one already on its way is left going.
+      if (cmd.action === 'toDepot' && t?.toDepot) continue;
+      const plan = trainActionHandler.plan(state, ctx, { type: 'trainAction', id, action: cmd.action });
+      if (plan.ok) commits.push(plan.commit);
+      else firstError ??= plan.error;
+    }
+    if (commits.length === 0) return fail(firstError ?? 'Nothing to do');
+    return {
+      ok: true,
+      cost: 0,
+      note: `${commits.length} vehicle${commits.length === 1 ? '' : 's'}`,
+      commit() {
+        for (const c of commits) c();
+        return noEffects();
+      },
+    };
   },
 };
 

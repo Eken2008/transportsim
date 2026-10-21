@@ -52,6 +52,7 @@ import { GameInfoWindow } from './GameInfoWindow.tsx';
 import { IndustryWindow } from './IndustryWindow.tsx';
 import { CargoWindow } from './CargoWindow.tsx';
 import { TownWindow } from './TownWindow.tsx';
+import { VehicleListWindow } from './VehicleListWindow.tsx';
 import { vehicleViews } from '../render/vehicleViews.ts';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
@@ -61,10 +62,6 @@ export function useTick(ms: number): void {
     const id = setInterval(() => set((n) => n + 1), ms);
     return () => clearInterval(id);
   }, [ms]);
-}
-
-function useMyCompany(): number | null {
-  return useMyRole().companyId;
 }
 
 /** The local player's company and role in it. */
@@ -260,7 +257,7 @@ export function WindowLayer() {
           case 'station':
             return <StationWindow key={key} w={w} />;
           case 'trains':
-            return <TrainListWindow key={key} w={w} />;
+            return <VehicleListWindow key={key} w={w} />;
           case 'lines':
             return <LinesWindow key={key} w={w} />;
           case 'line':
@@ -895,32 +892,6 @@ function RatingBreakdown({ st }: { st: Station }) {
         higher rating brings more passengers.
       </p>
     </details>
-  );
-}
-
-function TrainListWindow({ w }: { w: GameWindow & { kind: 'trains' } }) {
-  useTick(1000);
-  useApp((s) => s.trainsRev);
-  const company = useMyCompany();
-  const trains = [...(client.world?.trains.values() ?? [])].filter((t) => t.owner === company).sort((a, b) => a.id - b.id);
-  return (
-    <Win w={w} title="Your vehicles" width={480}>
-      <button style={{ width: '100%', marginBottom: 8 }} onClick={() => openWindow({ kind: 'lines', id: 0 })}>
-        Lines…
-      </button>
-      {trains.length === 0 && <p className="muted">No vehicles yet. Build a depot (7 for trains, J for road vehicles), click it, and buy one.</p>}
-      {trains.map((t) => (
-        <div className="list-row" key={t.id}>
-          <b style={{ width: 70 }}>{t.name}</b>
-          <span className="muted small" style={{ flex: 1, minWidth: 0 }}>
-            {trainStatus(t)}
-          </span>
-          <LineTag t={t} />
-          <span className={`mono small ${t.profitThisYear < 0 ? 'neg' : ''}`}>{formatMoney(t.profitThisYear)}</span>
-          <button onClick={() => openWindow({ kind: 'train', id: t.id })}>Open</button>
-        </div>
-      ))}
-    </Win>
   );
 }
 

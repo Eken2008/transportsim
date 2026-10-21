@@ -1163,9 +1163,86 @@ ol.orders li.kind-waypoint .order-name {
   justify-content: center;
   max-width: calc(100% - 20px);
 }
-.tool-options .seg {
+.tool-options .seg,
+.window .seg {
   display: flex;
   gap: 4px;
+}
+
+/* Vehicle list */
+.bulk-bar {
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: rgba(88, 166, 255, 0.12);
+}
+.bulk-bar button {
+  padding: 3px 9px;
+}
+table.vlist {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+table.vlist th {
+  font-weight: 600;
+  font-size: 12px;
+  text-align: right;
+  padding: 0 0 4px 6px;
+  white-space: nowrap;
+}
+table.vlist th:nth-last-child(-n + 5) {
+  width: 78px;
+}
+table.vlist th:nth-last-child(2) {
+  width: 52px;
+}
+table.vlist th:last-child {
+  width: 62px;
+}
+table.vlist th.check,
+table.vlist td.check {
+  width: 26px;
+  text-align: left;
+  padding-left: 0;
+}
+table.vlist th .sort {
+  padding: 2px 4px;
+  font-weight: 600;
+  font-size: 12px;
+}
+table.vlist td {
+  text-align: right;
+  padding: 5px 0 5px 6px;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+table.vlist .left {
+  text-align: left;
+}
+table.vlist td.left {
+  overflow: hidden;
+}
+table.vlist td button {
+  padding: 3px 9px;
+}
+table.vlist tr.issue td {
+  background: rgba(242, 165, 65, 0.07);
+}
+.vname,
+.vstatus {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.issue-tag {
+  font-size: 11px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Game window */
