@@ -11,6 +11,7 @@ import {
   vehiclesOn,
   type VehicleMode,
 } from '../vehicles/lines.ts';
+import { resetSpacing } from '../vehicles/spacing.ts';
 import type { Order, Train } from '../vehicles/train.ts';
 import { fail, isInt, type CommandHandler, type PlanResult } from './types.ts';
 
@@ -23,13 +24,14 @@ export interface CreateLineCommand {
   vehicle?: number;
 }
 
-/** Change a line's orders, name or colour. */
+/** Change a line's orders, name or colour, or space its vehicles out evenly from one of its stations (null: don't). */
 export interface EditLineCommand {
   type: 'editLine';
   id: number;
   orders?: Order[];
   name?: string;
   color?: number;
+  spacing?: number | null;
 }
 
 /** Remove a line; vehicles on it are left without orders. */
@@ -104,6 +106,10 @@ export const editLineHandler: CommandHandler<EditLineCommand> = {
     const name = cmd.name === undefined ? undefined : lineName(cmd.name);
     if (name === null) return fail('Give the line a name');
     if (cmd.color !== undefined && (!isInt(cmd.color) || cmd.color < 0 || cmd.color >= LINE_COLORS.length)) return fail('Invalid colour');
+    if (cmd.spacing !== undefined && cmd.spacing !== null) {
+      const stops = orders ?? line.orders;
+      if (!isInt(cmd.spacing) || !stops.some((o) => o.kind === 'station' && o.station === cmd.spacing)) return fail('Space vehicles out at one of the line’s stations');
+    }
     return {
       ok: true,
       cost: 0,
@@ -112,6 +118,10 @@ export const editLineHandler: CommandHandler<EditLineCommand> = {
         if (cmd.color !== undefined) line.color = cmd.color;
         state.dirtyLines.add(line.id);
         if (orders) setLineOrders(state, line, orders);
+        if (cmd.spacing !== undefined && (cmd.spacing ?? undefined) !== line.spacing) {
+          line.spacing = cmd.spacing ?? undefined;
+          resetSpacing(state, line);
+        }
         return noEffects();
       },
     };

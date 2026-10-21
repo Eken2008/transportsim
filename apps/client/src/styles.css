@@ -1451,3 +1451,6 @@ button.link {
   color: var(--accent);
   border-color: rgba(242, 165, 65, 0.5);
 }
+.warn-text {
+  color: var(--accent);
+}

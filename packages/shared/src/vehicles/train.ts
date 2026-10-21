@@ -184,6 +184,9 @@ export interface Train {
   noRouteSince?: number;
   /** Has gone too long without a route to its next stop; its owner has been told. */
   lost?: boolean;
+  /** Even spacing: tick it last left its line's timing point, and ticks held there since. */
+  lapStart?: number;
+  spacingHeld?: number;
 }
 
 export interface TrainStats {

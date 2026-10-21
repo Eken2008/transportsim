@@ -1,4 +1,4 @@
-import { LINE_COLORS, VEHICLE_MODES, roleAllows, vehicleMode, type Line, type Order, type TrainInfo, type VehicleMode } from '@transportsim/shared';
+import { LINE_COLORS, TICKS_PER_DAY, VEHICLE_MODES, roleAllows, runningOn, targetGap, vehicleMode, type Line, type Order, type TrainInfo, type VehicleMode } from '@transportsim/shared';
 import { useEffect, useRef } from 'react';
 import { client } from '../net/client.ts';
 import { openWindow, useApp, type GameWindow } from '../store.ts';
@@ -193,6 +193,7 @@ export function LineWindow({ w }: { w: GameWindow & { kind: 'line' } }) {
         <b className={`mono ${profit < 0 ? 'neg' : ''}`}>{formatMoney(profit)}</b>
       </div>
       <OrdersEditor line={line} mine={mine} />
+      <Spacing line={line} mine={mine} />
       <h4>Vehicles on this line</h4>
       {vehicles.length === 0 && <p className="muted small">None yet.</p>}
       {vehicles.map((t) => (
@@ -226,6 +227,65 @@ export function LineWindow({ w }: { w: GameWindow & { kind: 'line' } }) {
         </select>
       )}
     </Win>
+  );
+}
+
+const days = (ticks: number) => (ticks / TICKS_PER_DAY).toFixed(1);
+
+/** Even spacing: the station where vehicles wait to spread out, and how even they run. */
+function Spacing({ line, mine }: { line: Line; mine: boolean }) {
+  const world = client.world;
+  const stations = [...new Set(line.orders.flatMap((o) => (o.kind === 'station' ? [o.station] : [])))];
+  if (stations.length === 0) return null;
+  const n = world ? runningOn(world.state, line.id) : 0;
+  const gap = world ? targetGap(world.state, line) : 0;
+  const gaps = line.gaps ?? [];
+  const even = gap > 0 && gaps.length >= Math.min(n, 3) && gaps.slice(-n).every((g) => Math.abs(g * TICKS_PER_DAY - gap) <= gap * 0.15);
+  return (
+    <>
+      <h4>Even spacing</h4>
+      <div className="row">
+        <select
+          style={{ flex: 1, minWidth: 0 }}
+          aria-label="Space vehicles out at"
+          disabled={!mine}
+          value={line.spacing ?? ''}
+          onChange={(e) => act({ type: 'editLine', id: line.id, spacing: e.target.value === '' ? null : Number(e.target.value) })}
+        >
+          <option value="">Off: vehicles leave when they are ready</option>
+          {stations.map((id) => (
+            <option key={id} value={id}>
+              Space them out at {world?.state.stations.get(id)?.name ?? `station #${id}`}
+            </option>
+          ))}
+        </select>
+      </div>
+      {line.spacing === undefined ? (
+        <p className="muted small">Vehicles wait at the chosen station until it is their turn, so they run evenly spread instead of bunching up.</p>
+      ) : n < 2 ? (
+        <p className="muted small">Spacing needs at least two vehicles running on the line.</p>
+      ) : line.lap === undefined ? (
+        <p className="muted small">Measuring the round trip: a vehicle has to go all the way round once.</p>
+      ) : (
+        <div className="kv small" style={{ marginTop: 6 }}>
+          <span>Round trip</span>
+          <span>about {days(line.lap)} days</span>
+          <span>Aim</span>
+          <span>
+            one of the {n} vehicles every {days(gap)} days
+          </span>
+          {gaps.length > 0 && (
+            <>
+              <span>Latest gaps</span>
+              <span>
+                <span className="mono">{gaps.slice(-5).map((g) => g.toFixed(1)).join(' · ')}</span> days{' '}
+                <b className={even ? 'pos' : 'warn-text'}>{even ? 'even' : 'evening out'}</b>
+              </span>
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

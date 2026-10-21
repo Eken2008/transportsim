@@ -3,6 +3,7 @@ import { stationHas } from '../rail/station.ts';
 import { stationDocks } from '../water/waterways.ts';
 import { isBus } from './catalog.ts';
 import { settleOrders } from './orders.ts';
+import { resetSpacing } from './spacing.ts';
 import { JUMP_CONDITIONS, type Order, type Train } from './train.ts';
 
 /** How a vehicle (and a line) gets around. */
@@ -23,6 +24,14 @@ export interface Line {
   /** Index into LINE_COLORS. */
   color: number;
   orders: Order[];
+  /** Even spacing: the station whose departures are spaced out (see vehicles/spacing.ts). */
+  spacing?: number;
+  /** Measured round trip (ticks), from the timing point back to it. */
+  lap?: number;
+  /** Tick the last vehicle left the timing point. */
+  lastDeparture?: number;
+  /** The latest gaps between departures from the timing point (days), oldest first. */
+  gaps?: number[];
 }
 
 export const LINE_COLORS = [
@@ -120,8 +129,17 @@ export function setVehicleOrders(state: GameState, t: Train, orders: Order[]): v
   state.dirtyTrains.add(t.id);
 }
 
+/** The stops of a list of orders, without timetable times (to see whether the route changed). */
+const routeOf = (orders: readonly Order[]) =>
+  orders.map((o) => (o.kind === 'station' ? `s${o.station}` : o.kind === 'waypoint' ? `w${o.waypoint}` : o.kind === 'jump' ? `j${o.to}${o.cond}${o.op}${o.value}` : 'd')).join();
+
 /** Replace a line's orders; every vehicle on it follows the new ones. */
 export function setLineOrders(state: GameState, line: Line, orders: Order[]): void {
+  if (routeOf(orders) !== routeOf(line.orders)) {
+    // A new route takes a different time round, and the timing point may be gone.
+    resetSpacing(state, line);
+    if (line.spacing !== undefined && !orders.some((o) => o.kind === 'station' && o.station === line.spacing)) line.spacing = undefined;
+  }
   line.orders = orders;
   state.dirtyLines.add(line.id);
   for (const t of state.trains.values()) if (t.line === line.id) setVehicleOrders(state, t, orders);
@@ -130,6 +148,8 @@ export function setLineOrders(state: GameState, line: Line, orders: Order[]): vo
 /** Put a vehicle on a line (or take it off, with null): it follows the line's orders. */
 export function assignVehicle(state: GameState, t: Train, line: Line | null): void {
   t.line = line?.id;
+  t.lapStart = undefined;
+  t.spacingHeld = undefined;
   setVehicleOrders(state, t, line ? line.orders : []);
 }
 

@@ -46,6 +46,7 @@ import { removeWaterTile } from '../commands/water.ts';
 import { hangarTile } from '../air/airports.ts';
 import { isRailVehicle } from '../vehicles/train.ts';
 import type { Order, Train } from '../vehicles/train.ts';
+import { spacingAtStop } from '../vehicles/spacing.ts';
 import { VEHICLE_MODES, deleteLine, setLineOrders, vehicleMode, type Line, type VehicleMode } from '../vehicles/lines.ts';
 import { GameMap } from '../world/map.ts';
 import { generateTerrain, worldClimate } from '../world/terrain.ts';
@@ -169,22 +170,28 @@ export class GameState {
     this.air = new AirSystem(this);
     this.air.onService = (t) => this.maintenance.service(t);
     this.air.onArrive = (t, s) => this.cargo.arrive(t, s);
-    this.air.onLoading = (t, s) => this.cargo.loading(t, s);
+    this.air.onLoading = (t, s) => this.atStop(t, s);
     this.ships = new ShipSystem(this);
     this.ships.onService = (t) => this.maintenance.service(t);
     this.ships.onArrive = (t, s) => this.cargo.arrive(t, s);
-    this.ships.onLoading = (t, s) => this.cargo.loading(t, s);
+    this.ships.onLoading = (t, s) => this.atStop(t, s);
     this.cargo = new CargoSystem(this);
     this.maintenance = new MaintenanceSystem(this);
     this.rail.onService = (t) => this.maintenance.service(t);
     this.road.onService = (t) => this.maintenance.service(t);
     this.road.onArrive = (t, s) => this.cargo.arrive(t, s);
-    this.road.onLoading = (t, s) => this.cargo.loading(t, s);
+    this.road.onLoading = (t, s) => this.atStop(t, s);
     this.incidents = new IncidentSystem(this);
     this.maintenance.onBreakdown = (t) => this.incidents.onBreakdown(t);
     this.air.onLanded = (t, st) => this.incidents.onLanded(t, st);
     this.rail.onArrive = (t, s) => this.cargo.arrive(t, s);
-    this.rail.onLoading = (t, s) => this.cargo.loading(t, s);
+    this.rail.onLoading = (t, s) => this.atStop(t, s);
+  }
+
+  /** Each tick a vehicle stands at a stop: true keeps it there (a full load, or even spacing). */
+  private atStop(t: Train, station: number): boolean {
+    const keep = this.cargo.loading(t, station);
+    return spacingAtStop(this, t, station, keep) || keep;
   }
 
   static create(settings: GameSettings): GameState {

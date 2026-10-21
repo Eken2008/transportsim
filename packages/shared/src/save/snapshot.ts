@@ -14,6 +14,7 @@ import { findHeadquarters } from '../company/headquarters.ts';
 import { WAYPOINT_FLAG, type Waypoint } from '../rail/waypoint.ts';
 import { JUMP_CONDITIONS, type AirPhase, type AirState, type Order, type ShipState } from '../vehicles/train.ts';
 import { LINE_COLORS, VEHICLE_MODES, addLine, vehicleMode, type Line } from '../vehicles/lines.ts';
+import { SPACING_GAPS_KEPT } from '../vehicles/spacing.ts';
 import { isCargo } from '../economy/cargo.ts';
 import { industryType, newIndustry, type CargoAmounts, type Industry } from '../economy/industries.ts';
 import type { StationPacket } from '../economy/cargoSystem.ts';
@@ -270,6 +271,10 @@ export function restoreSnapshot(bytes: Uint8Array, limits: ServerLimits, overrid
       mode: l.mode,
       color: Number.isInteger(l.color) && l.color >= 0 && l.color < LINE_COLORS.length ? l.color : 0,
       orders: sanitizeOrders(l.orders),
+      spacing: typeof l.spacing === 'number' ? l.spacing : undefined,
+      lap: typeof l.lap === 'number' && l.lap > 0 ? l.lap : undefined,
+      lastDeparture: typeof l.lastDeparture === 'number' ? l.lastDeparture : undefined,
+      gaps: Array.isArray(l.gaps) ? l.gaps.filter((g: unknown): g is number => typeof g === 'number').slice(-SPACING_GAPS_KEPT) : undefined,
     });
   }
   state.nextLineId = Math.max(num(snap.nextLineId, 0), ...[...state.lines.keys()].map((k) => k + 1));
@@ -483,6 +488,8 @@ function sanitizeTrain(t: Partial<Train> | null | undefined, state: GameState, v
     ranRedAt: typeof t.ranRedAt === 'number' ? t.ranRedAt : undefined,
     noRouteSince: typeof t.noRouteSince === 'number' ? t.noRouteSince : undefined,
     lost: t.lost === true || undefined,
+    lapStart: typeof t.lapStart === 'number' ? t.lapStart : undefined,
+    spacingHeld: typeof t.spacingHeld === 'number' ? Math.max(0, t.spacingHeld) : undefined,
   };
 }
 
