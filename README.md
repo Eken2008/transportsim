@@ -2,7 +2,7 @@
 
 A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from OpenTTD, Simutrans and Transport Fever. Players found transport companies, build rail, road, air and sea networks, and carry passengers and goods between towns and industries. They can compete with each other or cooperate.
 
-> Status: milestones M0–M8 of the [plan](docs/PLAN.md) are in; M9–M12 are planned.
+> Status: milestones M0–M9 of the [plan](docs/PLAN.md) are in; M10–M12 are planned.
 >
 > - **World:** procedural terrain with rivers running from the hills to the sea, towns, roads and houses that grow with good service; terraforming.
 > - **Climates:** temperate; sub-arctic, with a low snow line, a paper and printing chain, gold mines, and towns above the snow line that only grow with food delivered; and sub-tropical, with desert and rainforest, rubber, fruit, maize, copper ore, water and diamonds, and desert towns that only grow with food and water delivered. Towns big enough take gold and diamonds at their banks. Wagons and road vehicles carry only the climate's cargo.
@@ -17,7 +17,8 @@ A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from
 > - **Road vehicles:** company roads, one-way roads, bus and truck stops, road depots; buses and trucks that keep left, queue and take junctions one at a time.
 > - **Air:** small (from 1930) and city (from 1955) airports with runway, gates and hangar; aircraft from mail biplanes to jumbo jets that taxi, take off, hold while the runway is busy and land. Heavy jets need a city airport; with accidents on, aircraft can crash after engine failures or landing at too small an airport.
 > - **Water:** navigable rivers, canals at any height, locks between levels (also on river rapids), docks on the shore, ship depots and buoys; ferries, cargo ships, tankers and hovercraft that find their way over the water grid and wait their turn at locks. With accidents on, a ship that breaks down may founder.
-> - **Lines:** vehicles run on lines, which hold the stops every vehicle on them serves: stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness.
+> - **Lines:** vehicles run on lines, which hold the stops every vehicle on them serves: stations (full load), waypoints, depot services, conditional jumps (load, age, reliability, service due) and timetables with waits, travel times, autofill and lateness. A line can space its vehicles out evenly: at a chosen station each waits its turn, a measured round trip divided by the vehicles running, so they don't bunch up.
+> - **Finding and managing:** a minimap of the whole world (land, owners, industries, towns by your reputation, last month's cargo flows) that moves the camera; a find window (Ctrl+F) that searches and sorts towns, industries (with producers nobody serves) and your stations; a vehicle list that filters by type, line and status, sorts by profit, age or reliability, flags vehicles that need attention, and starts, stops or sends many at once; a problem list counted in the top bar (lost, stopped, unprofitable, old or idle vehicles, falling station ratings, cargo piling up, empty lines); and stations and vehicles can be renamed.
 > - **Cargo:** passengers, mail and nine freight cargoes on refittable wagons, routed by cargodist (demand to every reachable destination, transfers between trains), paid per leg by distance and journey time. With market prices on (a game setting), each cargo's price moves every month: it falls when the world is flooded with it, rises when it is scarce or in demand, and world events (strikes, booms, recessions) push prices up or down for months. Seasonal events come at their time of year: bitter winters, summer droughts and holidays, harvests, Christmas shopping and post.
 > - **Industries:** mines, forests, farms (among their fields) and oil wells feed steel mills, factories, sawmills, food plants, refineries and power stations; towns take goods and food. Served industries grow, neglected ones close, new ones open. A cargo routes window draws the production chain (which industry types feed which, and what towns take) and lists the nearest destination for every producer; industry windows list the nearest places to bring input from and send output to. Optional inflation.
 > - **Companies:** players found or join companies with roles (owner, manager, operator, viewer), and invite or accept members. Each company can build a headquarters (and move it), which grows from a small office to a skyscraper as the company's value grows.
@@ -96,7 +97,10 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `V`                                              | Convert track type (drag an area); the rail tools choose standard, electrified or high-speed track |
 | `8`                                              | Bulldoze an area                                             |
 | Click                                            | Open a depot, hangar or ship depot, station (show its catchment) or train (rearrange vehicles in a depot) |
-| `T`                                              | Vehicle list                                                 |
+| `T`                                              | Vehicle list: filter, sort, select several to start, stop or send to a depot |
+| `Ctrl`+`F`                                       | Find a town, industry or station                             |
+| ⚠ (top bar)                                      | Problems in your network that need looking at                |
+| Minimap (top right)                              | Click or drag to move the camera; layers for land, owners, industries, towns and cargo |
 | `C`                                              | Company: found or join one, members, roles, invitations      |
 | `F` / `L`                                        | Finances (books, loans, infrastructure) / company league     |
 | `Shift`+`T` / `Shift`+`B`, 🌳 / 🏠              | Trees / houses and industries: shown, see-through or hidden |

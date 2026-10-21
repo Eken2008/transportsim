@@ -116,7 +116,7 @@ The game also has chat, a news feed and statistics graphs.
 
 ## Milestones (each one ends playable and committed)
 
-The first nine milestones (M0–M8) are done as of October 2026; M9–M12 are planned. Measured at the end of M8: the 2048² benchmark (about 5,000 vehicles in every mode) averages 14–17 ms per tick (40–50% of one core at normal speed, depending on what else the machine is doing). In the 15-player load test each player receives about 10 KB/s.
+The first ten milestones (M0–M9) are done as of October 2026; M10–M12 are planned. Measured at the end of M8: the 2048² benchmark (about 5,000 vehicles in every mode) averages 14–17 ms per tick (40–50% of one core at normal speed, depending on what else the machine is doing). In the 15-player load test each player receives about 10 KB/s.
 1. **M0 Foundations.** `git init`, Bun workspaces, and tooling (TypeScript, ESLint, Prettier, `bun test`). Map typed arrays, terrain generation, chunked Three.js terrain, camera, picking and a terraform tool. Bun server lobby, rooms, host ownership and grace-period shutdown, tick loop, command pipeline and chunk subscriptions. IndexedDB save/load with an autosave consent prompt.
 2. **M1 Rail core.** Track building with slopes, bridges and tunnels, plus depots and multi-tile stations. Simple consists, movement, pathfinding, block signals and orders. Towns with houses produce passengers using destination-tagged packets with simple routing. Also money, costs, and a basic company per player.
 3. **M2 Companies and multiplayer depth.** Multi-member companies with roles and permissions, finances and loans, sharing agreements, station ratings, chat and news. Full lobby settings: timeline or sandbox mode and accident severity.
@@ -282,27 +282,28 @@ Each part ends with green tests and a commit.
 
 ### M9 in detail
 Each part ends with green tests and a commit.
-1. **Minimap.** A corner map of the whole world that can be collapsed, enlarged and clicked to move the camera, with a frame showing the camera's view.
-   - **Data:** clients only receive the chunks they can see, so the server keeps a low-resolution overview (one value per tile or per 2×2 tiles: land, water, height band, town, industry, owner of track and roads) and sends it on join, then sends changes at most every few seconds.
-   - **Layers:** terrain, owners (in company colours), industries by type, town ratings for my company, and cargo flow (the link graph's links, drawn thicker by volume and coloured by cargo).
-2. **Lists of towns, industries and stations.** Three windows (or tabs of one window), each searchable by name and sortable by its columns, with a button that moves the camera there.
+1. **Minimap.** A corner map of the whole world that can be hidden, enlarged and clicked or dragged to move the camera, with a frame showing the camera's view and the name of what is under the pointer.
+   - **Data:** clients only receive the chunks they can see, so the server keeps a low-resolution overview (`world/overview.ts`): at most 512 cells a side, so one tile per cell up to 512² maps and 4×4 tiles per cell on a 2048² map. Each cell holds what is there (land, trees, water, town, industry, road, track, station…) with a height band, and its owner; anything built in a cell shows over the land. It is sent run-length encoded on join (about 80 KB on a 2048² map) and the chunks that changed are sent every 3 seconds.
+   - **Layers:** land, owners (in company colours), industries (in the colour of what they make), towns (by size, coloured by my company's reputation), and cargo flows (last month's cargo along each link, counted as it boards, drawn thicker by amount and coloured by cargo).
+2. **Lists of towns, industries and stations.** One Find window (Ctrl+F) with a tab for each, searchable by name and sortable by its columns, with buttons that move the camera there or open the town, industry or station.
    - **Towns:** population, growth, and my company's reputation.
-   - **Industries:** type, production last month, and the share transported; a filter shows producers nobody serves.
-   - **Stations:** my company's stations with cargo waiting, rating and the lines calling there.
+   - **Industries:** type, production last month, and the share transported; filters by type and for producers nobody serves.
+   - **Stations:** my company's stations with cargo waiting, rating (and where it is heading) and the lines calling there.
+   - **Data:** day-to-day station and industry figures only went to players looking at them, so the server now also sends compact summaries: members get their company's stations' ratings, rating targets and cargo waiting every 2 seconds when they change, and everyone gets every industry's monthly figures.
 3. **A better vehicle list.**
    - **Filters:** by transport type, line and status (running, stopped, in depot, broken down, lost).
    - **Sorting:** by name, profit this year, profit last year, age and reliability.
    - **Highlights:** vehicles that lose money, are lost, are stopped or are past their lifespan.
-   - **Bulk actions:** select several vehicles and start, stop, send to depot or service them at once.
-4. **Renaming stations and vehicles.** New commands rename a station or a vehicle (operator or higher, unique within the company, at most 40 characters), with an editable name in their windows as for lines.
+   - **Bulk actions:** select several vehicles and start, stop, send to depot or service them at once, as one command (`vehiclesAction`) that skips the vehicles it doesn't apply to. A service is also a single-vehicle action: visit a depot, then carry on with the line.
+4. **Renaming stations and vehicles.** New commands rename a station or a vehicle (operator or higher, at most 40 characters), from a ✎ beside the name in their windows' title bars. Station names are unique in the game, as the generated ones are; vehicle names are unique within the company. New vehicles take the first free number.
 5. **Problem list.** A window that collects my company's current problems, each with a locate button:
    - vehicles that lost money last year or are past their lifespan;
    - lost vehicles, and vehicles stopped outside a depot;
    - stations whose rating is falling or where cargo is piling up;
    - lines with no vehicles, and vehicles with no line.
 
-   The toolbar button shows how many problems there are.
-6. **Even spacing on lines.** A line option: at a chosen stop, a vehicle waits until the gap since the previous vehicle on the line left is at least the line's round-trip time divided by the number of vehicles. The round-trip time is measured from the vehicles' own runs, so no timetable is needed. The line window shows the target gap and how even the vehicles are.
+   The top-bar button shows how many problems there are. Each group says what to do about it.
+6. **Even spacing on lines.** A line option: at a chosen station, a vehicle waits until the gap since the previous vehicle on the line left is at least the line's round-trip time divided by the number of vehicles running on it. The round-trip time is measured from the vehicles' own runs, less the time held for spacing (so it settles on the true round trip rather than growing with the holds), and no timetable is needed. Changing the line's route starts the measuring again. The line window shows the round trip, the target gap and the latest gaps.
 
 ### M10 in detail
 Each part ends with green tests and a commit.
