@@ -172,7 +172,7 @@ export function VehicleListWindow({ w }: { w: GameWindow & { kind: 'trains' } })
         <p className="muted">No vehicles match.</p>
       ) : (
         <div className="table-scroll">
-          <table className="vlist">
+          <table className="vlist vehicles">
             <thead>
               <tr>
                 {canOperate && (

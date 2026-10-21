@@ -306,6 +306,43 @@ describe('lobby & rooms', () => {
     lobby.shutdown();
   });
 
+  test('members hear their stations’ figures wherever they are; everyone hears industries monthly', () => {
+    const lobby = new Lobby(CONFIG);
+    const { host, room } = hostGame(lobby);
+    const guest = client(lobby, 'Guest');
+    guest.send({ t: 'joinRoom', roomId: room.id });
+    host.send({ t: 'command', seq: 1, cmd: { type: 'foundCompany', name: 'Host Rail', color: 0 } });
+    const company = [...room.state.companies.values()][0]!;
+    const st = { id: 5, name: 'Far', owner: company.id, x: 100, y: 100, x0: 100, y0: 100, x1: 100, y1: 100, tiles: 1, townId: null, builtDays: room.state.date, waiting: {}, waitingTotal: 42, rating: 200 };
+    room.state.stations.set(st.id, st);
+    host.conn.inbox = [];
+    guest.conn.inbox = [];
+    room.flush();
+    const [id, rating, target, waiting] = host.conn.last('summary')!.stations!;
+    expect([id, rating, waiting]).toEqual([5, 200, 42]);
+    expect(target).toBeGreaterThan(0);
+    // Not to players outside the company, and only again once something changed.
+    expect(guest.conn.last('summary')).toBeUndefined();
+    host.conn.inbox = [];
+    (room as unknown as { lastStationStatsAt: number }).lastStationStatsAt = -Infinity;
+    room.flush();
+    expect(host.conn.last('summary')).toBeUndefined();
+    st.waitingTotal = 50;
+    (room as unknown as { lastStationStatsAt: number }).lastStationStatsAt = -Infinity;
+    room.flush();
+    expect(host.conn.last('summary')!.stations).toEqual([5, 200, target, 50]);
+
+    const ind = [...room.state.industries.values()][0]!;
+    const month = new Date(room.state.date * 86400000).getUTCMonth();
+    let now = 0;
+    while (new Date(room.state.date * 86400000).getUTCMonth() === month) room.update((now += 2000));
+    room.flush();
+    const rows = guest.conn.last('summary')!.industries!;
+    expect(rows).toHaveLength(room.state.industries.size);
+    expect(rows.find((r) => r[0] === ind.id)).toBeDefined();
+    lobby.shutdown();
+  });
+
   test('rejects garbage and wrong protocol', () => {
     const lobby = new Lobby(CONFIG);
     const conn = new FakeConn();

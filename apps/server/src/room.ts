@@ -1,10 +1,12 @@
 import {
+  CARGO_IDS,
   GAME_SPEEDS,
   TICKS_PER_SECOND,
   encodeFrame,
   encodeSnapshot,
   executeCommand,
   extractChunk,
+  ratingParts,
   findLandNear,
   segTile,
   trainInfo,
@@ -50,6 +52,9 @@ export interface Session {
   /** Stations and industries shown in the client's windows. */
   watchStations?: Set<number>;
   watchIndustries?: Set<number>;
+  /** The company whose station figures this client gets, and what it was last sent (id → figures). */
+  statsCompany?: number | null;
+  sentStats?: Map<number, string>;
 }
 
 const MAX_CHUNKS_PER_FLUSH = 12;
@@ -63,6 +68,8 @@ const POS_INTERVAL_MS = 100;
 /** Unchanged positions are repeated this often, so clients keep the vehicle. */
 const POS_KEEPALIVE_MS = 900;
 const NEWS_ON_JOIN = 50;
+/** How often members hear their stations' ratings and waiting cargo (wherever the stations are). */
+const STATION_STATS_MS = 2000;
 
 export class Room {
   readonly id: string;
@@ -91,6 +98,9 @@ export class Room {
   private lastAutosaveAt = 0;
   private hostClosesAt: number | null = null;
   private lastPosAt = 0;
+  private lastStationStatsAt = -Infinity;
+  /** A month ended: everyone gets every industry's figures. */
+  private industrySummaryDue = false;
   /** Cargodist link graphs are solved in a worker. */
   private readonly linkGraph = new LinkGraphWorker();
 
@@ -385,7 +395,10 @@ export class Room {
         this.stats.stepMs = this.stats.steps === 0 ? ms : this.stats.stepMs * 0.98 + ms * 0.02;
         this.stats.steps++;
         if (ev.newDay) this.globalDirty = true;
-        if (ev.newMonth) this.maybeAutosave();
+        if (ev.newMonth) {
+          this.industrySummaryDue = true;
+          this.maybeAutosave();
+        }
       }
     }
     this.flush();
@@ -505,7 +518,15 @@ export class Room {
       events.length = 0;
       this.globalDirty = true;
     }
+    if (this.industrySummaryDue) {
+      this.industrySummaryDue = false;
+      this.broadcast({ t: 'summary', industries: this.industrySummary() });
+    }
     const now = performance.now();
+    if (now - this.lastStationStatsAt >= STATION_STATS_MS) {
+      this.lastStationStatsAt = now;
+      this.sendStationStats();
+    }
     if (now - this.lastPosAt >= POS_INTERVAL_MS) {
       this.lastPosAt = now;
       this.sendPositions();
@@ -523,6 +544,54 @@ export class Room {
         if (--budget === 0) break;
       }
     }
+  }
+
+  /** Each member's company's stations: rating, its target and cargo waiting, where they changed. */
+  private sendStationStats(): void {
+    const st = this.state;
+    const figures = new Map<number, number[]>();
+    for (const session of this.sessions) {
+      const company = session.player?.companyId ?? null;
+      if (session.statsCompany !== company || !session.sentStats) {
+        session.statsCompany = company;
+        session.sentStats = new Map();
+      }
+      if (company === null) continue;
+      let all = figures.get(company);
+      if (!all) {
+        all = [];
+        for (const s of st.stations.values()) {
+          if (s.owner !== company) continue;
+          const town = s.townId === null ? undefined : st.towns.get(s.townId);
+          all.push(s.id, Math.round(s.rating), ratingParts(s, st.date, town).target, s.waitingTotal);
+        }
+        figures.set(company, all);
+      }
+      const sent = session.sentStats;
+      const out: number[] = [];
+      for (let i = 0; i < all.length; i += 4) {
+        const key = `${all[i + 1]}|${all[i + 2]}|${all[i + 3]}`;
+        if (sent.get(all[i]!) === key) continue;
+        sent.set(all[i]!, key);
+        out.push(all[i]!, all[i + 1]!, all[i + 2]!, all[i + 3]!);
+      }
+      for (const id of sent.keys()) if (!st.stations.has(id)) sent.delete(id);
+      if (out.length) this.send(session, { t: 'summary', stations: out });
+    }
+  }
+
+  /** Last month's production and transport of every industry (see the `summary` message). */
+  private industrySummary(): number[][] {
+    const rows: number[][] = [];
+    for (const ind of this.state.industries.values()) {
+      const row = [ind.id];
+      CARGO_IDS.forEach((c, k) => {
+        const n = ind.lastProduced[c];
+        if (n) row.push(k, n, ind.lastTransported[c] ?? 0);
+      });
+      rows.push(row);
+    }
+    return rows;
   }
 
   /** Stream positions of trains touching each client's subscribed chunks, and signal aspects. */

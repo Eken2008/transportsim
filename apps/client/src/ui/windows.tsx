@@ -53,6 +53,7 @@ import { IndustryWindow } from './IndustryWindow.tsx';
 import { CargoWindow } from './CargoWindow.tsx';
 import { TownWindow } from './TownWindow.tsx';
 import { VehicleListWindow } from './VehicleListWindow.tsx';
+import { FindWindow } from './FindWindow.tsx';
 import { vehicleViews } from '../render/vehicleViews.ts';
 
 /** Re-render periodically (for live values read from the non-reactive world mirror). */
@@ -280,6 +281,8 @@ export function WindowLayer() {
             return <TownWindow key={key} w={w} />;
           case 'cargo':
             return <CargoWindow key={key} w={w} />;
+          case 'find':
+            return <FindWindow key={key} w={w} />;
           case 'roadDepot':
           case 'hangar':
           case 'shipDepot':

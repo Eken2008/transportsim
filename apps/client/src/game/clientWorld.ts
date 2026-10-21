@@ -1,4 +1,5 @@
 import {
+  CARGO_IDS,
   CHUNK_SIZE,
   CROSSING_FLAG,
   TileType,
@@ -126,8 +127,44 @@ export class ClientWorld {
     const s = this.state.stations;
     if (full) s.clear();
     for (const st of stations) s.set(st.id, st);
-    for (const id of removed) s.delete(id);
+    for (const id of removed) {
+      s.delete(id);
+      this.ratingTargets.delete(id);
+    }
     this.stationsRev++;
+  }
+
+  /** The rating each of our stations is moving towards (from `summary` messages). */
+  readonly ratingTargets = new Map<number, number>();
+
+  /**
+   * Figures the server sends for our own stations wherever they are, and for every industry
+   * each month (see the `summary` message).
+   */
+  applySummary(stations: readonly number[] = [], industries: readonly (readonly number[])[] = []): void {
+    for (let i = 0; i + 3 < stations.length; i += 4) {
+      const st = this.state.stations.get(stations[i]!);
+      if (!st) continue;
+      st.rating = stations[i + 1]!;
+      this.ratingTargets.set(st.id, stations[i + 2]!);
+      st.waitingTotal = stations[i + 3]!;
+    }
+    if (stations.length) this.stationsRev++;
+    for (const row of industries) {
+      const ind = this.state.industries.get(row[0]!);
+      if (!ind) continue;
+      const produced: Industry['lastProduced'] = {};
+      const transported: Industry['lastTransported'] = {};
+      for (let k = 1; k + 2 < row.length; k += 3) {
+        const cargo = CARGO_IDS[row[k]!];
+        if (!cargo) continue;
+        produced[cargo] = row[k + 1]!;
+        transported[cargo] = row[k + 2]!;
+      }
+      ind.lastProduced = produced;
+      ind.lastTransported = transported;
+    }
+    if (industries.length) this.industriesRev++;
   }
 
   applyTrains(trains: TrainInfo[], removed: number[], full: boolean): void {

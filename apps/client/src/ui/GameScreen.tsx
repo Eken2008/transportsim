@@ -50,7 +50,12 @@ export function GameScreen() {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
       const tools: Record<string, ToolId> = Object.fromEntries(TOOLS.map((t) => [/\d/.test(t.key) ? 'Digit' + t.key : 'Key' + t.key, t.id]));
-      if (e.shiftKey && e.code === 'KeyT') {
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyF') {
+        e.preventDefault();
+        openWindow({ kind: 'find', id: 0 });
+      } else if (e.ctrlKey || e.metaKey) {
+        return;
+      } else if (e.shiftKey && e.code === 'KeyT') {
         useApp.setState((s) => ({ treeView: nextViewMode(s.treeView) }));
       } else if (e.shiftKey && e.code === 'KeyB') {
         useApp.setState((s) => ({ buildingView: nextViewMode(s.buildingView) }));
@@ -187,6 +192,9 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         </button>
         <button title="Your lines: the stops your vehicles serve" aria-label="〰 Lines" onClick={() => openWindow({ kind: 'lines', id: 0 })}>
           〰<span className="lbl"> Lines</span>
+        </button>
+        <button title="Find a town, industry or station (Ctrl+F)" aria-label="🔍 Find" onClick={() => openWindow({ kind: 'find', id: 0 })}>
+          🔍<span className="lbl"> Find</span>
         </button>
         <button title="Cargo routes: where each industry's cargo comes from and can go" aria-label="⛓ Cargo" onClick={() => openWindow({ kind: 'cargo', id: 0 })}>
           ⛓<span className="lbl"> Cargo</span>
@@ -595,6 +603,7 @@ function Help({ onClose }: { onClose: () => void }) {
       </div>
       <div>
         Click a depot, station, headquarters or vehicle to open it · <kbd>T</kbd> vehicle list · <kbd>C</kbd> company (and its headquarters) · <kbd>F</kbd> finances · <kbd>L</kbd> league · 📈 graphs ·{' '}
+        <kbd>Ctrl</kbd>+<kbd>F</kbd> find a town, industry or station ·{' '}
         <kbd>Space</kbd> pause (host) · ⤓ Export downloads the game
       </div>
       <div>

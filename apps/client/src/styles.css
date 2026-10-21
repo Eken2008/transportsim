@@ -1193,13 +1193,13 @@ table.vlist th {
   padding: 0 0 4px 6px;
   white-space: nowrap;
 }
-table.vlist th:nth-last-child(-n + 5) {
+table.vlist.vehicles th:nth-last-child(-n + 5) {
   width: 78px;
 }
-table.vlist th:nth-last-child(2) {
+table.vlist.vehicles th:nth-last-child(2) {
   width: 52px;
 }
-table.vlist th:last-child {
+table.vlist.vehicles th:last-child {
   width: 62px;
 }
 table.vlist th.check,
@@ -1224,6 +1224,7 @@ table.vlist .left {
 }
 table.vlist td.left {
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 table.vlist td button {
   padding: 3px 9px;

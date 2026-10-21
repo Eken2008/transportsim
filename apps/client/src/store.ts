@@ -93,6 +93,8 @@ export interface AppState {
   trainsRev: number;
   /** Bumped when lines change, so windows re-render. */
   linesRev: number;
+  /** Bumped when station or industry figures arrive in a `summary` message. */
+  summaryRev: number;
   /** Line whose orders the orders tool is adding to. */
   ordersFor: number | null;
   /** Camera focus request (renderer watches `seq`). */
@@ -134,7 +136,12 @@ export type GameWindow =
   /** `tab`: the statistics to show first. */
   | { kind: 'stats'; id: 0; tab?: string }
   /** `select`: the chain node to show (an industry type `t:<id>`, a cargo `c:<id>` or `towns`). */
-  | { kind: 'cargo'; id: 0; select?: string };
+  | { kind: 'cargo'; id: 0; select?: string }
+  /** Towns, industries and stations to search; `tab`: the list to show first. */
+  | { kind: 'find'; id: 0; tab?: FindTab };
+
+/** The lists in the find window. */
+export type FindTab = 'towns' | 'industries' | 'stations';
 
 export const windowKey = (w: GameWindow) => `${w.kind}:${w.id}`;
 
@@ -185,6 +192,7 @@ export const useApp = create<AppState>(() => ({
   catchmentFor: null,
   trainsRev: 0,
   linesRev: 0,
+  summaryRev: 0,
   ordersFor: null,
   focus: null,
   follow: null,

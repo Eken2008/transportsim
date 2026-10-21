@@ -128,6 +128,14 @@ export type ServerMessage =
    * the level crossings there that are closed to road traffic.
    */
   | { t: 'signals'; tiles: number[]; red: number[]; reserved: number[]; crossings?: number[] }
+  /**
+   * Figures that change too often to send whole objects to every player.
+   * `stations`: the receiver's company's stations, four numbers each: id, rating, the rating it
+   * is moving towards, and cargo waiting. `industries`: last month's figures, one array per
+   * industry: its id, then cargo index (in CARGO_IDS), produced and transported for each cargo
+   * it made.
+   */
+  | { t: 'summary'; stations?: number[]; industries?: number[][] }
   /** A train was paid at a station (floating "+£" label). */
   | { t: 'income'; tile: number; amount: number }
   | { t: 'global'; global: GlobalState }
