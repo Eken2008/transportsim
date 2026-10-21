@@ -10,6 +10,7 @@ import {
   Piece,
   Random,
   TICKS_PER_DAY,
+  daysFromYmd,
   encodeSnapshot,
   executeCommand,
   industryType,
@@ -17,6 +18,8 @@ import {
   placeIndustry,
   restoreSnapshot,
   saturation,
+  seasonalEvents,
+  ymdFromDays,
   type CargoId,
   type Command,
   type Industry,
@@ -33,6 +36,9 @@ function world(): { industries: Industry[]; towns: Town[] } {
   const towns = [{ id: 0, name: 'Town', x: 100, y: 100, population: 2000, houses: 100 } as Town];
   return { industries, towns };
 }
+
+/** The first day of the `n`th month from January 1900 (the market moves as a month starts). */
+const monthStart = (n: number) => daysFromYmd(1900, n, 1);
 
 describe('market', () => {
   test('saturation: scarce cargo pays a little more, a flooded market less', () => {
@@ -57,12 +63,12 @@ describe('market', () => {
   test('a cargo flooding the market falls in price, a scarce one rises, and both move gradually', () => {
     const { industries, towns } = world();
     const m = new Market();
-    m.eventChance = 0;
+    m.eventRate = 0;
     const rng = new Random(1);
     const coal: number[] = [];
     for (let month = 0; month < 24; month++) {
       m.record('coal', 5000);
-      m.monthly(month * 30, CARGOS, industries, towns, rng);
+      m.monthly(monthStart(month), CARGOS, industries, towns, rng);
       coal.push(m.price('coal'));
     }
     expect(m.events).toEqual([]);
@@ -75,7 +81,7 @@ describe('market', () => {
     // Passengers and mail barely move.
     expect(Math.abs(m.price('passengers') - 1)).toBeLessThan(0.15);
     // When the coal stops, its price recovers.
-    for (let month = 24; month < 48; month++) m.monthly(month * 30, CARGOS, industries, towns, rng);
+    for (let month = 24; month < 48; month++) m.monthly(monthStart(month), CARGOS, industries, towns, rng);
     expect(m.price('coal')).toBeGreaterThan(0.95);
   });
 
@@ -89,7 +95,7 @@ describe('market', () => {
     for (let month = 0; month < 600; month++) {
       const before = Object.fromEntries(CARGOS.map((c) => [c, m.price(c)]));
       const ids = new Set(m.events.map((e) => e.id));
-      news.push(...m.monthly(month * 30, CARGOS, industries, towns, rng));
+      news.push(...m.monthly(monthStart(month), CARGOS, industries, towns, rng));
       for (const e of m.events) {
         if (ids.has(e.id)) continue;
         seen++;
@@ -104,14 +110,45 @@ describe('market', () => {
         expect(m.price(c)).toBeLessThanOrEqual(PRICE_MAX);
       }
     }
-    // About one event a year.
-    expect(seen).toBeGreaterThan(25);
-    expect(seen).toBeLessThan(110);
+    // A few a year: about one at any time of year, and the seasons' (Christmas post, summer holidays...).
+    expect(seen).toBeGreaterThan(50);
+    expect(seen).toBeLessThan(200);
     expect(moved).toBe(true);
     expect(news.length).toBeGreaterThanOrEqual(2 * seen - 3);
     // Cargo nobody on the map makes gets no events (no oil wells, farms or forests here).
     expect(news.some((n) => /oil|grain|wood/i.test(n))).toBe(false);
     expect(m.history.length).toBe(120);
+  });
+
+  test('seasonal events start only at their time of year and end as a month ends', () => {
+    const { industries, towns } = world();
+    const m = new Market();
+    const rng = new Random(11);
+    const started = new Map<string, Set<number>>();
+    for (let month = 0; month < 1200; month++) {
+      const ids = new Set(m.events.map((e) => e.id));
+      m.monthly(monthStart(month), CARGOS, industries, towns, rng);
+      for (const e of m.events) {
+        if (ids.has(e.id)) continue;
+        const key = e.text.split(':')[0]!;
+        if (!started.has(key)) started.set(key, new Set());
+        started.get(key)!.add(ymdFromDays(e.from).month);
+        // Events run whole months.
+        expect(ymdFromDays(e.until).day).toBe(1);
+        expect(e.until).toBeGreaterThan(e.from);
+      }
+    }
+    // The Christmas post comes in December, for December only; Christmas shopping in November.
+    expect([...started.get('Christmas post')!]).toEqual([11]);
+    expect([...started.get('Christmas shopping')!]).toEqual([10]);
+    expect([...started.get('Summer holidays')!]).toEqual([5]);
+    for (const month of started.get('Bitter winter') ?? []) expect([10, 11, 0]).toContain(month);
+    // Seasonal events this world can have (no farms or water here), for the market's calendar.
+    const names = seasonalEvents(CARGOS).map((s) => s.name);
+    expect(names).toContain('Christmas post');
+    expect(names).toContain('Bitter winter');
+    expect(names).not.toContain('Bumper harvest');
+    expect(names).not.toContain('Heatwave');
   });
 
   test('deliveries are paid at the market price, and count towards supply', () => {

@@ -6,6 +6,8 @@ import {
   climateCargos,
   eventsFor,
   formatPrice,
+  monthSpan,
+  seasonalEvents,
   ledgerTotal,
   ymdFromDays,
   type CargoId,
@@ -279,6 +281,15 @@ function MarketTab({ climate }: { climate: Climate }) {
             })}
           </tbody>
         </table>
+      </div>
+      <h4>Seasons</h4>
+      <p className="muted small" style={{ marginTop: 0 }}>Some events only come at their time of year, and not every year:</p>
+      <div className="row wrap small" style={{ gap: '4px 14px', marginBottom: 6 }}>
+        {seasonalEvents(cargos).map((s) => (
+          <span key={s.name} style={{ whiteSpace: 'nowrap' }}>
+            <span aria-hidden>{s.up ? '📈' : '📉'}</span> {s.name} <span className="muted">({monthSpan(s.months)})</span>
+          </span>
+        ))}
       </div>
       <h4>{hl ? `${CARGOS[hl].name} price` : 'Prices'} over time</h4>
       <LineChart series={series} fmt={(v) => `${Math.round(v)}%`} xFmt={monthLabel} fit />

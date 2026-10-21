@@ -2,6 +2,7 @@ import type { Industry } from './industries.ts';
 import { industryType } from './industries.ts';
 import type { Town } from '../town/towns.ts';
 import type { Random } from '../util/random.ts';
+import { MONTH_NAMES, daysFromYmd, ymdFromDays } from '../sim/date.ts';
 import { isCargo, type CargoId } from './cargo.ts';
 
 /**
@@ -13,7 +14,8 @@ import { isCargo, type CargoId } from './cargo.ts';
  *   pays less.
  * - A slow random drift.
  * - World events (a miners' strike, a bumper harvest, a recession) that push prices up or down
- *   for some months.
+ *   for some months. Seasonal ones (a bitter winter, the Christmas post, a summer drought) only
+ *   start at their time of year, each with its own chance, so they come round like the seasons.
  *
  * Prices are sticky: the market part moves only part of the way to its target each month, so a
  * glut or a shortage shows over a season. Events act at once, and end at once.
@@ -39,7 +41,7 @@ const VOLATILITY: Partial<Record<CargoId, number>> = { passengers: 0.35, mail: 0
 const STICKINESS = 0.4;
 /** Weight of the latest month in the smoothed supply. */
 const SUPPLY_SMOOTHING = 0.5;
-/** Monthly chance of a new world event, and how many may run at once. */
+/** Monthly chance of a new world event at any time of year, and how many may run at once. */
 const EVENT_CHANCE = 0.12;
 const MAX_EVENTS = 3;
 /** Months of price history kept. */
@@ -102,20 +104,49 @@ interface EventTemplate {
   /** Headline; `{pct}` is the change. */
   text: string;
   end: string;
-  /** Relative frequency. */
+  /** Relative frequency (events at any time of year). */
   weight?: number;
+  /**
+   * Seasonal events: the months (0 = January) it may start in, its chance of starting in each of
+   * them, how many months it lasts, and a short name for the market's calendar.
+   */
+  season?: { name: string; months: readonly number[]; chance: number; length: readonly [number, number] };
 }
 
 const EVENTS: readonly EventTemplate[] = [
   { cargos: ['coal'], up: true, text: "Miners' strike: coal pays {pct} more", end: "The miners' strike is over and coal prices settle" },
-  { cargos: ['coal'], up: true, text: 'Bitter winter: coal is in demand and pays {pct} more', end: 'The cold spell breaks and coal prices settle' },
-  { cargos: ['coal'], up: false, text: 'Mild winter: coal pays {pct} less', end: 'Coal prices recover after the mild winter' },
+  {
+    cargos: ['coal'],
+    up: true,
+    text: 'Bitter winter: coal is in demand and pays {pct} more',
+    end: 'The cold spell breaks and coal prices settle',
+    season: { name: 'Bitter winter', months: [10, 11, 0], chance: 0.12, length: [2, 4] },
+  },
+  {
+    cargos: ['coal'],
+    up: false,
+    text: 'Mild winter: coal pays {pct} less',
+    end: 'Coal prices recover after the mild winter',
+    season: { name: 'Mild winter', months: [11, 0], chance: 0.08, length: [2, 3] },
+  },
   { cargos: ['iron_ore', 'steel'], up: true, text: 'Railway building boom: steel and iron ore pay {pct} more', end: 'The railway building boom cools and steel prices settle' },
   { cargos: ['steel'], up: false, text: 'Cheap imported steel floods the market: steel pays {pct} less', end: 'Steel imports dry up and steel prices recover' },
   { cargos: ['wood'], up: true, text: 'Housing boom: wood pays {pct} more', end: 'The housing boom is over and wood prices settle' },
   { cargos: ['wood'], up: false, text: 'Timber glut: wood pays {pct} less', end: 'The timber glut is cleared and wood prices recover' },
-  { cargos: ['grain', 'livestock', 'fruit'], up: true, text: 'Drought ruins the harvest: farm produce pays {pct} more', end: 'The rains return and farm prices settle' },
-  { cargos: ['grain', 'fruit'], up: false, text: 'Bumper harvest: grain and fruit pay {pct} less', end: 'The bumper harvest is sold and crop prices recover' },
+  {
+    cargos: ['grain', 'livestock', 'fruit'],
+    up: true,
+    text: 'Summer drought ruins the harvest: farm produce pays {pct} more',
+    end: 'The rains return and farm prices settle',
+    season: { name: 'Summer drought', months: [5, 6, 7], chance: 0.07, length: [3, 5] },
+  },
+  {
+    cargos: ['grain', 'fruit'],
+    up: false,
+    text: 'Bumper harvest: grain and fruit pay {pct} less',
+    end: 'The bumper harvest is sold and crop prices recover',
+    season: { name: 'Bumper harvest', months: [7, 8], chance: 0.12, length: [2, 4] },
+  },
   { cargos: ['livestock'], up: true, text: 'Cattle disease thins the herds: livestock pays {pct} more', end: 'The herds recover and livestock prices settle' },
   { cargos: ['food'], up: true, text: 'Food shortage in the cities: food pays {pct} more', end: 'The food shortage eases and food prices settle' },
   { cargos: ['oil'], up: true, text: 'Oil crisis: oil pays {pct} more', end: 'The oil crisis is over and oil prices settle' },
@@ -124,18 +155,68 @@ const EVENTS: readonly EventTemplate[] = [
   { cargos: ['copper_ore'], up: true, text: 'Electrification drive: copper ore pays {pct} more', end: 'The electrification drive slows and copper prices settle' },
   { cargos: ['copper_ore'], up: false, text: 'Copper slump: copper ore pays {pct} less', end: 'Copper prices recover' },
   { cargos: ['goods'], up: true, text: 'Shopping spree: goods pay {pct} more', end: 'The shopping spree is over and goods prices settle' },
+  {
+    cargos: ['goods'],
+    up: true,
+    text: 'Christmas shopping: goods pay {pct} more',
+    end: 'The Christmas rush is over and goods prices settle',
+    season: { name: 'Christmas shopping', months: [10], chance: 0.4, length: [2, 2] },
+  },
   { cargos: ['goods'], up: false, text: 'Trade slump: goods pay {pct} less', end: 'Trade picks up and goods prices recover' },
   { cargos: ['paper'], up: true, text: 'Newspaper boom: paper pays {pct} more', end: 'The newspaper boom is over and paper prices settle' },
   { cargos: ['gold'], up: true, text: 'Gold fever: gold pays {pct} more', end: 'Gold fever passes and gold prices settle' },
   { cargos: ['gold'], up: false, text: 'Gold found abroad: gold pays {pct} less', end: 'Gold prices recover' },
   { cargos: ['diamonds'], up: true, text: 'Diamonds are in fashion: they pay {pct} more', end: 'The diamond fashion passes and prices settle' },
   { cargos: ['diamonds'], up: false, text: 'A diamond glut: diamonds pay {pct} less', end: 'Diamond prices recover' },
-  { cargos: ['water'], up: true, text: 'Heatwave: water pays {pct} more', end: 'The heatwave breaks and water prices settle' },
-  { cargos: ['passengers'], up: true, text: 'A grand exhibition draws visitors: fares are {pct} higher', end: 'The grand exhibition closes and fares settle' },
-  { cargos: ['mail'], up: true, text: 'Postal rush: mail pays {pct} more', end: 'The postal rush is over' },
+  {
+    cargos: ['water'],
+    up: true,
+    text: 'Heatwave: water pays {pct} more',
+    end: 'The heatwave breaks and water prices settle',
+    season: { name: 'Heatwave', months: [5, 6, 7], chance: 0.1, length: [1, 3] },
+  },
+  {
+    cargos: ['passengers'],
+    up: true,
+    text: 'Summer holidays: fares are {pct} higher',
+    end: 'The summer holidays are over and fares settle',
+    season: { name: 'Summer holidays', months: [5], chance: 0.35, length: [3, 3] },
+  },
+  {
+    cargos: ['passengers'],
+    up: true,
+    text: 'A grand exhibition draws visitors: fares are {pct} higher',
+    end: 'The grand exhibition closes and fares settle',
+    season: { name: 'Grand exhibition', months: [3, 4], chance: 0.06, length: [4, 6] },
+  },
+  {
+    cargos: ['mail'],
+    up: true,
+    text: 'Christmas post: mail pays {pct} more',
+    end: 'The Christmas post is delivered',
+    season: { name: 'Christmas post', months: [11], chance: 0.5, length: [1, 1] },
+  },
   { cargos: 'freight', up: true, text: 'Economic boom: all freight pays {pct} more', end: 'The economic boom is over and freight prices settle', weight: 0.5 },
   { cargos: 'freight', up: false, text: 'Recession: all freight pays {pct} less', end: 'The recession is over and freight prices recover', weight: 0.5 },
 ];
+
+/** A seasonal event that can happen in this world: its name and the months it may start in. */
+export interface SeasonalEvent {
+  name: string;
+  months: readonly number[];
+  up: boolean;
+}
+
+/** The seasonal events that can happen with these cargoes, in calendar order. */
+export function seasonalEvents(cargos: readonly CargoId[]): SeasonalEvent[] {
+  return EVENTS.filter((t) => t.season && t.cargos !== 'freight' && t.cargos.some((c) => cargos.includes(c)))
+    .map((t) => ({ name: t.season!.name, months: t.season!.months, up: t.up }))
+    .sort((a, b) => a.months[0]! - b.months[0]!);
+}
+
+/** "Nov–Jan" for a run of months. */
+export const monthSpan = (months: readonly number[]) =>
+  months.length === 1 ? MONTH_NAMES[months[0]!]! : `${MONTH_NAMES[months[0]!]}–${MONTH_NAMES[months[months.length - 1]!]}`;
 
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
 const pct = (factor: number) => `${Math.round(Math.abs(factor - 1) * 100)}%`;
@@ -148,8 +229,8 @@ export class Market {
   nextEventId = 1;
   /** Set when a month was added to the history (the server sends it out). */
   historyChanged = false;
-  /** Monthly chance of a new world event. */
-  eventChance = EVENT_CHANCE;
+  /** Scales the chance of every world event (0: none). */
+  eventRate = 1;
 
   /** The price level a cargo pays now (1 = its normal rate). */
   price(cargo: CargoId): number {
@@ -191,25 +272,39 @@ export class Market {
     for (const ind of industries) for (const c of industryType(ind.type)?.produces ?? []) made.add(c);
     const inPlay = cargos.filter((c) => made.has(c));
     const busy = new Set(this.events.flatMap((e) => e.cargos));
-    if (this.events.length < MAX_EVENTS && rng.chance(this.eventChance)) {
-      const options = EVENTS.map((t) => ({
-        t,
-        cargos: (t.cargos === 'freight' ? inPlay.filter((c) => c !== 'passengers' && c !== 'mail') : t.cargos.filter((c) => inPlay.includes(c))),
-      })).filter((o) => o.cargos.length > 0 && !o.cargos.some((c) => busy.has(c)));
-      const total = options.reduce((s, o) => s + (o.t.weight ?? 1), 0);
+    const options = EVENTS.map((t) => ({
+      t,
+      cargos: t.cargos === 'freight' ? inPlay.filter((c) => c !== 'passengers' && c !== 'mail') : t.cargos.filter((c) => inPlay.includes(c)),
+    })).filter((o) => o.cargos.length > 0);
+    type Option = (typeof options)[number];
+    const free = (o: Option) => this.events.length < MAX_EVENTS && !o.cargos.some((c) => busy.has(c));
+    // The month that starts now (the date is its first day).
+    const { year, month } = ymdFromDays(date);
+    const start = (o: Option, months: number) => {
+      const wide = o.t.cargos === 'freight';
+      // Booms and recessions move everything a little; fares and postage move half as much.
+      const tame = o.cargos.every((c) => (VOLATILITY[c] ?? 1) < 1) ? 0.5 : 1;
+      const size = (wide ? 0.1 + rng.next() * 0.1 : o.t.up ? 0.2 + rng.next() * 0.3 : 0.15 + rng.next() * 0.2) * tame;
+      const factor = round3(o.t.up ? 1 + size : 1 - size);
+      // Events end as a month ends.
+      const until = daysFromYmd(year, month + months, 1);
+      const e: MarketEvent = { id: this.nextEventId++, cargos: o.cargos, factor, from: date, until, text: o.t.text.replace('{pct}', pct(factor)), end: o.t.end };
+      this.events.push(e);
+      for (const c of o.cargos) busy.add(c);
+      news.push(e.text);
+    };
+    // Seasonal events in their season, each with its own chance.
+    for (const o of options) {
+      const s = o.t.season;
+      if (s && s.months.includes(month) && free(o) && rng.chance(s.chance * this.eventRate)) start(o, rng.int(s.length[0], s.length[1]));
+    }
+    // Now and then an event at any time of year.
+    if (rng.chance(EVENT_CHANCE * this.eventRate)) {
+      const open = options.filter((o) => !o.t.season && free(o));
+      const total = open.reduce((s, o) => s + (o.t.weight ?? 1), 0);
       let r = rng.next() * total;
-      const pick = options.find((o) => (r -= o.t.weight ?? 1) < 0);
-      if (pick) {
-        const wide = pick.t.cargos === 'freight';
-        // Booms and recessions move everything a little; fares and postage move half as much.
-        const tame = pick.cargos.every((c) => (VOLATILITY[c] ?? 1) < 1) ? 0.5 : 1;
-        const size = (wide ? 0.1 + rng.next() * 0.1 : pick.t.up ? 0.2 + rng.next() * 0.3 : 0.15 + rng.next() * 0.2) * tame;
-        const factor = round3(pick.t.up ? 1 + size : 1 - size);
-        const months = wide ? rng.int(6, 14) : rng.int(3, 10);
-        const e: MarketEvent = { id: this.nextEventId++, cargos: pick.cargos, factor, from: date, until: date + months * 30, text: pick.t.text.replace('{pct}', pct(factor)), end: pick.t.end };
-        this.events.push(e);
-        news.push(e.text);
-      }
+      const pick = open.find((o) => (r -= o.t.weight ?? 1) < 0);
+      if (pick) start(pick, pick.t.cargos === 'freight' ? rng.int(6, 14) : rng.int(3, 10));
     }
 
     // Prices.
