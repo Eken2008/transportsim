@@ -996,7 +996,7 @@ ol.consist .grip {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-@media (max-width: 1280px) {
+@media (max-width: 1520px) {
   .hud-box .lbl {
     display: none;
   }
@@ -1435,4 +1435,19 @@ button.link {
   background: var(--panel-solid);
   border: 1px solid var(--line-strong);
   border-radius: 7px;
+}
+
+/* Problems */
+.problem-group h4 {
+  margin: 12px 0 2px;
+}
+.problem-group:first-child h4 {
+  margin-top: 0;
+}
+.problem-group > p {
+  margin: 0 0 4px;
+}
+.problems-btn.has {
+  color: var(--accent);
+  border-color: rgba(242, 165, 65, 0.5);
 }

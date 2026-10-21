@@ -19,6 +19,7 @@ import { client } from '../net/client.ts';
 import { installDebugHook } from '../render/debugHook.ts';
 import { availableBridges } from '../tools/structureTools.ts';
 import { WindowLayer, useMyRole } from './windows.tsx';
+import { ProblemsButton } from './ProblemsWindow.tsx';
 import { Tutorial } from './Tutorial.tsx';
 import { sound } from '../audio/sound.ts';
 import { NewsTicker } from './NewsWindow.tsx';
@@ -193,6 +194,7 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         <button title="Your lines: the stops your vehicles serve" aria-label="〰 Lines" onClick={() => openWindow({ kind: 'lines', id: 0 })}>
           〰<span className="lbl"> Lines</span>
         </button>
+        <ProblemsButton />
         <button title="Find a town, industry or station (Ctrl+F)" aria-label="🔍 Find" onClick={() => openWindow({ kind: 'find', id: 0 })}>
           🔍<span className="lbl"> Find</span>
         </button>

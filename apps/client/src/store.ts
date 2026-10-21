@@ -138,7 +138,8 @@ export type GameWindow =
   /** `select`: the chain node to show (an industry type `t:<id>`, a cargo `c:<id>` or `towns`). */
   | { kind: 'cargo'; id: 0; select?: string }
   /** Towns, industries and stations to search; `tab`: the list to show first. */
-  | { kind: 'find'; id: 0; tab?: FindTab };
+  | { kind: 'find'; id: 0; tab?: FindTab }
+  | { kind: 'problems'; id: 0 };
 
 /** The lists in the find window. */
 export type FindTab = 'towns' | 'industries' | 'stations';
