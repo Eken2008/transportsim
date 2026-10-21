@@ -23,6 +23,7 @@ import { GeoBuilder, lin } from './geoBuilder.ts';
 import { SIGNAL_POST_HEIGHT, signalPlacement } from './signalGeometry.ts';
 import { addBridge, addHeadFoundation, addTunnelPortal } from './structureMesh.ts';
 import { addCrossingFurniture } from './crossings.ts';
+import { addFences, type FencePolylines } from './fences.ts';
 import type { Lod } from './terrainMesh.ts';
 import { TRACK_LIFT, curveParamAt, curvePoint, curveTangent, straightCurve, type PieceCurve, type TrackCurves } from './trackCurves.ts';
 
@@ -233,6 +234,7 @@ export function addTrack(
 ): void {
   const x0 = cx * CHUNK_SIZE;
   const y0 = cy * CHUNK_SIZE;
+  const polys: FencePolylines = new Map();
   for (let y = y0; y < y0 + CHUNK_SIZE; y++) {
     for (let x = x0; x < x0 + CHUNK_SIZE; x++) {
       const i = map.tileIndex(x, y);
@@ -264,11 +266,14 @@ export function addTrack(
       }
       const railType = map.layers.railType[i]!;
       const wires = isElectrified(railType) && lod <= 1;
+      // Lineside fences on open track; stations, crossings, bridges and tunnels have none.
+      const fenced = type === TileType.Rail && !head && !(map.layers.data[i]! & CROSSING_FLAG) && lod <= 1;
       for (let p = 0; p < PIECE_COUNT; p++) {
         if (!hasPiece(bits, p)) continue;
         const curve = curves.get(i, p);
         addPieceCurve(g, curve, lod, railType);
         if (wires) addCatenary(g, map, curves, x, y, p, curve, type === TileType.Station || !!head);
+        if (fenced) addFences(g, map, curves, polys, i, p, lod, companyColor(map.layers.owner[i]!));
       }
       if (type === TileType.Rail && map.layers.data[i]! & WAYPOINT_FLAG && lod <= 1) addWaypointMarker(g, map, x, y, hasPiece(bits, 0));
       const sig = map.layers.signals[i]!;
