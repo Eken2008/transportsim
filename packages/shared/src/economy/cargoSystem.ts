@@ -3,7 +3,7 @@ import { STATION_CATCHMENT, type Station } from '../rail/station.ts';
 import type { GameState } from '../sim/state.ts';
 import { houseType } from '../town/houses.ts';
 import { exclusionBarred } from '../town/actions.ts';
-import { emptyTownStats } from '../town/towns.ts';
+import { emptyTownStats, type TownStats } from '../town/towns.ts';
 import { TileType } from '../world/constants.ts';
 import { Random } from '../util/random.ts';
 import { cargoCount, type Train } from '../vehicles/train.ts';
@@ -63,6 +63,8 @@ export const FOOD_RESIDENTS = 100;
 export const WATER_RESIDENTS = 100;
 /** Towns take gold and diamonds (at their banks) from this many residents. */
 export const VALUABLES_RESIDENTS = 600;
+/** Towns take building materials (at their building sites) from this many residents. */
+export const BUILDING_RESIDENTS = 300;
 
 /** Residents a station needs in reach before it takes each cargo that towns take. */
 export const TOWN_CARGO_RESIDENTS: Partial<Record<CargoId, number>> = {
@@ -71,6 +73,7 @@ export const TOWN_CARGO_RESIDENTS: Partial<Record<CargoId, number>> = {
   water: WATER_RESIDENTS,
   gold: VALUABLES_RESIDENTS,
   diamonds: VALUABLES_RESIDENTS,
+  building_materials: BUILDING_RESIDENTS,
 };
 
 /**
@@ -539,7 +542,7 @@ export class CargoSystem {
         const c = this.state.companies.get(t.owner);
         if (c) c.month.delivered[p.cargo] = (c.month.delivered[p.cargo] ?? 0) + p.n;
         this.deliverToIndustry(st, p.cargo, p.n);
-        if (p.cargo === 'goods' || p.cargo === 'food' || p.cargo === 'water') this.countForTown(st, p.cargo, p.n);
+        if (p.cargo === 'goods' || p.cargo === 'food' || p.cargo === 'water' || p.cargo === 'building_materials') this.countForTown(st, p.cargo, p.n);
       }
       else this.addWaiting(st, { cargo: p.cargo, dest: p.dest, src: p.src, n: p.n, day: p.day });
     }
@@ -553,7 +556,7 @@ export class CargoSystem {
   }
 
   /** Add to the town's monthly figures. */
-  private countForTown(st: Station, what: 'passengers' | 'mail' | 'goods' | 'food' | 'water', n: number): void {
+  private countForTown(st: Station, what: keyof TownStats, n: number): void {
     const town = st.townId === null ? undefined : this.state.towns.get(st.townId);
     if (!town) return;
     town.stats ??= emptyTownStats();

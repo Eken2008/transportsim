@@ -81,10 +81,10 @@ const wagon = (v: Omit<RailVehicleType, 'kind' | 'power' | 'tractiveEffort' | 'r
   ...v,
 });
 
-const BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'copper_ore'];
-const PIECE: CargoId[] = ['goods', 'food', 'grain', 'mail', 'paper', 'fruit'];
-const FLAT: CargoId[] = ['steel', 'wood'];
-const TANK: CargoId[] = ['oil', 'rubber', 'water'];
+const BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'copper_ore', 'stone'];
+const PIECE: CargoId[] = ['goods', 'food', 'grain', 'mail', 'paper', 'fruit', 'cotton', 'building_materials'];
+const FLAT: CargoId[] = ['steel', 'wood', 'building_materials'];
+const TANK: CargoId[] = ['oil', 'rubber', 'water', 'chemicals'];
 const VALUABLES: CargoId[] = ['gold', 'diamonds'];
 
 /** All rail vehicles, 1850–2050 and beyond. Names are fictional. */
@@ -131,8 +131,8 @@ export const RAIL_VEHICLES: readonly RailVehicleType[] = [
 ];
 
 const road = (v: Omit<RailVehicleType, 'kind' | 'mode'>): RailVehicleType => ({ kind: 'loco', mode: 'road', ...v });
-const ROAD_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'copper_ore'];
-const ROAD_PIECE: CargoId[] = ['goods', 'food', 'mail', 'grain', 'paper', 'fruit'];
+const ROAD_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'copper_ore', 'stone'];
+const ROAD_PIECE: CargoId[] = ['goods', 'food', 'mail', 'grain', 'paper', 'fruit', 'cotton', 'building_materials'];
 
 /** Buses (passengers, at bus stops) and trucks (everything else, at truck stops). */
 export const ROAD_VEHICLES: readonly RailVehicleType[] = [
@@ -141,12 +141,12 @@ export const ROAD_VEHICLES: readonly RailVehicleType[] = [
   road({ id: 'city_bus', name: 'City bus', model: 'bus', cargoes: ['passengers'], capacity: 50, length: 10, maxSpeed: 80, power: 140, tractiveEffort: 30, mass: 10, cost: 14_000, runningCost: 1_300, intro: 1950, retire: 2025, lifespan: 15, reliability: 0.88 }),
   road({ id: 'express_coach', name: 'Express coach', model: 'coachbus', cargoes: ['passengers'], capacity: 46, length: 11, maxSpeed: 110, power: 260, tractiveEffort: 40, mass: 13, cost: 26_000, runningCost: 1_900, intro: 1968, retire: 2100, lifespan: 15, reliability: 0.92 }),
   road({ id: 'electric_bus', name: 'Electric bus', model: 'bus', cargoes: ['passengers'], capacity: 64, length: 11, maxSpeed: 90, power: 250, tractiveEffort: 45, mass: 14, cost: 34_000, runningCost: 1_100, intro: 2015, retire: 2100, lifespan: 15, reliability: 0.96 }),
-  road({ id: 'steam_wagon', name: 'Steam wagon', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail', 'paper', 'fruit'], capacity: 8, length: 8, maxSpeed: 30, power: 35, tractiveEffort: 14, mass: 5, cost: 4_000, runningCost: 650, intro: 1850, retire: 1925, lifespan: 15, reliability: 0.72 }),
-  road({ id: 'lorry', name: 'Motor lorry', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail', 'steel', 'paper', 'fruit'], capacity: 12, length: 8, maxSpeed: 50, power: 60, tractiveEffort: 20, mass: 5, cost: 6_500, runningCost: 850, intro: 1915, retire: 1965, lifespan: 15, reliability: 0.8 }),
+  road({ id: 'steam_wagon', name: 'Steam wagon', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail', 'paper', 'fruit', 'cotton', 'building_materials'], capacity: 8, length: 8, maxSpeed: 30, power: 35, tractiveEffort: 14, mass: 5, cost: 4_000, runningCost: 650, intro: 1850, retire: 1925, lifespan: 15, reliability: 0.72 }),
+  road({ id: 'lorry', name: 'Motor lorry', model: 'truck', cargoes: [...ROAD_BULK, 'goods', 'food', 'livestock', 'mail', 'steel', 'paper', 'fruit', 'cotton', 'building_materials'], capacity: 12, length: 8, maxSpeed: 50, power: 60, tractiveEffort: 20, mass: 5, cost: 6_500, runningCost: 850, intro: 1915, retire: 1965, lifespan: 15, reliability: 0.8 }),
   road({ id: 'tanker_truck', name: 'Tanker truck', model: 'tankertruck', cargoes: TANK, capacity: 18, length: 9, maxSpeed: 70, power: 110, tractiveEffort: 30, mass: 8, cost: 11_000, runningCost: 1_100, intro: 1930, retire: 2100, lifespan: 15, reliability: 0.86 }),
   road({ id: 'tipper', name: 'Tipper truck', model: 'tipper', cargoes: ROAD_BULK, capacity: 24, length: 9, maxSpeed: 80, power: 180, tractiveEffort: 45, mass: 10, cost: 14_000, runningCost: 1_300, intro: 1955, retire: 2100, lifespan: 15, reliability: 0.9 }),
   road({ id: 'box_truck', name: 'Box truck', model: 'truck', cargoes: ROAD_PIECE, capacity: 22, length: 9, maxSpeed: 90, power: 180, tractiveEffort: 40, mass: 9, cost: 13_000, runningCost: 1_250, intro: 1955, retire: 2100, lifespan: 15, reliability: 0.9 }),
-  road({ id: 'flatbed', name: 'Flatbed truck', model: 'flatbed', cargoes: ['steel', 'wood'], capacity: 22, length: 10, maxSpeed: 80, power: 180, tractiveEffort: 45, mass: 10, cost: 13_500, runningCost: 1_250, intro: 1940, retire: 2100, lifespan: 15, reliability: 0.88 }),
+  road({ id: 'flatbed', name: 'Flatbed truck', model: 'flatbed', cargoes: ['steel', 'wood', 'building_materials'], capacity: 22, length: 10, maxSpeed: 80, power: 180, tractiveEffort: 45, mass: 10, cost: 13_500, runningCost: 1_250, intro: 1940, retire: 2100, lifespan: 15, reliability: 0.88 }),
   road({ id: 'armoured_truck', name: 'Armoured truck', model: 'truck', cargoes: VALUABLES, capacity: 8, length: 8, maxSpeed: 70, power: 110, tractiveEffort: 28, mass: 7, cost: 10_000, runningCost: 1_000, intro: 1925, retire: 2100, lifespan: 15, reliability: 0.86 }),
   road({ id: 'livestock_truck', name: 'Livestock truck', model: 'truck', cargoes: ['livestock'], capacity: 15, length: 9, maxSpeed: 80, power: 160, tractiveEffort: 40, mass: 9, cost: 12_500, runningCost: 1_200, intro: 1935, retire: 2100, lifespan: 15, reliability: 0.88 }),
 ];
@@ -165,8 +165,8 @@ export const AIRCRAFT: readonly RailVehicleType[] = [
 ];
 
 const ship = (v: Omit<RailVehicleType, 'kind' | 'mode' | 'tractiveEffort'>): RailVehicleType => ({ kind: 'loco', mode: 'water', tractiveEffort: 0, ...v });
-const SHIP_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'steel', 'copper_ore'];
-const SHIP_PIECE: CargoId[] = ['goods', 'food', 'mail', 'livestock', 'grain', 'paper', 'fruit'];
+const SHIP_BULK: CargoId[] = ['coal', 'iron_ore', 'grain', 'wood', 'steel', 'copper_ore', 'stone'];
+const SHIP_PIECE: CargoId[] = ['goods', 'food', 'mail', 'livestock', 'grain', 'paper', 'fruit', 'cotton', 'building_materials'];
 
 /** Ships, bought at ship depots: slow, but they carry a lot. */
 export const SHIPS: readonly RailVehicleType[] = [

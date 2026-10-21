@@ -20,7 +20,12 @@ export type IndustryModel =
   | 'printworks'
   | 'plantation'
   | 'orchard'
-  | 'watersupply';
+  | 'watersupply'
+  | 'quarry'
+  | 'cementworks'
+  | 'chemworks'
+  | 'cotton'
+  | 'textilemill';
 
 /** Where an industry type may be built: in a climate zone, or outside one. */
 export type IndustryZone = 'snow' | 'nosnow' | 'desert' | 'nodesert' | 'rainforest';
@@ -58,14 +63,18 @@ export const INDUSTRY_TYPES: readonly IndustryType[] = [
   { id: 'farm', name: 'Farm', model: 'farm', climates: NORTHERN, w: 4, h: 3, produces: ['grain', 'livestock'], accepts: [], production: 700, weight: 4, intro: 0, zone: 'nosnow' },
   { id: 'oil_wells', name: 'Oil Wells', model: 'oilwells', climates: ALL, w: 3, h: 3, produces: ['oil'], accepts: [], production: 1100, weight: 2, intro: 1880 },
   { id: 'steel_mill', name: 'Steel Mill', model: 'mill', climates: TEMPERATE, w: 4, h: 3, produces: ['steel'], accepts: ['iron_ore', 'coal'], production: 0, weight: 1.5, intro: 0 },
-  { id: 'factory', name: 'Factory', model: 'factory', climates: TEMPERATE, w: 3, h: 3, produces: ['goods'], accepts: ['steel'], production: 0, weight: 1.5, intro: 0 },
+  { id: 'factory', name: 'Factory', model: 'factory', climates: TEMPERATE, w: 3, h: 3, produces: ['goods'], accepts: ['steel', 'chemicals'], production: 0, weight: 1.5, intro: 0 },
   { id: 'sawmill', name: 'Sawmill', model: 'sawmill', climates: TEMPERATE, w: 3, h: 2, produces: ['goods'], accepts: ['wood'], production: 0, weight: 1.5, intro: 0 },
   { id: 'food_plant', name: 'Food Processing Plant', model: 'foodplant', climates: NORTHERN, w: 3, h: 3, produces: ['food'], accepts: ['grain', 'livestock'], production: 0, weight: 1.5, intro: 0 },
   { id: 'refinery', name: 'Oil Refinery', model: 'refinery', climates: ALL, w: 4, h: 4, produces: ['goods'], accepts: ['oil'], production: 0, weight: 1, intro: 1880 },
   { id: 'power_station', name: 'Power Station', model: 'power', climates: NORTHERN, w: 3, h: 3, produces: [], accepts: ['coal'], production: 0, weight: 2, intro: 0 },
+  // All climates
+  { id: 'quarry', name: 'Quarry', model: 'quarry', climates: ALL, w: 3, h: 3, produces: ['stone'], accepts: [], production: 1400, weight: 2, intro: 0 },
+  { id: 'cement_works', name: 'Cement Works', model: 'cementworks', climates: ALL, w: 4, h: 3, produces: ['building_materials'], accepts: ['stone'], production: 0, weight: 1.5, intro: 0 },
+  { id: 'chemical_works', name: 'Chemical Works', model: 'chemworks', climates: ALL, w: 3, h: 3, produces: ['chemicals'], accepts: ['oil'], production: 0, weight: 1, intro: 1880 },
   // Sub-arctic
   { id: 'gold_mine', name: 'Gold Mine', model: 'mine', climates: ARCTIC, w: 3, h: 3, produces: ['gold'], accepts: [], production: 320, weight: 1.5, intro: 0, zone: 'snow' },
-  { id: 'paper_mill', name: 'Paper Mill', model: 'papermill', climates: ARCTIC, w: 4, h: 3, produces: ['paper'], accepts: ['wood'], production: 0, weight: 1.5, intro: 0 },
+  { id: 'paper_mill', name: 'Paper Mill', model: 'papermill', climates: ARCTIC, w: 4, h: 3, produces: ['paper'], accepts: ['wood', 'chemicals'], production: 0, weight: 1.5, intro: 0 },
   { id: 'printing_works', name: 'Printing Works', model: 'printworks', climates: ARCTIC, w: 3, h: 3, produces: ['goods'], accepts: ['paper'], production: 0, weight: 1.5, intro: 0 },
   // Sub-tropical
   { id: 'copper_mine', name: 'Copper Ore Mine', model: 'mine', climates: TROPICAL, w: 3, h: 3, produces: ['copper_ore'], accepts: [], production: 1300, weight: 2.5, intro: 0 },
@@ -76,6 +85,8 @@ export const INDUSTRY_TYPES: readonly IndustryType[] = [
   { id: 'maize_farm', name: 'Maize Farm', model: 'farm', climates: TROPICAL, w: 4, h: 3, produces: ['grain'], accepts: [], production: 1100, weight: 2.5, intro: 0, zone: 'nodesert' },
   { id: 'water_supply', name: 'Water Supply', model: 'watersupply', climates: TROPICAL, w: 2, h: 2, produces: ['water'], accepts: [], production: 1200, weight: 2.5, intro: 0, zone: 'desert' },
   { id: 'tropic_food_plant', name: 'Food Processing Plant', model: 'foodplant', climates: TROPICAL, w: 3, h: 3, produces: ['food'], accepts: ['fruit', 'grain'], production: 0, weight: 2, intro: 0 },
+  { id: 'cotton_plantation', name: 'Cotton Plantation', model: 'cotton', climates: TROPICAL, w: 4, h: 3, produces: ['cotton'], accepts: [], production: 900, weight: 2, intro: 0, zone: 'nodesert' },
+  { id: 'textile_mill', name: 'Textile Mill', model: 'textilemill', climates: TROPICAL, w: 3, h: 3, produces: ['goods'], accepts: ['cotton', 'chemicals'], production: 0, weight: 1.5, intro: 0 },
   { id: 'tropic_factory', name: 'Factory', model: 'factory', climates: TROPICAL, w: 3, h: 3, produces: ['goods'], accepts: ['rubber', 'copper_ore', 'wood'], production: 0, weight: 1.5, intro: 0 },
 ];
 

@@ -6,17 +6,26 @@ import {
   GameState,
   Ground,
   CLIMATES,
+  CARGOS,
+  INDUSTRY_TYPES,
+  Market,
   Piece,
+  RAIL_VEHICLES,
+  Random,
   TICKS_PER_DAY,
   TileType,
+  cargoesIn,
+  daysFromYmd,
   encodeSnapshot,
   executeCommand,
   industryType,
   newIndustry,
   placeIndustry,
   restoreSnapshot,
+  townAcceptsAt,
   typesFor,
   zoneFits,
+  type CargoId,
   type Command,
 } from '../src/index.ts';
 
@@ -138,6 +147,31 @@ describe('farm fields', () => {
         }
       }
       expect(fields).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  test('every cargo an industry makes has somewhere to go, and wagons to carry it, in its climate', () => {
+    for (const climate of ['temperate', 'arctic', 'tropical'] as const) {
+      const types = typesFor(2000, climate);
+      for (const c of new Set(types.flatMap((t) => t.produces))) {
+        expect({ climate, c, taken: types.some((t) => t.accepts.includes(c)) || townAcceptsAt(c) !== undefined }).toEqual({ climate, c, taken: true });
+        expect({ climate, c, carried: RAIL_VEHICLES.some((v) => v.kind === 'wagon' && cargoesIn(v, climate).includes(c)) }).toEqual({ climate, c, carried: true });
+      }
+      // And every input has an industry making it.
+      for (const c of new Set(types.flatMap((t) => t.accepts))) expect({ climate, c, made: types.some((t) => t.produces.includes(c)) }).toEqual({ climate, c, made: true });
+    }
+  });
+
+  test('every freight cargo has world events of its own', () => {
+    const market = new Market();
+    const rng = new Random(7);
+    const industries = INDUSTRY_TYPES.map((t, i) => newIndustry(i, t, 0, 0, t.name));
+    const cargos = Object.keys(CARGOS) as CargoId[];
+    const news: string[] = [];
+    for (let m = 0; m < 6000; m++) news.push(...market.monthly(daysFromYmd(1950 + Math.floor(m / 12), m % 12, 1), cargos, industries, [], rng));
+    for (const c of new Set(INDUSTRY_TYPES.flatMap((t) => t.produces))) {
+      const name = CARGOS[c].name.toLowerCase();
+      expect({ c, events: news.some((n) => n.toLowerCase().includes(name)) }).toEqual({ c, events: true });
     }
   });
 });

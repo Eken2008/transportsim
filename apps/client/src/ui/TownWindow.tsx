@@ -84,6 +84,8 @@ export function TownWindow({ w }: { w: GameWindow & { kind: 'town' } }) {
         <span className="mono">{last?.goods ?? 0} delivered</span>
         <span>Food</span>
         <span className="mono">{last?.food ?? 0} delivered</span>
+        <span>Building materials</span>
+        <span className="mono">{last?.building_materials ?? 0} delivered</span>
         {tropical && (
           <>
             <span>Water</span>

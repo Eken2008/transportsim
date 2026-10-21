@@ -35,6 +35,12 @@ const C = {
   fruit: lin('#f2a03d'),
   water: lin('#4f9fc4'),
   dryEarth: lin('#b89a68'),
+  stone: lin('#a3a097'),
+  stoneDark: lin('#7f7c74'),
+  cement: lin('#cfcbc2'),
+  chem: lin('#a06cc9'),
+  cottonLeaf: lin('#5d7a3a'),
+  bale: lin('#ece8dc'),
 } as const;
 
 /** Spoil heap colour of a mine, by what it digs. */
@@ -255,6 +261,88 @@ function build(g: GeoBuilder, ind: Industry, model: IndustryModel, y: number): v
       g.color(C.water).cylinderY(tx, tz, top + 0.7, top + 1.05, 0.3, 12);
       g.color(C.roofDark).pyramid(tx, tz, 0.22, top + 1.05, 0.1);
       g.color(C.metal).cylinderX(x + 0.9, tx, top + 0.06, z + 0.5, 0.04, 6);
+      break;
+    }
+    case 'quarry': {
+      pad(g, ind, y, C.gravel);
+      // A stepped rock face along the back, stone heaps, and a crusher fed by a conveyor.
+      g.color(C.stoneDark).aabb(x + 0.1, top, z + 0.1, x + w - 0.1, top + 0.7, z + 0.6);
+      g.color(C.stone).aabb(x + 0.1, top, z + 0.6, x + w - 0.1, top + 0.4, z + 1.05);
+      g.color(C.stoneDark).aabb(x + 0.1, top, z + 1.05, x + w - 1.2, top + 0.15, z + 1.4);
+      g.color(C.stone);
+      cone(g, x + 0.6, z + h - 0.6, top, 0.35, 0.4);
+      cone(g, x + 1.35, z + h - 0.45, top, 0.25, 0.3);
+      shed(g, x + w - 1.0, z + 1.5, x + w - 0.2, z + 2.3, top, 0.55, C.metal, C.roofDark);
+      g.color(C.rust).box(v(x + 1.0, top, z + 1.9), v(x + w - 1.0, top + 0.45, z + 1.9), 0.1, 0.04);
+      g.color(C.stone).aabb(x + w - 0.9, top, z + h - 0.55, x + w - 0.3, top + 0.12, z + h - 0.15); // loaded stone
+      break;
+    }
+    case 'cementworks': {
+      pad(g, ind, y, C.concrete);
+      // A long rotary kiln, a preheater tower, a row of cement silos and a chimney.
+      g.color(C.metal);
+      for (const kx of [x + 0.6, x + 1.9]) g.aabb(kx - 0.06, top, z + 0.55, kx + 0.06, top + 0.22, z + 0.85);
+      g.color(C.rust).cylinderX(x + 0.3, x + 2.5, top + 0.3, z + 0.7, 0.13, 10);
+      g.color(C.cement).aabb(x + 2.5, top, z + 0.3, x + 3.0, top + 1.3, z + 1.1);
+      g.color(C.roofDark).aabb(x + 2.48, top + 1.3, z + 0.28, x + 3.02, top + 1.36, z + 1.12);
+      g.color(C.cement);
+      for (let k = 0; k < 3; k++) g.cylinderY(x + 0.6 + k * 0.62, z + h - 0.7, top, top + 1.0, 0.26, 12);
+      g.color(C.roofDark);
+      for (let k = 0; k < 3; k++) g.cylinderY(x + 0.6 + k * 0.62, z + h - 0.7, top + 1.0, top + 1.06, 0.27, 12);
+      shed(g, x + w - 1.0, z + 1.5, x + w - 0.2, z + h - 0.2, top, 0.4, C.cement, C.roofDark);
+      g.color(C.brick).cylinderY(x + w - 0.3, z + 0.35, top, top + 1.9, 0.1, 8);
+      break;
+    }
+    case 'chemworks': {
+      pad(g, ind, y, C.concrete);
+      // Storage tanks, a tall distillation column, a pipe rack, a flare stack and an office.
+      g.color(C.tank);
+      for (const [dx, dz, r, th] of [[0.55, 0.55, 0.32, 0.5], [1.3, 0.5, 0.25, 0.4], [0.55, 1.35, 0.25, 0.4]] as const) g.cylinderY(x + dx, z + dz, top, top + th, r, 12);
+      g.color(C.chem);
+      g.cylinderY(x + 0.55, z + 0.55, top + 0.5, top + 0.53, 0.33, 12);
+      g.color(C.metal);
+      g.cylinderY(x + w - 0.7, z + 0.7, top, top + 1.8, 0.14, 10);
+      g.cylinderY(x + w - 1.1, z + 0.6, top, top + 1.2, 0.1, 8);
+      for (const px of [x + 0.4, x + 1.5, x + w - 0.4]) g.aabb(px - 0.025, top, z + 1.9 - 0.025, px + 0.025, top + 0.4, z + 1.9 + 0.025);
+      for (const pz of [1.85, 1.95]) g.cylinderX(x + 0.35, x + w - 0.35, top + 0.42, z + pz, 0.035, 6);
+      g.color(C.rust).cylinderY(x + w - 0.35, z + h - 0.35, top, top + 1.5, 0.05, 6);
+      shed(g, x + 0.2, z + h - 0.75, x + 1.4, z + h - 0.2, top, 0.4, C.white, C.roofDark);
+      break;
+    }
+    case 'cotton': {
+      // Rows of low cotton bushes, a gin house and stacked bales.
+      pad(g, ind, y, C.dryEarth);
+      for (let r = 0; r < h * 3 - 1; r++) {
+        for (let k = 0; k < w * 3 - 1; k++) {
+          const tx = x + 0.25 + k * 0.33;
+          const tz = z + 0.25 + r * 0.33;
+          if (tx > x + w - 1.5 && tz < z + 1.2) continue; // the yard
+          g.color(C.cottonLeaf).aabb(tx - 0.07, top, tz - 0.07, tx + 0.07, top + 0.09, tz + 0.07);
+          g.color(C.white).aabb(tx - 0.05, top + 0.09, tz - 0.05, tx + 0.05, top + 0.13, tz + 0.05);
+        }
+      }
+      shed(g, x + w - 1.4, z + 0.15, x + w - 0.5, z + 0.8, top, 0.35, C.timber, C.roofDark);
+      g.color(C.bale);
+      for (let k = 0; k < 3; k++) g.aabb(x + w - 0.45, top + (k === 2 ? 0.14 : 0), z + 0.2 + (k % 2) * 0.3, x + w - 0.15, top + 0.14 + (k === 2 ? 0.14 : 0), z + 0.45 + (k % 2) * 0.3);
+      break;
+    }
+    case 'textilemill': {
+      pad(g, ind, y, C.concrete);
+      // A tall brick mill with rows of windows, a saw-tooth weaving shed and a chimney.
+      g.color(C.brick).aabb(x + 0.2, top, z + 0.2, x + w - 0.2, top + 1.0, z + 1.1);
+      g.color(C.roofDark).gable(x + 0.2, z + 0.2, x + w - 0.2, z + 1.1, top + 1.0, 0.25);
+      g.color(C.white);
+      for (let f = 0; f < 3; f++) for (let k = 0; k < 6; k++) g.aabb(x + 0.33 + k * 0.42, top + 0.18 + f * 0.28, z + 1.1, x + 0.47 + k * 0.42, top + 0.32 + f * 0.28, z + 1.12);
+      g.color(C.brick).aabb(x + 0.2, top, z + 1.4, x + w - 0.8, top + 0.45, z + h - 0.2);
+      g.color(C.roofDark);
+      for (let k = 0; k < 3; k++) {
+        const x0 = x + 0.2 + (k * (w - 1.0)) / 3;
+        const x1 = x0 + (w - 1.0) / 3;
+        g.quad(v(x0, top + 0.45, z + 1.4), v(x0, top + 0.45, z + h - 0.2), v(x1, top + 0.68, z + h - 0.2), v(x1, top + 0.68, z + 1.4));
+        g.quad(v(x1, top + 0.68, z + 1.4), v(x1, top + 0.68, z + h - 0.2), v(x1, top + 0.45, z + h - 0.2), v(x1, top + 0.45, z + 1.4));
+      }
+      g.color(C.brick).cylinderY(x + w - 0.4, z + h - 0.6, top, top + 2.0, 0.11, 8);
+      g.color(C.bale).aabb(x + w - 0.7, top, z + 1.35, x + w - 0.25, top + 0.15, z + 1.7);
       break;
     }
     case 'power': {

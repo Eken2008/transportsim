@@ -106,9 +106,9 @@ describe('climates', () => {
   });
 
   test('each climate has its own cargo', () => {
-    expect(climateCargos('temperate')).toEqual(['passengers', 'mail', 'coal', 'iron_ore', 'steel', 'wood', 'goods', 'grain', 'livestock', 'food', 'oil']);
-    expect(climateCargos('arctic')).toEqual(['passengers', 'mail', 'coal', 'wood', 'goods', 'grain', 'livestock', 'food', 'oil', 'paper', 'gold']);
-    expect(climateCargos('tropical')).toEqual(['passengers', 'mail', 'wood', 'goods', 'grain', 'food', 'oil', 'copper_ore', 'rubber', 'fruit', 'water', 'diamonds']);
+    expect(climateCargos('temperate')).toEqual(['passengers', 'mail', 'coal', 'iron_ore', 'steel', 'wood', 'goods', 'grain', 'livestock', 'food', 'oil', 'stone', 'building_materials', 'chemicals']);
+    expect(climateCargos('arctic')).toEqual(['passengers', 'mail', 'coal', 'wood', 'goods', 'grain', 'livestock', 'food', 'oil', 'stone', 'building_materials', 'chemicals', 'paper', 'gold']);
+    expect(climateCargos('tropical')).toEqual(['passengers', 'mail', 'wood', 'goods', 'grain', 'food', 'oil', 'stone', 'building_materials', 'chemicals', 'copper_ore', 'rubber', 'fruit', 'water', 'diamonds', 'cotton']);
   });
 
   test('wagons carry only cargo of the climate, and default to the first they can carry there', () => {

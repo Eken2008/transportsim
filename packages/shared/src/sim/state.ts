@@ -316,9 +316,9 @@ export class GameState {
 
   /**
    * Towns grow a little on their own and much faster with good service: each well-served
-   * station (picked up within 20 days, rated over 50%) adds growth, as do goods and food, and
-   * a company funding new buildings. Towns above the sub-arctic snow line, or in the desert,
-   * only grow with food (and water) delivered.
+   * station (picked up within 20 days, rated over 50%) adds growth, as do goods, food, building
+   * materials and a company funding new buildings. Towns above the sub-arctic snow line, or in
+   * the desert, only grow with food (and water) delivered.
    */
   private growTowns(): void {
     const served = new Map<number, number>();
@@ -333,7 +333,7 @@ export class GameState {
       const funded = t.funded && t.funded.until > this.date ? FUNDED_GROWTH : 0;
       // Towns in the snow or the desert don't grow without food (and water) unless funded.
       const lacking = townNeeds(this.map, t).some((c) => (last[c] ?? 0) < TOWN_NEED);
-      const rate = lacking ? funded : 1 / 150 + n / 30 + (last.goods >= 30 ? 1 / 40 : 0) + (last.food >= 30 ? 1 / 40 : 0) + funded;
+      const rate = lacking ? funded : 1 / 150 + n / 30 + (last.goods >= 30 ? 1 / 40 : 0) + (last.food >= 30 ? 1 / 40 : 0) + ((last.building_materials ?? 0) >= 30 ? 1 / 40 : 0) + funded;
       if (t.served !== n || t.growthRate !== rate) {
         t.served = n;
         t.growthRate = rate;

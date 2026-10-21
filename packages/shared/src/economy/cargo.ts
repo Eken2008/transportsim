@@ -10,6 +10,10 @@ export const CARGO_IDS = [
   'livestock',
   'food',
   'oil',
+  // All climates
+  'stone',
+  'building_materials',
+  'chemicals',
   // Sub-arctic
   'paper',
   'gold',
@@ -19,6 +23,7 @@ export const CARGO_IDS = [
   'fruit',
   'water',
   'diamonds',
+  'cotton',
 ] as const;
 export type CargoId = (typeof CARGO_IDS)[number];
 
@@ -55,6 +60,9 @@ export const CARGOS: Record<CargoId, CargoType> = {
   livestock: { id: 'livestock', name: 'Livestock', unit: 'head', color: '#b5835a', rate: 2.64, patience: 1.2, weight: 0.6 },
   food: { id: 'food', name: 'Food', unit: 'tonnes', color: '#6abf69', rate: 2.85, patience: 1, weight: 1 },
   oil: { id: 'oil', name: 'Oil', unit: 'kilolitres', color: '#2f2f4f', rate: 1.8, patience: 2.5, weight: 0.9 },
+  stone: { id: 'stone', name: 'Stone', unit: 'tonnes', color: '#9a978f', rate: 1.05, patience: 3, weight: 1 },
+  building_materials: { id: 'building_materials', name: 'Building materials', unit: 'tonnes', color: '#c25b56', rate: 2.04, patience: 2.5, weight: 1 },
+  chemicals: { id: 'chemicals', name: 'Chemicals', unit: 'kilolitres', color: '#a06cc9', rate: 2.28, patience: 2, weight: 1 },
   paper: { id: 'paper', name: 'Paper', unit: 'tonnes', color: '#e4dcc6', rate: 1.92, patience: 2, weight: 1 },
   gold: { id: 'gold', name: 'Gold', unit: 'bags', color: '#d4af37', rate: 4.8, patience: 1.2, weight: 0.2 },
   copper_ore: { id: 'copper_ore', name: 'Copper ore', unit: 'tonnes', color: '#b87333', rate: 1.17, patience: 3, weight: 1 },
@@ -62,6 +70,7 @@ export const CARGOS: Record<CargoId, CargoType> = {
   fruit: { id: 'fruit', name: 'Fruit', unit: 'tonnes', color: '#f2a03d', rate: 2.46, patience: 1, weight: 0.8 },
   water: { id: 'water', name: 'Water', unit: 'kilolitres', color: '#5fb6d9', rate: 1.5, patience: 2, weight: 1 },
   diamonds: { id: 'diamonds', name: 'Diamonds', unit: 'bags', color: '#b9e8f5', rate: 5.4, patience: 1.2, weight: 0.1 },
+  cotton: { id: 'cotton', name: 'Cotton', unit: 'bales', color: '#f3f1ea', rate: 1.65, patience: 2.5, weight: 0.5 },
 };
 
 /** Share of the rate a very late delivery still earns. */
