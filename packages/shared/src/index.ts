@@ -6,6 +6,7 @@ export * from './world/foundation.ts';
 export * from './world/terrain.ts';
 export * from './world/rivers.ts';
 export * from './world/chunks.ts';
+export * from './world/overview.ts';
 export * from './sim/settings.ts';
 export * from './sim/date.ts';
 export * from './sim/state.ts';

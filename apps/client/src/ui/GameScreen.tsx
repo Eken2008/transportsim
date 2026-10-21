@@ -14,12 +14,13 @@ import {
   type GameSpeed,
   type SignalKind,
 } from '@transportsim/shared';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
 import { installDebugHook } from '../render/debugHook.ts';
 import { availableBridges } from '../tools/structureTools.ts';
 import { WindowLayer, useMyRole } from './windows.tsx';
 import { ProblemsButton } from './ProblemsWindow.tsx';
+import { Minimap } from './Minimap.tsx';
 import { Tutorial } from './Tutorial.tsx';
 import { sound } from '../audio/sound.ts';
 import { NewsTicker } from './NewsWindow.tsx';
@@ -31,17 +32,21 @@ export function GameScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stats, setStats] = useState({ fps: 0, chunks: 0 });
   const [showHelp, setShowHelp] = useState(false);
+  const rendererRef = useRef<GameRenderer | null>(null);
+  const view = useCallback(() => rendererRef.current?.viewFootprint() ?? null, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const world = client.world;
     if (!canvas || !world) return;
     const r = new GameRenderer(canvas, world);
+    rendererRef.current = r;
     const spawn = useApp.getState().room?.spawn;
     if (spawn) r.lookAt(spawn.x + 0.5, spawn.y + 0.5);
     r.onStats = setStats;
     const removeHook = installDebugHook(r);
     return () => {
+      rendererRef.current = null;
       removeHook();
       r.dispose();
     };
@@ -94,6 +99,7 @@ export function GameScreen() {
       <NewsTicker />
       {showHelp && <Help onClose={() => setShowHelp(false)} />}
       {!showHelp && <Tutorial />}
+      <Minimap view={view} />
       <WindowLayer />
       <StationOptions />
       <SignalOptions />

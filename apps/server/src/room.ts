@@ -1,6 +1,12 @@
 import {
   CARGO_IDS,
   GAME_SPEEDS,
+  buildOverview,
+  chunkCells,
+  overviewPatch,
+  rle,
+  updateOverview,
+  type Overview,
   TICKS_PER_SECOND,
   encodeFrame,
   encodeSnapshot,
@@ -70,6 +76,8 @@ const POS_KEEPALIVE_MS = 900;
 const NEWS_ON_JOIN = 50;
 /** How often members hear their stations' ratings and waiting cargo (wherever the stations are). */
 const STATION_STATS_MS = 2000;
+/** How often the minimap overview catches up with changes to the map. */
+const OVERVIEW_MS = 3000;
 
 export class Room {
   readonly id: string;
@@ -99,6 +107,10 @@ export class Room {
   private hostClosesAt: number | null = null;
   private lastPosAt = 0;
   private lastStationStatsAt = -Infinity;
+  private lastOverviewAt = -Infinity;
+  /** The minimap's picture of the map, and the chunk versions it was made from. */
+  private overviewCache: Overview | null = null;
+  private overviewVersions: Uint32Array | null = null;
   /** A month ended: everyone gets every industry's figures. */
   private industrySummaryDue = false;
   /** Cargodist link graphs are solved in a worker. */
@@ -202,6 +214,9 @@ export class Room {
     this.send(session, { t: 'news', items: this.state.news.slice(-NEWS_ON_JOIN), full: true });
     this.send(session, { t: 'history', companies: [...this.state.companies.values()].map((c) => ({ id: c.id, finances: c.finances, months: c.history })), full: true });
     this.send(session, { t: 'market', months: this.state.market.history, full: true });
+    const ov = this.overview;
+    this.send(session, this.overviewMessage(0, 0, ov.w, ov.h));
+    if (this.state.cargo.lastFlows.length) this.send(session, { t: 'summary', flows: this.state.cargo.lastFlows });
 
     if (isHost && this.hostCloseTimer) {
       clearTimeout(this.hostCloseTimer);
@@ -520,9 +535,13 @@ export class Room {
     }
     if (this.industrySummaryDue) {
       this.industrySummaryDue = false;
-      this.broadcast({ t: 'summary', industries: this.industrySummary() });
+      this.broadcast({ t: 'summary', industries: this.industrySummary(), flows: this.state.cargo.lastFlows });
     }
     const now = performance.now();
+    if (now - this.lastOverviewAt >= OVERVIEW_MS) {
+      this.lastOverviewAt = now;
+      this.sendOverviewChanges();
+    }
     if (now - this.lastStationStatsAt >= STATION_STATS_MS) {
       this.lastStationStatsAt = now;
       this.sendStationStats();
@@ -543,6 +562,37 @@ export class Room {
         s.sentVersions.set(c, v);
         if (--budget === 0) break;
       }
+    }
+  }
+
+  /** The minimap overview, built when first needed. */
+  private get overview(): Overview {
+    if (!this.overviewCache) {
+      this.overviewCache = buildOverview(this.state.map);
+      this.overviewVersions = this.state.map.chunkVersions.slice();
+    }
+    return this.overviewCache;
+  }
+
+  private overviewMessage(x: number, y: number, w: number, h: number): ServerMessage {
+    const ov = this.overview;
+    const { cells, owners } = overviewPatch(ov, x, y, w, h);
+    return { t: 'overview', scale: ov.scale, x, y, w, h, cells: rle(cells), owners: rle(owners) };
+  }
+
+  /** Send everyone the parts of the overview in chunks that changed since it was last brought up to date. */
+  private sendOverviewChanges(): void {
+    const ov = this.overview;
+    const map = this.state.map;
+    const sent = this.overviewVersions!;
+    for (let c = 0; c < sent.length; c++) {
+      if (sent[c] === map.chunkVersions[c]) continue;
+      sent[c] = map.chunkVersions[c]!;
+      const chunkX = c % map.chunksX;
+      const chunkY = (c - chunkX) / map.chunksX;
+      if (!updateOverview(map, ov, chunkX * CHUNK_SIZE, chunkY * CHUNK_SIZE, (chunkX + 1) * CHUNK_SIZE, (chunkY + 1) * CHUNK_SIZE)) continue;
+      const [x, y, w, h] = chunkCells(ov, chunkX, chunkY);
+      this.broadcast(this.overviewMessage(x, y, w, h));
     }
   }
 

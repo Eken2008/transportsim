@@ -360,6 +360,27 @@ export class GameRenderer {
     this.controller.lookAt(x, z);
   }
 
+  /**
+   * Where the corners of the screen meet the ground (tile coordinates), for the minimap's view
+   * frame. Corners looking above the horizon stop a few camera distances out.
+   */
+  viewFootprint(): [number, number][] {
+    const cam = this.camera;
+    const ground = this.controller.target.y;
+    const far = this.controller.distance * 6;
+    return [
+      [-1, 1],
+      [1, 1],
+      [1, -1],
+      [-1, -1],
+    ].map(([nx, ny]) => {
+      const dir = new THREE.Vector3(nx, ny, 0.5).unproject(cam).sub(cam.position).normalize();
+      let t = dir.y < -1e-4 ? (ground - cam.position.y) / dir.y : far;
+      if (!(t > 0) || t > far) t = far;
+      return [cam.position.x + dir.x * t, cam.position.z + dir.z * t];
+    });
+  }
+
   private setTool(id: ToolId | null): void {
     this.tool?.cancel();
     this.toolDown = false;

@@ -133,9 +133,15 @@ export type ServerMessage =
    * `stations`: the receiver's company's stations, four numbers each: id, rating, the rating it
    * is moving towards, and cargo waiting. `industries`: last month's figures, one array per
    * industry: its id, then cargo index (in CARGO_IDS), produced and transported for each cargo
-   * it made.
+   * it made. `flows`: last month's cargo flows, four numbers per link: from station, to station,
+   * cargo index, amount (the minimap draws them).
    */
-  | { t: 'summary'; stations?: number[]; industries?: number[][] }
+  | { t: 'summary'; stations?: number[]; industries?: number[][]; flows?: number[] }
+  /**
+   * Part of the map overview for the minimap (see world/overview.ts): the cells x..x+w, y..y+h
+   * of an overview with `scale` tiles per cell, run-length encoded (rle), row by row.
+   */
+  | { t: 'overview'; scale: number; x: number; y: number; w: number; h: number; cells: Uint8Array; owners: Uint8Array }
   /** A train was paid at a station (floating "+£" label). */
   | { t: 'income'; tile: number; amount: number }
   | { t: 'global'; global: GlobalState }

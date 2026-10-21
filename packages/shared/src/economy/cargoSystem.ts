@@ -102,6 +102,10 @@ export class CargoSystem {
   private rng: Random;
   /** Income events since the last flush (for floating "+£" labels). */
   readonly events: IncomeEvent[] = [];
+  /** Cargo that boarded for each link this month: (cargo index, from, to) → amount. */
+  private moved = new Map<number, number>();
+  /** Last month's flows: from station, to station, cargo index (CARGO_IDS), amount, four numbers per link. */
+  lastFlows: number[] = [];
 
   constructor(private readonly state: GameState) {
     this.rng = new Random(state.settings.seed ^ 0x9a55e9);
@@ -134,6 +138,18 @@ export class CargoSystem {
     const flow = this.flows.get(cargo);
     if (flow) return flow.nextHop.get(station)?.get(dest);
     return this.links.get(cargo)?.get(station)?.includes(dest) ? dest : undefined;
+  }
+
+  /** A month ended: what moved along each link becomes last month's flows. */
+  monthly(): void {
+    const flows: number[] = [];
+    for (const [key, n] of this.moved) {
+      const to = key % 0x10000;
+      const from = Math.floor(key / 0x10000) % 0x10000;
+      flows.push(from, to, Math.floor(key / 0x100000000), n);
+    }
+    this.lastFlows = flows;
+    this.moved.clear();
   }
 
   // ---- cargodist -----------------------------------------------------------------
@@ -608,6 +624,8 @@ export class CargoSystem {
         if (same) same.n += n;
         else t.cargo.push({ cargo: p.cargo, dest: p.dest, src: p.src, n, day: p.day, hop, at: st.id });
         boarded += n;
+        const key = (CARGO_IDS.indexOf(p.cargo) * 0x10000 + st.id) * 0x10000 + hop;
+        this.moved.set(key, (this.moved.get(key) ?? 0) + n);
       }
     }
     if (boarded > 0) {

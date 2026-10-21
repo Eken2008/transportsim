@@ -149,8 +149,11 @@ class AppClient {
         this.world?.applyStations(m.stations, m.removed, m.full);
         return;
       case 'summary':
-        this.world?.applySummary(m.stations, m.industries);
+        this.world?.applySummary(m.stations, m.industries, m.flows);
         useApp.setState((s) => ({ summaryRev: s.summaryRev + 1 }));
+        return;
+      case 'overview':
+        this.world?.applyOverview(m.scale, m.x, m.y, m.w, m.h, m.cells, m.owners);
         return;
       case 'trains':
         this.world?.applyTrains(m.trains, m.removed, m.full);

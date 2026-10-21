@@ -301,6 +301,7 @@ export class GameState {
       this.historyChanged.add(c.id);
     }
     industryMonthly(this, this.industryRng, ymdFromDays(this.date).year);
+    this.cargo.monthly();
     this.updateMarket();
     monthlyReputation(this);
     if (ymdFromDays(this.date).month % 3 === 0) this.onNewQuarter();

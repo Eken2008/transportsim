@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
   PROTOCOL_VERSION,
+  OverviewKind,
   TICKS_PER_DAY,
+  TileType,
+  tileKind,
+  unrle,
   decodeFrame,
   encodeFrame,
   type ClientMessage,
@@ -340,6 +344,30 @@ describe('lobby & rooms', () => {
     const rows = guest.conn.last('summary')!.industries!;
     expect(rows).toHaveLength(room.state.industries.size);
     expect(rows.find((r) => r[0] === ind.id)).toBeDefined();
+    lobby.shutdown();
+  });
+
+  test('players get the whole map overview on joining, then the parts that change', () => {
+    const lobby = new Lobby(CONFIG);
+    const { host, room } = hostGame(lobby);
+    const first = host.conn.last('overview')!;
+    expect([first.scale, first.x, first.y, first.w, first.h]).toEqual([1, 0, 0, 128, 128]);
+    const cells = unrle(first.cells, 128 * 128);
+    const map = room.state.map;
+    const i = map.tileIndex(70, 5);
+    expect(cells[i]! & 15).toBe(tileKind(map, i));
+    // Nothing changed: nothing sent. A tile changes: its chunk is sent.
+    host.conn.inbox = [];
+    room.flush();
+    expect(host.conn.last('overview')).toBeUndefined();
+    map.layers.type[i] = TileType.Rail;
+    map.layers.owner[i] = 0;
+    map.touchTile(70, 5);
+    (room as unknown as { lastOverviewAt: number }).lastOverviewAt = -Infinity;
+    room.flush();
+    const patch = host.conn.last('overview')!;
+    expect([patch.x, patch.y, patch.w, patch.h]).toEqual([64, 0, 64, 64]);
+    expect(unrle(patch.cells, 64 * 64)[5 * 64 + 6]! & 15).toBe(OverviewKind.Rail);
     lobby.shutdown();
   });
 

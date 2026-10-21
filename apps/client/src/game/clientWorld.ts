@@ -3,6 +3,10 @@ import {
   CHUNK_SIZE,
   CROSSING_FLAG,
   TileType,
+  applyOverviewPatch,
+  emptyOverview,
+  unrle,
+  type Overview,
   GameMap,
   GameState,
   applyChunk,
@@ -134,6 +138,19 @@ export class ClientWorld {
     this.stationsRev++;
   }
 
+  /** The whole map at low resolution, for the minimap (null until the server sends it). */
+  overview: Overview | null = null;
+  overviewRev = 0;
+  /** Last month's cargo flows: from, to, cargo index, amount per link (see the `summary` message). */
+  flows: number[] = [];
+  flowsRev = 0;
+
+  applyOverview(scale: number, x: number, y: number, w: number, h: number, cells: Uint8Array, owners: Uint8Array): void {
+    if (!this.overview || this.overview.scale !== scale) this.overview = emptyOverview(this.map);
+    applyOverviewPatch(this.overview, x, y, w, h, unrle(cells, w * h), unrle(owners, w * h));
+    this.overviewRev++;
+  }
+
   /** The rating each of our stations is moving towards (from `summary` messages). */
   readonly ratingTargets = new Map<number, number>();
 
@@ -141,7 +158,11 @@ export class ClientWorld {
    * Figures the server sends for our own stations wherever they are, and for every industry
    * each month (see the `summary` message).
    */
-  applySummary(stations: readonly number[] = [], industries: readonly (readonly number[])[] = []): void {
+  applySummary(stations: readonly number[] = [], industries: readonly (readonly number[])[] = [], flows?: number[]): void {
+    if (flows) {
+      this.flows = flows;
+      this.flowsRev++;
+    }
     for (let i = 0; i + 3 < stations.length; i += 4) {
       const st = this.state.stations.get(stations[i]!);
       if (!st) continue;
