@@ -116,7 +116,7 @@ The game also has chat, a news feed and statistics graphs.
 
 ## Milestones (each one ends playable and committed)
 
-All nine milestones (M0–M8) are done as of October 2026. Measured at the end of M8: the 2048² benchmark (about 5,000 vehicles in every mode) averages 14–17 ms per tick (40–50% of one core at normal speed, depending on what else the machine is doing). In the 15-player load test each player receives about 10 KB/s.
+The first nine milestones (M0–M8) are done as of October 2026; M9–M12 are planned. Measured at the end of M8: the 2048² benchmark (about 5,000 vehicles in every mode) averages 14–17 ms per tick (40–50% of one core at normal speed, depending on what else the machine is doing). In the 15-player load test each player receives about 10 KB/s.
 1. **M0 Foundations.** `git init`, Bun workspaces, and tooling (TypeScript, ESLint, Prettier, `bun test`). Map typed arrays, terrain generation, chunked Three.js terrain, camera, picking and a terraform tool. Bun server lobby, rooms, host ownership and grace-period shutdown, tick loop, command pipeline and chunk subscriptions. IndexedDB save/load with an autosave consent prompt.
 2. **M1 Rail core.** Track building with slopes, bridges and tunnels, plus depots and multi-tile stations. Simple consists, movement, pathfinding, block signals and orders. Towns with houses produce passengers using destination-tagged packets with simple routing. Also money, costs, and a basic company per player.
 3. **M2 Companies and multiplayer depth.** Multi-member companies with roles and permissions, finances and loans, sharing agreements, station ratings, chat and news. Full lobby settings: timeline or sandbox mode and accident severity.
@@ -126,6 +126,10 @@ All nine milestones (M0–M8) are done as of October 2026. Measured at the end o
 7. **M6 Air.** Airports, the aircraft state machine and **air incidents**.
 8. **M7 Water.** Docks, canals, locks, buoys, ships and **ship incidents**.
 9. **M8 Polish and scale.** Profiling (target: a 2048² map, 15+ players, 5k+ vehicles), LOD and instancing tuning, bandwidth tuning, statistics graphs, a tutorial and audio. Self-hosting docs covering `MAX_PLAYERS` and other config.
+10. **M9 Finding and managing.** A minimap with overlays, lists of towns, industries and stations, a sortable and filterable vehicle list with bulk actions, renaming stations and vehicles, a problem list, and even spacing of vehicles on a line.
+11. **M10 Hosting.** Passing the host role to another player so a game outlives its host, and world generation in a worker.
+12. **M11 Gameplay depth.** Subsidies, buying out companies and trading shares, station and junction blueprints, trams, maglev, funding and prospecting industries, planting trees, and a scenario editor with heightmap import.
+13. **M12 AI companies.** Computer-run companies that build and run networks in every mode, at a chosen difficulty.
 
 Implementation starts with **M0 and then M1**. Later milestones are planned in detail when they begin.
 
@@ -275,6 +279,65 @@ Each part ends with green tests and a commit.
 4. **Tutorial.** An optional step-by-step guide for new players: build track, a station, a depot and a train, give it orders and start it. Each step is ticked off from the game state.
 5. **Audio.** Sounds synthesised with Web Audio (no asset files) for building, demolishing, money, news and crashes, plus ambient vehicle sounds near the camera. Volume and mute controls.
 6. **Self-hosting docs.** `docs/SELF_HOSTING.md` covers every server setting (port, `MAX_PLAYERS`, map size limit, game count, grace period), building, running behind a proxy, and hardware guidance.
+
+### M9 in detail
+Each part ends with green tests and a commit.
+1. **Minimap.** A corner map of the whole world that can be collapsed, enlarged and clicked to move the camera, with a frame showing the camera's view.
+   - **Data:** clients only receive the chunks they can see, so the server keeps a low-resolution overview (one value per tile or per 2×2 tiles: land, water, height band, town, industry, owner of track and roads) and sends it on join, then sends changes at most every few seconds.
+   - **Layers:** terrain, owners (in company colours), industries by type, town ratings for my company, and cargo flow (the link graph's links, drawn thicker by volume and coloured by cargo).
+2. **Lists of towns, industries and stations.** Three windows (or tabs of one window), each searchable by name and sortable by its columns, with a button that moves the camera there.
+   - **Towns:** population, growth, and my company's reputation.
+   - **Industries:** type, production last month, and the share transported; a filter shows producers nobody serves.
+   - **Stations:** my company's stations with cargo waiting, rating and the lines calling there.
+3. **A better vehicle list.**
+   - **Filters:** by transport type, line and status (running, stopped, in depot, broken down, lost).
+   - **Sorting:** by name, profit this year, profit last year, age and reliability.
+   - **Highlights:** vehicles that lose money, are lost, are stopped or are past their lifespan.
+   - **Bulk actions:** select several vehicles and start, stop, send to depot or service them at once.
+4. **Renaming stations and vehicles.** New commands rename a station or a vehicle (operator or higher, unique within the company, at most 40 characters), with an editable name in their windows as for lines.
+5. **Problem list.** A window that collects my company's current problems, each with a locate button:
+   - vehicles that lost money last year or are past their lifespan;
+   - lost vehicles, and vehicles stopped outside a depot;
+   - stations whose rating is falling or where cargo is piling up;
+   - lines with no vehicles, and vehicles with no line.
+
+   The toolbar button shows how many problems there are.
+6. **Even spacing on lines.** A line option: at a chosen stop, a vehicle waits until the gap since the previous vehicle on the line left is at least the line's round-trip time divided by the number of vehicles. The round-trip time is measured from the vehicles' own runs, so no timetable is needed. The line window shows the target gap and how even the vehicles are.
+
+### M10 in detail
+Each part ends with green tests and a commit.
+1. **Passing the host role.** The host can hand the host role to another connected player from the game window. The new host gets the host controls and is asked about autosaves, and the server streams the next snapshot to them.
+   - **Host leaves:** a game setting chooses what happens when the host disconnects. After the grace period, either the game ends (as now) or the host role passes to the connected player who joined earliest. The game only ends when nobody is left.
+   - **Original host returns:** they rejoin as an ordinary player, and the current host can hand the role back.
+   - This changes the decision that a game stops when its host leaves, as an option the host chooses.
+2. **World generation in a worker.** The server generates new maps in a Bun Worker, so creating a large map no longer stalls the other games on the server. The lobby shows progress while the map is made.
+
+### M11 in detail
+Each part ends with green tests and a commit.
+1. **Subsidies.** Every few months the game offers a subsidy: carry a cargo from one town or industry to another, both currently unserved by anyone, at least a set distance apart. The offer lapses after a year.
+   - **Award:** the first company to deliver that cargo from the source to the destination wins the subsidy, with news.
+   - **Pay:** for the next year (or two), deliveries on that route earn double, triple or quadruple pay, set by difficulty.
+   - **UI:** a subsidies window lists open offers and awarded subsidies, with buttons to locate each end.
+2. **Buying out companies and shares.**
+   - **Shares:** each company has four 25% shares. Other companies can buy them at a price based on company value; owning 100% merges the company into the buyer. Dividends are paid yearly from profit. A game setting turns shares off.
+   - **Buyouts:** a company about to go bankrupt is first offered for sale to the other companies (at its value, which may be low) instead of being removed. The buyer takes over its vehicles, infrastructure, lines and loan. Its members join the buyer as viewers, and its owner can be promoted.
+   - **Merging by agreement:** two companies' owners can agree to merge; the larger one takes over the smaller.
+3. **Station and junction blueprints.** A copy tool selects a rectangle of my track, signals, stations, depots and roads, and saves it as a blueprint (stored per player in the browser, and exportable). A paste tool previews the blueprint rotated or mirrored with its cost and conflicts, and places it as one command that builds everything or nothing.
+4. **Trams.** Tram track is laid on roads (town or company) or on its own. Trams are road vehicles with `tram: true` that only run on tram track, stop at bus and truck stops on tram track, and turn only at the ends of tram track loops or at stops that allow it. Catenary is drawn above tram track. Trams from the 1880s to 2050, horse-drawn at first.
+5. **Maglev.** A fourth track type: from 2020 in era mode, with its own speed limit, its own maglev trains that only run on maglev track, and no level crossings. Maglev track can't be converted to or from other types.
+6. **Funding and prospecting industries.** A company can pay to build a secondary industry where it chooses, or pay to prospect for a primary one, which may fail. The cost scales with the industry type and inflation. A game setting can turn funding off.
+7. **Planting trees.** A tool plants trees on clear land by dragging. Trees planted in a town's zone slowly win back some of the town's reputation, up to a limit, so it isn't a cheap way around demolition.
+8. **Scenario editor and heightmap import.**
+   - **Heightmaps:** a new game can start from an imported greyscale image, scaled to the map size, with sea level and height range as settings. Towns, industries and rivers are placed on it as usual.
+   - **Editor:** the host can start a game in editor mode, where time is paused and they can terraform for free, place and remove towns and industries, place water, and rename towns. Saving the editor's world gives a scenario file that new games can start from.
+
+### M12 in detail
+Each part ends with green tests and a commit.
+1. **AI framework.** An AI company is an ordinary company with no members, run by a planner on the server that sends the same commands as players do, so it follows every rule and permission. It runs on its own cadence, spread across ticks, with a time budget per day so it doesn't slow the game. Games set the number of AI companies, when they start, and their difficulty. A player can take over an AI company, or the host can remove one.
+2. **Planning.** The AI looks for profitable routes (pairs of large towns, or an industry and a place that accepts its cargo), estimates cost and income with the same pricing the game uses, and picks within its money and loan.
+3. **Building.** Road routes come first (bus and truck stops and depots, using the road pathfinder to lay roads), then rail lines with stations at each end, passing places and signals, then airports and docks when the money allows.
+4. **Running.** The AI buys vehicles, puts them on lines, adds vehicles when cargo piles up, sells those that lose money, renews old ones, repays its loan when it can, and removes routes that fail.
+5. **Difficulty and character.** Difficulty sets how fast it reacts, how carefully it builds and how much it borrows. Each AI company gets a name, colour and a preference for some transport types.
 
 ## Key dependencies
 `three`, `react`, `react-dom`, `zustand`, `vite`, `@vitejs/plugin-react`, `msgpackr`, `simplex-noise`, `idb` (a small IndexedDB wrapper) and `concurrently` (to run client and server together in dev). The server uses Bun's built-in `Bun.serve` WebSockets, so it needs no `ws` package, and tests use `bun test`.

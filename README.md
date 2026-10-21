@@ -2,7 +2,7 @@
 
 A web-based multiplayer transport tycoon game in 2.5D. It takes inspiration from OpenTTD, Simutrans and Transport Fever. Players found transport companies, build rail, road, air and sea networks, and carry passengers and goods between towns and industries. They can compete with each other or cooperate.
 
-> Status: all milestones of the [plan](docs/PLAN.md) (M0–M8) are in.
+> Status: milestones M0–M8 of the [plan](docs/PLAN.md) are in; M9–M12 are planned.
 >
 > - **World:** procedural terrain with rivers running from the hills to the sea, towns, roads and houses that grow with good service; terraforming.
 > - **Climates:** temperate; sub-arctic, with a low snow line, a paper and printing chain, gold mines, and towns above the snow line that only grow with food delivered; and sub-tropical, with desert and rainforest, rubber, fruit, maize, copper ore, water and diamonds, and desert towns that only grow with food and water delivered. Towns big enough take gold and diamonds at their banks. Wagons and road vehicles carry only the climate's cargo.
