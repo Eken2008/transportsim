@@ -30,6 +30,7 @@ import { AirportRole, HEIGHT_SCALE, TileType, type Piece } from '@transportsim/s
 import { openWindow } from '../store.ts';
 import { OrdersTool } from '../tools/ordersTool.ts';
 import { catchmentRect, rectTiles } from '../game/catchment.ts';
+import { GRAPHICS } from './graphics.ts';
 
 const SKY = new THREE.Color('#a8c8e6');
 /** Camera distance and tilt of the vehicle views in vehicle windows. */
@@ -37,6 +38,8 @@ const VIEW_DISTANCE = 6;
 const VIEW_PITCH = 0.75;
 /** Camera distance of the place views in news previews: far enough to see what happened around. */
 const PLACE_VIEW_DISTANCE = 16;
+/** Frames a second when nothing moves: picks up whatever changed without telling. */
+const IDLE_FPS = 2;
 
 /** Draw a shared material normally, see-through or not at all. */
 function applyViewMode(mat: THREE.Material, mode: ViewMode, opacity: number): void {
@@ -96,16 +99,29 @@ export class GameRenderer {
   private mods: Modifiers = { ctrl: false, shift: false };
   private raf = 0;
   private lastTime = performance.now();
+  /** When the last frame was drawn, and where the camera was. */
+  private drawnAt = 0;
+  private readonly drawnView = new THREE.Matrix4();
+  /** Draw at full rate next frame (the view changed size, or the player is doing something). */
+  private urgent = true;
+  /** Something changed: draw it at the moving rate. */
+  private dirty = true;
+  /** The last frame showed things in motion. */
+  private moving = false;
   private disposers: (() => void)[] = [];
-  onStats: ((s: { fps: number; chunks: number }) => void) | null = null;
+  onStats: ((s: { fps: number; chunks: number; idle: boolean }) => void) | null = null;
   private fpsFrames = 0;
+  /** Frames this second drawn because something moved or changed. */
+  private fpsActive = 0;
   private fpsTime = 0;
 
   constructor(canvas: HTMLCanvasElement, world: ClientWorld) {
     this.canvas = canvas;
     this.world = world;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Antialiasing and the GPU preference are fixed when the canvas is made: the game screen makes a new one when they change.
+    const preset = GRAPHICS[useApp.getState().graphics];
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: preset.antialias, powerPreference: preset.powerPreference });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, preset.pixelRatio));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -121,6 +137,7 @@ export class GameRenderer {
       if (useApp.getState().follow !== null) useApp.setState({ follow: null });
     };
     this.chunks = new ChunkManager(world, (ids) => client.subscribe(ids));
+    this.chunks.sparseTrees = preset.sparseTrees;
     this.cursor = new Cursor(world.map);
     this.ghost = new TrackGhost(world.map);
     this.area = new AreaGhost(world.map);
@@ -159,6 +176,7 @@ export class GameRenderer {
       world.onChunk(() => {
         this.tool?.invalidate?.();
         this.hoverDirty = true;
+        this.dirty = true;
       }),
     );
     // A second finger makes it a camera gesture: drop the build the first finger started.
@@ -215,6 +233,12 @@ export class GameRenderer {
     this.disposers.push(() => ro.disconnect());
     this.disposers.push(
       useApp.subscribe((s, prev) => {
+        this.dirty = true;
+        if (s.graphics !== prev.graphics) {
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, GRAPHICS[s.graphics].pixelRatio));
+          this.chunks.sparseTrees = GRAPHICS[s.graphics].sparseTrees;
+          this.resize();
+        }
         if (s.treeView !== prev.treeView || s.buildingView !== prev.buildingView) this.applyViewModes();
         if (s.focus && s.focus !== prev.focus) this.lookAt(s.focus.x + 0.5, s.focus.y + 0.5);
         if (s.follow !== prev.follow) this.followSeen = performance.now();
@@ -534,18 +558,37 @@ export class GameRenderer {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.urgent = true;
   }
 
+  /**
+   * Draws a frame only as often as is needed: at full rate while the camera moves or a tool is in
+   * use, slower while only vehicles move, and hardly at all when nothing does. Each frame not drawn
+   * is battery saved.
+   */
   private loop = () => {
     this.raf = requestAnimationFrame(this.loop);
     const now = performance.now();
-    const dt = Math.min(0.1, (now - this.lastTime) / 1000);
+    this.controller.update(Math.min(0.1, (now - this.lastTime) / 1000));
     this.lastTime = now;
+    const preset = GRAPHICS[useApp.getState().graphics];
+    // A camera held on a vehicle moves as the vehicle does.
+    const moved = !this.camera.matrixWorld.equals(this.drawnView) && !this.controller.following;
+    const busy = this.urgent || moved || this.toolDown || this.controller.isDragging || (this.hoverDirty && this.tool !== null);
+    const fps = busy ? preset.fps : this.moving || this.dirty ? preset.movingFps : IDLE_FPS;
+    // A little early rather than a frame late.
+    if (fps > 0 && now - this.drawnAt < 1000 / fps - 3) return;
+    const dt = Math.min(0.25, (now - this.drawnAt) / 1000);
+    this.drawnAt = now;
+    if (fps !== IDLE_FPS) this.fpsActive++;
+    this.drawnView.copy(this.camera.matrixWorld);
+    this.urgent = false;
+    this.dirty = false;
 
-    this.controller.update(dt);
     this.locateViews();
     this.trains.wreckage = useApp.getState().global?.wreckage ?? [];
-    this.trains.update(now, useApp.getState().global?.speed ?? 1, this.controller.target, this.controller.distance, new Set(this.viewPoints.keys()));
+    const speed = useApp.getState().global?.speed ?? 1;
+    this.trains.update(now, speed, this.controller.target, this.controller.distance, new Set(this.viewPoints.keys()));
     this.followVehicle(now);
     // Ambient rumble: louder with more vehicles near the focus, and when zoomed in.
     const t = this.controller.target;
@@ -556,12 +599,13 @@ export class GameRenderer {
     this.updateReservations();
     this.updateWrecks();
     this.industries.update(now);
-    this.crossings.update(dt, now, this.controller.target);
+    const crossingsMoving = this.crossings.update(dt, now, this.controller.target);
     this.lineOverlay.update(this.controller.distance);
     const fog = this.scene.fog as THREE.Fog;
     fog.near = this.controller.distance * 2.5;
     fog.far = this.controller.distance * 9 + 300;
-    this.chunks.update(this.camera, this.controller.target, this.controller.distance, [...this.viewPoints.values(), ...this.placePoints]);
+    // Keep drawing at full rate until the view is built.
+    if (this.chunks.update(this.camera, this.controller.target, this.controller.distance, [...this.viewPoints.values(), ...this.placePoints])) this.urgent = true;
 
     if (this.hoverDirty && this.tool) {
       this.hoverDirty = false;
@@ -575,11 +619,14 @@ export class GameRenderer {
     this.renderer.render(this.scene, this.camera);
     this.labels.update(this.camera, this.canvas.clientWidth, this.canvas.clientHeight, this.controller.distance);
     this.floaters.update(this.camera, this.canvas.clientWidth, this.canvas.clientHeight);
+    // The views in windows and news show vehicles too.
+    this.moving = (speed > 0 && (this.trains.picks.length > 0 || vehicleViews.size > 0 || placeViews.size > 0)) || crossingsMoving || this.floaters.active;
 
     this.fpsFrames++;
     if (now - this.fpsTime > 1000) {
-      this.onStats?.({ fps: Math.round((this.fpsFrames * 1000) / (now - this.fpsTime)), chunks: this.chunks.stats.views });
+      this.onStats?.({ fps: Math.round((this.fpsFrames * 1000) / (now - this.fpsTime)), chunks: this.chunks.stats.views, idle: this.fpsActive === 0 });
       this.fpsFrames = 0;
+      this.fpsActive = 0;
       this.fpsTime = now;
     }
   };
@@ -603,5 +650,7 @@ export class GameRenderer {
     this.world.onIncome = null;
     if (client.resubscribe) client.resubscribe = null;
     this.renderer.dispose();
+    // Let go of the GPU now rather than when the canvas is collected (graphics changes make new ones).
+    this.renderer.forceContextLoss();
   }
 }

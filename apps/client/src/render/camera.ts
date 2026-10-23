@@ -304,6 +304,8 @@ export class CameraController {
 
     const ground = this.map.heightAt(this.target.x, this.target.z) * HEIGHT_SCALE;
     this.groundY += (ground - this.groundY) * Math.min(1, dt * 6);
+    // Settle exactly, so a camera at rest stops moving (the renderer only draws when something changes).
+    if (Math.abs(ground - this.groundY) < 1e-3) this.groundY = ground;
     this.target.y = this.groundY;
     this.apply();
   }

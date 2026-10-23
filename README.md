@@ -52,6 +52,7 @@ Open http://localhost:5173. To play against yourself, open a second browser prof
 | `bun run start`     | Server only; serves `apps/client/dist` if it exists                  |
 | `bun run smoke`     | Build, then run a two-player browser test (needs Node 22 and Chrome) |
 | `bun run mobile`    | Build, then play on an emulated phone: layout and touch gestures (needs Node 22 and Chrome) |
+| `bun run perf`      | Build, then measure frames drawn and CPU use on an emulated phone, per graphics setting (needs Node 22 and Chrome) |
 | `bun run bench`     | Simulation benchmark on a big map full of vehicles                   |
 | `bun run loadtest`  | Bot players join one game; reports tick time and bandwidth           |
 
@@ -105,6 +106,7 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `C`                                              | Company: found or join one, members, roles, invitations      |
 | `F` / `L`                                        | Finances (books, loans, infrastructure) / company league     |
 | `Shift`+`T` / `Shift`+`B`, 🌳 / 🏠              | Trees / houses and industries: shown, see-through or hidden |
+| 🔋 / ⚖ / ✨ (top-bar menu)                       | Graphics: battery saver, balanced or best looking (kept in this browser) |
 | `Esc`                                            | Deselect tool        |
 | `Space`                                          | Pause (host only)    |
 | `?`                                              | Help                 |

@@ -26,6 +26,11 @@ export class FloatingText {
     parent.insertBefore(this.el, parent.querySelector('canvas')?.nextSibling ?? null);
   }
 
+  /** Labels are rising. */
+  get active(): boolean {
+    return this.items.length > 0;
+  }
+
   add(tile: number, text: string, kind: 'income' | 'cost' = 'income'): void {
     const map = this.world.map;
     const el = document.createElement('div');

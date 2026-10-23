@@ -21,6 +21,10 @@ export function installDebugHook(r: GameRenderer): () => void {
     get spawn() {
       return useApp.getState().room?.spawn ?? null;
     },
+    /** Map width in tiles (tile index = y * width + x). */
+    get width() {
+      return client.world?.map.width ?? 0;
+    },
     lookAt(x: number, y: number, distance?: number) {
       r.lookAt(x, y);
       if (distance) r.controller.distance = distance;
@@ -120,6 +124,15 @@ export function installDebugHook(r: GameRenderer): () => void {
     },
     command(cmd: Command) {
       return client.command(cmd);
+    },
+    /** Frames drawn so far (vehicle and place views count too). */
+    frames() {
+      return r.renderer.info.render.frame;
+    },
+    /** Draw calls and triangles of the last frame drawn. */
+    drawn() {
+      const { calls, triangles } = r.renderer.info.render;
+      return { calls, triangles, geometries: r.renderer.info.memory.geometries };
     },
     /** Industries the client knows about. */
     industries() {

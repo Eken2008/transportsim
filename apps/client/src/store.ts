@@ -2,6 +2,7 @@ import type { ChatChannel, GameSettings, GlobalState, MarketMonth, NewsItem, Roo
 import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
+import { loadGraphics, type Graphics } from './render/graphics.ts';
 import { COMPACT, matches } from './ui/media.ts';
 
 export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders' | 'signal' | 'bridge' | 'tunnel' | 'convert' | 'waypoint' | 'road' | 'removeRoad' | 'roadStop' | 'roadDepot' | 'oneWay' | 'airport' | 'canal' | 'lock' | 'dock' | 'shipDepot' | 'buoy' | 'headquarters';
@@ -88,6 +89,8 @@ export interface AppState {
   treeView: ViewMode;
   /** How houses and industries are drawn. */
   buildingView: ViewMode;
+  /** How much the renderer draws (kept in this browser). */
+  graphics: Graphics;
   /** Station whose catchment area is shown (toggled from its window). */
   catchmentFor: number | null;
   /** Bumped when train details change, so windows re-render. */
@@ -193,6 +196,7 @@ export const useApp = create<AppState>(() => ({
   showReservations: false,
   treeView: 'normal',
   buildingView: 'normal',
+  graphics: loadGraphics(),
   catchmentFor: null,
   trainsRev: 0,
   linesRev: 0,

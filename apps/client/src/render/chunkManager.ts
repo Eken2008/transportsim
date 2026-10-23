@@ -36,6 +36,7 @@ export class ChunkManager {
   private dataRev: Uint32Array;
   private wanted = new Map<number, Lod>();
   private lastSubKey = '';
+  private sparse = false;
   private lastSubAt = 0;
   private frustum = new THREE.Frustum();
   private projScreen = new THREE.Matrix4();
@@ -76,13 +77,23 @@ export class ChunkManager {
     });
   }
 
+  /** One tree a tile everywhere, not just far away. Rebuilds every chunk when it changes. */
+  set sparseTrees(on: boolean) {
+    if (on === this.sparse) return;
+    this.sparse = on;
+    for (let i = 0; i < this.dataRev.length; i++) this.dataRev[i]!++;
+  }
+
   /** Force the subscription to be re-sent (after a reconnect). */
   resubscribe(): void {
     this.lastSubKey = '';
   }
 
-  /** `extra` are points (x, z) whose surroundings are also shown in full detail, e.g. for vehicle views. */
-  update(camera: THREE.PerspectiveCamera, target: THREE.Vector3, distance: number, extra: readonly { x: number; z: number }[] = []): void {
+  /**
+   * `extra` are points (x, z) whose surroundings are also shown in full detail, e.g. for vehicle views.
+   * Returns whether chunks are left to build (they are built a few at a time, frame by frame).
+   */
+  update(camera: THREE.PerspectiveCamera, target: THREE.Vector3, distance: number, extra: readonly { x: number; z: number }[] = []): boolean {
     const map = this.world.map;
     const now = performance.now();
     this.projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
@@ -135,8 +146,8 @@ export class ChunkManager {
 
     // Build or rebuild meshes nearest-first within the frame budget.
     const start = performance.now();
+    let more = false;
     for (const { id } of order) {
-      if (performance.now() - start > BUILD_BUDGET_MS) break;
       const cx = id % map.chunksX;
       const cy = (id - cx) / map.chunksX;
       if (!this.world.isLoaded(cx, cy)) continue;
@@ -144,6 +155,10 @@ export class ChunkManager {
       const view = this.views.get(id);
       if (view) view.lastWanted = now;
       if (view && view.lod === lod && view.builtRev === this.dataRev[id]) continue;
+      if (performance.now() - start > BUILD_BUDGET_MS) {
+        more = true;
+        break;
+      }
       this.build(id, cx, cy, lod, now);
     }
 
@@ -152,6 +167,7 @@ export class ChunkManager {
       if (this.wanted.has(id)) view.lastWanted = now;
       else if (now - view.lastWanted > UNLOAD_AFTER_MS) this.disposeView(id, view);
     }
+    return more;
   }
 
   private build(id: number, cx: number, cy: number, lod: Lod, now: number): void {
@@ -183,7 +199,7 @@ export class ChunkManager {
     for (const h of buildHouses(map, cx, cy)) group.add(h);
     const hq = buildHeadquarters(map, cx, cy, (owner) => this.companyColor(owner));
     if (hq) group.add(hq);
-    if (lod <= 2) for (const t of buildTrees(map, cx, cy, lod >= 1)) group.add(t);
+    if (lod <= 2) for (const t of buildTrees(map, cx, cy, lod >= 1 || this.sparse)) group.add(t);
     this.root.add(group);
     this.views.set(id, { cx, cy, lod, group, builtRev: this.dataRev[id]!, lastWanted: now });
   }

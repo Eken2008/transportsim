@@ -25,16 +25,20 @@ import { Tutorial } from './Tutorial.tsx';
 import { sound } from '../audio/sound.ts';
 import { NewsTicker } from './NewsWindow.tsx';
 import { GameRenderer } from '../render/gameRenderer.ts';
+import { GRAPHICS, nextGraphics, saveGraphics } from '../render/graphics.ts';
 import { nextViewMode, openWindow, useApp, type ToolId, type ViewMode } from '../store.ts';
 import { formatMoney } from './format.ts';
 import { COMPACT, HUD_FOLD, TOUCH, useMedia } from './media.ts';
 
 export function GameScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stats, setStats] = useState({ fps: 0, chunks: 0 });
+  const [stats, setStats] = useState({ fps: 0, chunks: 0, idle: false });
   const [showHelp, setShowHelp] = useState(false);
   const rendererRef = useRef<GameRenderer | null>(null);
   const view = useCallback(() => rendererRef.current?.viewFootprint() ?? null, []);
+  // A canvas's antialiasing and GPU are fixed once it is drawn on: changing them takes a new one.
+  const canvasKind = useApp((s) => `${GRAPHICS[s.graphics].antialias}:${GRAPHICS[s.graphics].powerPreference}`);
+  const cameraRef = useRef<{ x: number; z: number; yaw: number; pitch: number; distance: number } | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -42,16 +46,22 @@ export function GameScreen() {
     if (!canvas || !world) return;
     const r = new GameRenderer(canvas, world);
     rendererRef.current = r;
+    const was = cameraRef.current;
     const spawn = useApp.getState().room?.spawn;
-    if (spawn) r.lookAt(spawn.x + 0.5, spawn.y + 0.5);
+    if (was) {
+      Object.assign(r.controller, { yaw: was.yaw, pitch: was.pitch, distance: was.distance });
+      r.lookAt(was.x, was.z);
+    } else if (spawn) r.lookAt(spawn.x + 0.5, spawn.y + 0.5);
     r.onStats = setStats;
     const removeHook = installDebugHook(r);
     return () => {
+      const c = r.controller;
+      cameraRef.current = { x: c.target.x, z: c.target.z, yaw: c.yaw, pitch: c.pitch, distance: c.distance };
       rendererRef.current = null;
       removeHook();
       r.dispose();
     };
-  }, []);
+  }, [canvasKind]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -94,7 +104,7 @@ export function GameScreen() {
 
   return (
     <div className="game">
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} key={canvasKind} />
       <TopBar onHelp={() => setShowHelp((v) => !v)} />
       <HostBanner />
       <NewsTicker />
@@ -113,7 +123,7 @@ export function GameScreen() {
         <AirportOptions />
       </div>
       <Chat />
-      <StatusBar fps={stats.fps} chunks={stats.chunks} />
+      <StatusBar fps={stats.fps} idle={stats.idle} chunks={stats.chunks} />
       <AutosavePrompt />
     </div>
   );
@@ -225,6 +235,7 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         </button>
         <ViewModeButton field="treeView" icon="🌳" what="Trees" short="Trees" shortcut="Shift+T" />
         <ViewModeButton field="buildingView" icon="🏠" what="Houses and industries" short="Buildings" shortcut="Shift+B" />
+        <GraphicsButton />
         <VolumeButton />
         <button className="ghost" title="Controls (?)" aria-label="Controls" onClick={onHelp}>
           ?<span className="mlbl"> Controls</span>
@@ -593,7 +604,7 @@ function Chat() {
   );
 }
 
-function StatusBar({ fps, chunks }: { fps: number; chunks: number }) {
+function StatusBar({ fps, idle, chunks }: { fps: number; idle: boolean; chunks: number }) {
   const hover = useApp((s) => s.hover);
   const conn = useApp((s) => s.conn);
   const toolId = useApp((s) => s.tool);
@@ -621,7 +632,9 @@ function StatusBar({ fps, chunks }: { fps: number; chunks: number }) {
       )}
       <div className="spacer" />
       {conn !== 'open' && <span className="err">Reconnecting…</span>}
-      <span className="mono perf">{fps} fps</span>
+      <span className="mono perf" title={idle ? 'Nothing is moving, so hardly any frames are drawn' : undefined}>
+        {idle ? 'idle' : `${fps} fps`}
+      </span>
       <span className="mono perf">{chunks} chunks</span>
     </div>
   );
@@ -644,6 +657,27 @@ function ViewModeButton({ field, icon, what, short, shortcut }: { field: 'treeVi
     >
       {icon}
       <span className="mlbl"> {short}</span>
+    </button>
+  );
+}
+
+/** Cycles the graphics between battery saver, balanced and best looking. */
+function GraphicsButton() {
+  const graphics = useApp((s) => s.graphics);
+  const next = nextGraphics(graphics);
+  return (
+    <button
+      className={`ghost graphics ${graphics}`}
+      title={`Graphics: ${GRAPHICS[graphics].name} (click for ${GRAPHICS[next].name.toLowerCase()}). Battery saver draws fewer, plainer frames for slow or battery-powered devices.`}
+      aria-label={`Graphics: ${GRAPHICS[graphics].name}`}
+      onClick={() => {
+        saveGraphics(next);
+        useApp.setState({ graphics: next });
+      }}
+      data-keep-open
+    >
+      {graphics === 'saver' ? '🔋' : graphics === 'balanced' ? '⚖' : '✨'}
+      <span className="mlbl"> {GRAPHICS[graphics].name}</span>
     </button>
   );
 }

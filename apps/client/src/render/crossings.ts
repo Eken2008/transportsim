@@ -88,11 +88,13 @@ export class CrossingBooms {
     }
   }
 
-  update(dt: number, now: number, focus: THREE.Vector3): void {
+  /** Returns whether anything moves or flashes. */
+  update(dt: number, now: number, focus: THREE.Vector3): boolean {
     const map = this.world.map;
     // Crossings the server has closed to road traffic (a train is on them or about to arrive).
     const busy = this.world.closedCrossings;
     const barriers: Barrier[] = [];
+    let moving = false;
     for (const tile of this.world.crossings) {
       const x = tile % map.width;
       const y = (tile - x) / map.width;
@@ -108,6 +110,8 @@ export class CrossingBooms {
       const target = busy.has(tile) ? 1 : 0;
       const cur = this.angle.get(tile) ?? 0;
       this.angle.set(tile, cur + Math.max(-dt * 1.2, Math.min(dt * 1.2, target - cur)));
+      // Lamps flash while an arm is down.
+      if (cur !== target || cur > 0.02) moving = true;
     }
     if (barriers.length > this.arms.instanceMatrix.count) {
       this.grow(barriers.length * 2);
@@ -130,6 +134,7 @@ export class CrossingBooms {
     this.arms.instanceMatrix.needsUpdate = true;
     this.lamps.instanceMatrix.needsUpdate = true;
     if (this.lamps.instanceColor) this.lamps.instanceColor.needsUpdate = true;
+    return moving;
   }
 
   private grow(cap: number): void {

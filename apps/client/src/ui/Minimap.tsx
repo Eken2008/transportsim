@@ -162,6 +162,7 @@ export function Minimap({ view }: { view: () => [number, number][] | null }) {
     let baseKey = '';
     let raf = 0;
     let last = 0;
+    let drawn = '';
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
       if (now - last < 100) return;
@@ -171,6 +172,11 @@ export function Minimap({ view }: { view: () => [number, number][] | null }) {
       if (!world || !ov) return;
       const { layer, company: me } = live.current;
       const key = `${world.overviewRev}|${layer}|${live.current.colorKey}`;
+      // Only draw again when the map or the camera's frame has changed.
+      const quad = view();
+      const frame = `${key}|${me}|${world.townsRev}|${world.industriesRev}|${world.stationsRev}|${world.flowsRev}|${quad?.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')}`;
+      if (frame === drawn) return;
+      drawn = frame;
       if (key !== baseKey) {
         const byId = new Map(useApp.getState().global?.companies.map((c) => [c.id, hex(COMPANY_COLORS[c.color % COMPANY_COLORS.length]!)]) ?? []);
         base = paint(ov, layer, (id) => byId.get(id) ?? null);
@@ -212,7 +218,6 @@ export function Minimap({ view }: { view: () => [number, number][] | null }) {
         ctx.globalAlpha = 1;
       }
       // What the camera sees.
-      const quad = view();
       if (quad) {
         ctx.beginPath();
         quad.forEach(([x, y], j) => (j ? ctx.lineTo(x * k, y * k) : ctx.moveTo(x * k, y * k)));

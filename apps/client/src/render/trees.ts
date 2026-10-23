@@ -1,6 +1,6 @@
 import { CHUNK_SIZE, HEIGHT_SCALE, SNOW_LINE, type GameMap } from '@transportsim/shared';
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { tileHash } from './terrainMesh.ts';
 
 function colored(geo: THREE.BufferGeometry, hex: string): THREE.BufferGeometry {
@@ -11,29 +11,38 @@ function colored(geo: THREE.BufferGeometry, hex: string): THREE.BufferGeometry {
   for (let i = 0; i < n; i++) col.set([c.r, c.g, c.b], i * 3);
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.deleteAttribute('uv');
+  g.deleteAttribute('normal');
   return g;
 }
 
-function makeConifer(): THREE.BufferGeometry {
-  const trunk = new THREE.CylinderGeometry(0.035, 0.05, 0.18, 5).translate(0, 0.09, 0);
-  const low = new THREE.ConeGeometry(0.2, 0.38, 6).translate(0, 0.33, 0);
-  const high = new THREE.ConeGeometry(0.14, 0.3, 6).translate(0, 0.55, 0);
-  const g = mergeGeometries([colored(trunk, '#6b4a2b'), colored(low, '#ffffff'), colored(high, '#ffffff')])!;
+/**
+ * Merge a tree's parts into one indexed geometry, so shared corners are shaded once: there are
+ * tens of thousands of trees in view. The material shades flat, so the normals only need to exist.
+ */
+function tree(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const g = mergeVertices(mergeGeometries(parts)!);
   g.computeVertexNormals();
   return g;
+}
+
+// Trunk ends and the undersides of cones are never seen, so they are left open.
+
+function makeConifer(): THREE.BufferGeometry {
+  const trunk = new THREE.CylinderGeometry(0.035, 0.05, 0.18, 5, 1, true).translate(0, 0.09, 0);
+  const low = new THREE.ConeGeometry(0.2, 0.38, 6, 1, true).translate(0, 0.33, 0);
+  const high = new THREE.ConeGeometry(0.14, 0.3, 6, 1, true).translate(0, 0.55, 0);
+  return tree([colored(trunk, '#6b4a2b'), colored(low, '#ffffff'), colored(high, '#ffffff')]);
 }
 
 function makeDeciduous(): THREE.BufferGeometry {
-  const trunk = new THREE.CylinderGeometry(0.035, 0.05, 0.22, 5).translate(0, 0.11, 0);
+  const trunk = new THREE.CylinderGeometry(0.035, 0.05, 0.22, 5, 1, true).translate(0, 0.11, 0);
   const crown = new THREE.IcosahedronGeometry(0.2, 0).translate(0, 0.38, 0);
-  const g = mergeGeometries([colored(trunk, '#6b4a2b'), colored(crown, '#ffffff')])!;
-  g.computeVertexNormals();
-  return g;
+  return tree([colored(trunk, '#6b4a2b'), colored(crown, '#ffffff')]);
 }
 
 function makePalm(): THREE.BufferGeometry {
   // A leaning trunk with a crown of drooping fronds.
-  const trunk = new THREE.CylinderGeometry(0.025, 0.04, 0.5, 5).translate(0, 0.25, 0).rotateZ(0.12);
+  const trunk = new THREE.CylinderGeometry(0.025, 0.04, 0.5, 5, 1, true).translate(0, 0.25, 0).rotateZ(0.12);
   const top = new THREE.Vector3(-0.06, 0.5, 0);
   const fronds: THREE.BufferGeometry[] = [];
   for (let k = 0; k < 6; k++) {
@@ -42,9 +51,7 @@ function makePalm(): THREE.BufferGeometry {
     frond.rotateY((k / 6) * Math.PI * 2).translate(top.x, top.y, top.z);
     fronds.push(colored(frond, '#ffffff'));
   }
-  const g = mergeGeometries([colored(trunk, '#8a6a45'), ...fronds])!;
-  g.computeVertexNormals();
-  return g;
+  return tree([colored(trunk, '#8a6a45'), ...fronds]);
 }
 
 function makeCactus(): THREE.BufferGeometry {
@@ -53,9 +60,7 @@ function makeCactus(): THREE.BufferGeometry {
   const elbowL = new THREE.CylinderGeometry(0.025, 0.025, 0.06, 5).rotateZ(Math.PI / 2).translate(-0.05, 0.14, 0);
   const armR = new THREE.CylinderGeometry(0.022, 0.022, 0.1, 5).translate(0.075, 0.25, 0);
   const elbowR = new THREE.CylinderGeometry(0.022, 0.022, 0.05, 5).rotateZ(Math.PI / 2).translate(0.05, 0.2, 0);
-  const g = mergeGeometries([stem, armL, elbowL, armR, elbowR].map((p) => colored(p, '#ffffff')))!;
-  g.computeVertexNormals();
-  return g;
+  return tree([stem, armL, elbowL, armR, elbowR].map((p) => colored(p, '#ffffff')));
 }
 
 /** Shared geometry/material for all chunks. Foliage is white × instance color. */
