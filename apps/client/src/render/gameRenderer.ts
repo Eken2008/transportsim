@@ -200,9 +200,19 @@ export class GameRenderer {
       this.lastPointer = null;
       this.hoverDirty = true;
     });
+    // A tap acts on pointerup; the browser's click that follows would land on whatever that
+    // opened under the finger (a window's buttons). Taps on the map make no clicks.
+    const noClick = (e: TouchEvent) => e.preventDefault();
+    canvas.addEventListener('touchend', noClick, { passive: false });
+    this.disposers.push(() => canvas.removeEventListener('touchend', noClick));
     this.listen(canvas, 'pointerdown', ((e: PointerEvent) => {
-      // The camera has already counted this finger.
-      if (e.pointerType !== 'mouse' && this.controller.touchCount > 1) return;
+      if (e.pointerType !== 'mouse') {
+        // With no click, focus stays put: leave the chat field, so the keyboard goes away.
+        const active = document.activeElement;
+        if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) active.blur();
+        // The camera has already counted this finger.
+        if (this.controller.touchCount > 1) return;
+      }
       if (e.button === 0) this.downAt = { x: e.clientX, y: e.clientY };
       if (e.button !== 0 || !this.tool) return;
       const hit = this.pick(e.clientX, e.clientY);

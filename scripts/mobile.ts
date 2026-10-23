@@ -303,11 +303,29 @@ try {
   await first.getByRole('button', { name: 'Locate' }).tap();
   await closeWindows();
   await page.waitForTimeout(500);
+  // Note where the browser's own click after the tap lands: not in the window it opened.
+  await page.evaluate(() => {
+    const w = window as unknown as { clicks: string[] };
+    w.clicks = [];
+    document.addEventListener(
+      'click',
+      (e) =>
+        w.clicks.push(
+          (e.target as Element).closest('.window') ? 'window' : (e.target as Element).tagName,
+        ),
+      true,
+    );
+  });
   await gesture(cdp, [[{ x: W / 2, y: H / 2 }]]);
   await page.waitForTimeout(300);
   check(
     (await page.locator('.window', { hasText: town }).count()) > 0,
     `tapping a town opens it (${town})`,
+  );
+  const clicks = await page.evaluate(() => (window as unknown as { clicks: string[] }).clicks);
+  check(
+    !clicks.includes('window'),
+    `the tap doesn't also click the window it opened (clicks: ${clicks.join(', ') || 'none'})`,
   );
   await closeWindows();
 
