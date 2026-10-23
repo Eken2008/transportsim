@@ -15,10 +15,35 @@ interface Drag {
   planeY: number;
 }
 
+interface Point {
+  x: number;
+  y: number;
+}
+
+/** A two-finger touch gesture. */
+interface Pinch {
+  /** Ground points under the two fingers when the gesture began: they stay under the fingers. */
+  a: THREE.Vector3;
+  b: THREE.Vector3;
+  planeY: number;
+  /** Where the fingers went down. */
+  from: [Point, Point];
+  /** Fingers moving up or down together tilt; anything else pans, zooms and turns. Decided once they have moved a little. */
+  mode: 'undecided' | 'move' | 'tilt';
+  /** Height of the fingers' midpoint last move, while tilting. */
+  lastY: number;
+}
+
+/** Pixels the fingers move before a two-finger gesture is read as a tilt or not. */
+const DECIDE_PX = 10;
+
 /**
  * Tilted orbit camera around a ground target. Right-drag pans (grab), middle-drag or
  * Alt+right-drag rotates/tilts, wheel zooms toward the cursor, WASD/arrows pan,
  * Q/E rotate, PageUp/PageDown tilt.
+ *
+ * Touch: one finger pans (unless a build tool has it); two fingers keep the ground under them,
+ * so pinching zooms, twisting turns and moving both pans. Two fingers moved up or down together tilt.
  */
 export class CameraController {
   readonly camera: THREE.PerspectiveCamera;
@@ -30,11 +55,20 @@ export class CameraController {
   following = false;
   /** Called when the player pans the camera by hand. */
   onPan: (() => void) | null = null;
+  /** One finger pans; off while a build tool is picked, as the finger is the tool's. */
+  oneFingerPan = true;
+  /** Called when a second finger goes down: the gesture is the camera's now. */
+  onMultiTouch: (() => void) | null = null;
 
   private readonly map: GameMap;
   private readonly dom: HTMLElement;
   private keys = new Set<string>();
   private drag: Drag | null = null;
+  /** Fingers on the map, by pointer id. */
+  private touches = new Map<number, Point>();
+  private pinch: Pinch | null = null;
+  /** Fingers moved since the two-finger gesture was last applied (once a frame, when every finger has reported). */
+  private pinchMoved = false;
   private raycaster = new THREE.Raycaster();
   private groundY = 0;
   private disposers: (() => void)[] = [];
@@ -47,6 +81,7 @@ export class CameraController {
     this.listen(dom, 'pointerdown', this.onDown as EventListener);
     this.listen(window, 'pointermove', this.onMove as EventListener);
     this.listen(window, 'pointerup', this.onUp as EventListener);
+    this.listen(window, 'pointercancel', this.onUp as EventListener);
     this.listen(dom, 'wheel', this.onWheel as EventListener, { passive: false });
     this.listen(dom, 'contextmenu', (e) => e.preventDefault());
     this.listen(window, 'keydown', this.onKey as EventListener);
@@ -64,7 +99,12 @@ export class CameraController {
   }
 
   get isDragging(): boolean {
-    return this.drag !== null;
+    return this.drag !== null || this.pinch !== null;
+  }
+
+  /** Fingers on the map. */
+  get touchCount(): number {
+    return this.touches.size;
   }
 
   lookAt(x: number, z: number): void {
@@ -81,19 +121,61 @@ export class CameraController {
   }
 
   private onDown = (e: PointerEvent) => {
-    if (e.button === 1 || (e.button === 2 && e.altKey)) {
+    if (e.pointerType !== 'mouse') {
+      this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      this.startTouch();
+      if (this.touches.size === 2) this.onMultiTouch?.();
+    } else if (e.button === 1 || (e.button === 2 && e.altKey)) {
       this.drag = { mode: 'rotate', x: e.clientX, y: e.clientY, anchor: null, planeY: 0 };
       e.preventDefault();
     } else if (e.button === 2) {
-      const ray = this.rayAt(e.clientX, e.clientY);
-      const hit = pickTerrain(this.map, ray);
-      const planeY = hit ? hit.point.y : this.target.y;
-      this.drag = { mode: 'pan', x: e.clientX, y: e.clientY, anchor: hit?.point ?? rayPlane(ray, planeY), planeY };
-      this.onPan?.();
+      this.drag = this.grab(e.clientX, e.clientY);
     }
   };
 
+  /** Start panning with the ground under a screen point held there. */
+  private grab(x: number, y: number): Drag {
+    const ray = this.rayAt(x, y);
+    const hit = pickTerrain(this.map, ray);
+    const planeY = hit ? hit.point.y : this.target.y;
+    this.onPan?.();
+    return { mode: 'pan', x, y, anchor: hit?.point ?? rayPlane(ray, planeY), planeY };
+  }
+
+  /** (Re)start the touch gesture for the fingers now down. */
+  private startTouch(): void {
+    const [p, q] = [...this.touches.values()];
+    this.drag = null;
+    this.pinch = null;
+    if (p && q) this.pinch = this.startPinch(p, q);
+    else if (p && this.oneFingerPan) this.drag = this.grab(p.x, p.y);
+  }
+
+  private startPinch(p: Point, q: Point): Pinch | null {
+    const mx = (p.x + q.x) / 2;
+    const my = (p.y + q.y) / 2;
+    const hit = pickTerrain(this.map, this.rayAt(mx, my));
+    const planeY = hit ? hit.point.y : this.target.y;
+    const a = rayPlane(this.rayAt(p.x, p.y), planeY);
+    const b = rayPlane(this.rayAt(q.x, q.y), planeY);
+    this.onPan?.();
+    // A finger above the horizon has no ground under it: try again when they move.
+    if (!a || !b) return null;
+    return { a, b, planeY, from: [{ ...p }, { ...q }], mode: 'undecided', lastY: my };
+  }
+
   private onMove = (e: PointerEvent) => {
+    const t = this.touches.get(e.pointerId);
+    if (t) {
+      t.x = e.clientX;
+      t.y = e.clientY;
+      if (this.touches.size > 1) {
+        this.pinchMoved = true;
+      } else if (this.drag) {
+        this.panTo(this.drag, t.x, t.y);
+      }
+      return;
+    }
     const d = this.drag;
     if (!d) return;
     if (d.mode === 'rotate') {
@@ -103,18 +185,64 @@ export class CameraController {
       d.y = e.clientY;
       return;
     }
+    this.panTo(d, e.clientX, e.clientY);
+  };
+
+  /** Keep the grabbed point under the pointer. */
+  private panTo(d: Drag, x: number, y: number): void {
     if (!d.anchor) return;
-    // Keep the grabbed point under the cursor.
     this.apply();
-    const p = rayPlane(this.rayAt(e.clientX, e.clientY), d.planeY);
+    const p = rayPlane(this.rayAt(x, y), d.planeY);
     if (!p) return;
     this.target.x += d.anchor.x - p.x;
     this.target.z += d.anchor.z - p.z;
     this.clampTarget();
-  };
+  }
+
+  private movePinch(): void {
+    const [p, q] = [...this.touches.values()];
+    if (!p || !q) return;
+    this.pinch ??= this.startPinch(p, q);
+    const g = this.pinch;
+    if (!g) return;
+    const mx = (p.x + q.x) / 2;
+    const my = (p.y + q.y) / 2;
+    if (g.mode === 'undecided') {
+      const dp = { x: p.x - g.from[0].x, y: p.y - g.from[0].y };
+      const dq = { x: q.x - g.from[1].x, y: q.y - g.from[1].y };
+      if (Math.max(Math.hypot(dp.x, dp.y), Math.hypot(dq.x, dq.y)) < DECIDE_PX) return;
+      const upright = (v: Point) => Math.abs(v.y) > 2 * Math.abs(v.x);
+      const spread = Math.abs(Math.hypot(p.x - q.x, p.y - q.y) - Math.hypot(g.from[0].x - g.from[1].x, g.from[0].y - g.from[1].y));
+      g.mode = upright(dp) && upright(dq) && Math.sign(dp.y) === Math.sign(dq.y) && spread < DECIDE_PX ? 'tilt' : 'move';
+    }
+    if (g.mode === 'tilt') {
+      this.pitch = clamp(this.pitch + (my - g.lastY) * 0.004, MIN_PITCH, MAX_PITCH);
+      g.lastY = my;
+      return;
+    }
+    // Turn and zoom so the ground under the fingers lines up with the held points, then pan the
+    // held midpoint back under the fingers' midpoint. Measured afresh every move, so it settles.
+    this.apply();
+    const a = rayPlane(this.rayAt(p.x, p.y), g.planeY);
+    const b = rayPlane(this.rayAt(q.x, q.y), g.planeY);
+    if (!a || !b) return;
+    // Angles measured like yaw, so turning the camera by d turns the ground under the screen by d.
+    const turn = Math.atan2(g.b.x - g.a.x, g.b.z - g.a.z) - Math.atan2(b.x - a.x, b.z - a.z);
+    this.yaw += Math.atan2(Math.sin(turn), Math.cos(turn));
+    const span = Math.hypot(b.x - a.x, b.z - a.z);
+    if (span > 1e-3) this.distance = clamp((this.distance * g.a.distanceTo(g.b)) / span, MIN_DIST, MAX_DIST);
+    this.apply();
+    const m = rayPlane(this.rayAt(mx, my), g.planeY);
+    if (!m) return;
+    this.target.x += (g.a.x + g.b.x) / 2 - m.x;
+    this.target.z += (g.a.z + g.b.z) / 2 - m.z;
+    this.clampTarget();
+  }
 
   private onUp = (e: PointerEvent) => {
-    if (this.drag && (e.button === 1 || e.button === 2)) this.drag = null;
+    // A finger lifting restarts the gesture with the fingers left, so nothing jumps.
+    if (this.touches.delete(e.pointerId)) this.startTouch();
+    else if (this.drag && (e.button === 1 || e.button === 2)) this.drag = null;
   };
 
   private onWheel = (e: WheelEvent) => {
@@ -146,6 +274,10 @@ export class CameraController {
 
   /** Per-frame update: keyboard movement, smooth ground following, camera placement. */
   update(dt: number): void {
+    if (this.pinchMoved) {
+      this.pinchMoved = false;
+      this.movePinch();
+    }
     const k = this.keys;
     let mx = 0; // + = right
     let mf = 0; // + = forward

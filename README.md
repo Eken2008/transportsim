@@ -51,6 +51,7 @@ Open http://localhost:5173. To play against yourself, open a second browser prof
 | `bun run build`     | Production build of the client into `apps/client/dist`               |
 | `bun run start`     | Server only; serves `apps/client/dist` if it exists                  |
 | `bun run smoke`     | Build, then run a two-player browser test (needs Node 22 and Chrome) |
+| `bun run mobile`    | Build, then play on an emulated phone: layout and touch gestures (needs Node 22 and Chrome) |
 | `bun run bench`     | Simulation benchmark on a big map full of vehicles                   |
 | `bun run loadtest`  | Bot players join one game; reports tick time and bandwidth           |
 
@@ -107,6 +108,8 @@ All game rules live in `packages/shared`. The server runs them authoritatively, 
 | `Esc`                                            | Deselect tool        |
 | `Space`                                          | Pause (host only)    |
 | `?`                                              | Help                 |
+
+On a phone or tablet, drag with one finger to pan, pinch to zoom, twist to turn, and drag two fingers up or down together to tilt. Tap a station, vehicle or town to open it. With a tool picked, one finger builds: slide it to adjust before lifting, or put a second finger down to cancel and move the map instead. Tap the tool again to put it away. On small screens the top bar's buttons fold into a ☰ menu, the chat opens from 💬, and windows open as sheets from the bottom (or the side, held sideways).
 
 ## Self-hosting
 

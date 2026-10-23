@@ -2,6 +2,7 @@ import type { ChatChannel, GameSettings, GlobalState, MarketMonth, NewsItem, Roo
 import { create } from 'zustand';
 import type { ConnectionStatus } from './net/connection.ts';
 import type { SaveRecord } from './saves/saveStore.ts';
+import { COMPACT, matches } from './ui/media.ts';
 
 export type ToolId = 'raise' | 'lower' | 'level' | 'rail' | 'removeRail' | 'station' | 'depot' | 'bulldoze' | 'orders' | 'signal' | 'bridge' | 'tunnel' | 'convert' | 'waypoint' | 'road' | 'removeRoad' | 'roadStop' | 'roadDepot' | 'oneWay' | 'airport' | 'canal' | 'lock' | 'dock' | 'shipDepot' | 'buoy' | 'headquarters';
 
@@ -106,6 +107,8 @@ export interface AppState {
   raise: { key: string; seq: number } | null;
   /** The getting-started guide is showing. */
   tutorial: boolean;
+  /** The chat log is showing (on phones, the whole chat). */
+  chatOpen: boolean;
   /** Kinds of command this player has carried out (the guide ticks steps off with them). */
   doneCommands: string[];
 }
@@ -200,6 +203,7 @@ export const useApp = create<AppState>(() => ({
   windows: [],
   raise: null,
   tutorial: false,
+  chatOpen: !matches(COMPACT),
   doneCommands: [],
 }));
 

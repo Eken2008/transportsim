@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react';
 import { client } from '../net/client.ts';
 import { storageGet, storageSet } from '../net/identity.ts';
 import { useApp } from '../store.ts';
+import { COMPACT, matches, useMedia } from './media.ts';
 import { focusOn, useMyRole } from './windows.tsx';
 
 type Layer = 'terrain' | 'owners' | 'industries' | 'towns' | 'cargo';
@@ -41,10 +42,11 @@ function loadPrefs(): Prefs {
     return {
       layer: LAYERS.some((l) => l.id === p.layer) ? p.layer! : 'terrain',
       size: p.size === 'large' ? 'large' : 'small',
-      open: p.open !== false,
+      // On a phone it starts hidden, as it would cover much of the screen.
+      open: p.open ?? !matches(COMPACT),
     };
   } catch {
-    return { layer: 'terrain', size: 'small', open: true };
+    return { layer: 'terrain', size: 'small', open: !matches(COMPACT) };
   }
 }
 
@@ -139,7 +141,9 @@ export function Minimap({ view }: { view: () => [number, number][] | null }) {
   const company = useMyRole().companyId;
   const companies = useApp((s) => s.global?.companies);
   const map = client.world?.map;
-  const width = WIDTHS[prefs.size];
+  // The large map fits a narrow screen.
+  const narrow = useMedia('(max-width: 460px)');
+  const width = narrow && prefs.size === 'large' ? Math.min(WIDTHS.large, window.innerWidth - 36) : WIDTHS[prefs.size];
   const height = map ? Math.round((width * map.height) / map.width) : width;
 
   // Owner colours change only when companies are founded or recoloured.

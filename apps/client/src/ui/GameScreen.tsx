@@ -14,7 +14,7 @@ import {
   type GameSpeed,
   type SignalKind,
 } from '@transportsim/shared';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { client } from '../net/client.ts';
 import { installDebugHook } from '../render/debugHook.ts';
 import { availableBridges } from '../tools/structureTools.ts';
@@ -27,6 +27,7 @@ import { NewsTicker } from './NewsWindow.tsx';
 import { GameRenderer } from '../render/gameRenderer.ts';
 import { nextViewMode, openWindow, useApp, type ToolId, type ViewMode } from '../store.ts';
 import { formatMoney } from './format.ts';
+import { COMPACT, HUD_FOLD, TOUCH, useMedia } from './media.ts';
 
 export function GameScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -101,13 +102,16 @@ export function GameScreen() {
       {!showHelp && <Tutorial />}
       <Minimap view={view} />
       <WindowLayer />
-      <StationOptions />
-      <SignalOptions />
-      <BridgeOptions />
-      <RailTypeOptions />
-      <RoadStopOptions />
-      <AirportOptions />
-      <Toolbar />
+      {/* Bottom up: the toolbar, a tool menu, then the picked tool's options. */}
+      <div className="bottom-stack">
+        <Toolbar />
+        <StationOptions />
+        <SignalOptions />
+        <BridgeOptions />
+        <RailTypeOptions />
+        <RoadStopOptions />
+        <AirportOptions />
+      </div>
       <Chat />
       <StatusBar fps={stats.fps} chunks={stats.chunks} />
       <AutosavePrompt />
@@ -126,7 +130,7 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
 
   return (
     <div className="hud-top">
-      <div className="panel hud-box">
+      <div className="panel hud-box hud-company">
         {company ? (
           <button className="ghost company-btn" title="Your company (C)" onClick={() => openWindow({ kind: 'company', id: 0 })}>
             <span className="company-swatch" style={{ background: COMPANY_COLORS[company.color] }} />
@@ -135,7 +139,7 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
           </button>
         ) : (
           <>
-            <span className="muted">Spectating</span>
+            <span className="muted spectating">Spectating</span>
             <button className="primary" title="Found or join a company (C)" onClick={() => openWindow({ kind: 'company', id: 0 })}>
               🏢 Start or join a company
             </button>
@@ -143,7 +147,7 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         )}
       </div>
       <div className="spacer" />
-      <div className="panel hud-box">
+      <div className="panel hud-box hud-date">
         <span className="mono" style={{ minWidth: 96, textAlign: 'center' }}>
           {global ? formatDate(global.date) : '—'}
         </span>
@@ -162,7 +166,21 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         </div>
       </div>
       <div className="spacer" />
-      <div className="panel hud-box">
+      <HudMenu
+        pinned={
+          <>
+            <button title="Your trains (T)" aria-label="🚆 Trains" onClick={() => openWindow({ kind: 'trains', id: 0 })}>
+              🚆<span className="lbl"> Trains</span>
+            </button>
+            <button title="Your lines: the stops your vehicles serve" aria-label="〰 Lines" onClick={() => openWindow({ kind: 'lines', id: 0 })}>
+              〰<span className="lbl"> Lines</span>
+            </button>
+            <button title="Find a town, industry or station (Ctrl+F)" aria-label="🔍 Find" onClick={() => openWindow({ kind: 'find', id: 0 })}>
+              🔍<span className="lbl"> Find</span>
+            </button>
+          </>
+        }
+      >
         <button
           className="ghost muted"
           aria-label="Game and players"
@@ -170,10 +188,12 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
           onClick={() => openWindow({ kind: 'game', id: 0 })}
         >
           👥 {online}/{room.settings.maxPlayers}
+          <span className="mlbl"> Players</span>
         </button>
         <button
           className="ghost mono"
           title="Copy game code"
+          aria-label={`Game code ${room.id}`}
           onClick={() => {
             void navigator.clipboard?.writeText(room.id);
           }}
@@ -194,16 +214,6 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         <button title="Download this game as a .tsave file" aria-label="⤓ Export" onClick={() => client.exportGame()}>
           ⤓<span className="lbl"> Export</span>
         </button>
-        <button title="Your trains (T)" aria-label="🚆 Trains" onClick={() => openWindow({ kind: 'trains', id: 0 })}>
-          🚆<span className="lbl"> Trains</span>
-        </button>
-        <button title="Your lines: the stops your vehicles serve" aria-label="〰 Lines" onClick={() => openWindow({ kind: 'lines', id: 0 })}>
-          〰<span className="lbl"> Lines</span>
-        </button>
-        <ProblemsButton />
-        <button title="Find a town, industry or station (Ctrl+F)" aria-label="🔍 Find" onClick={() => openWindow({ kind: 'find', id: 0 })}>
-          🔍<span className="lbl"> Find</span>
-        </button>
         <button title="Cargo routes: where each industry's cargo comes from and can go" aria-label="⛓ Cargo" onClick={() => openWindow({ kind: 'cargo', id: 0 })}>
           ⛓<span className="lbl"> Cargo</span>
         </button>
@@ -213,11 +223,11 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         <button title="Statistics: graphs of every company's history" aria-label="📈 Graphs" onClick={() => openWindow({ kind: 'stats', id: 0 })}>
           📈<span className="lbl"> Graphs</span>
         </button>
-        <ViewModeButton field="treeView" icon="🌳" what="Trees" shortcut="Shift+T" />
-        <ViewModeButton field="buildingView" icon="🏠" what="Houses and industries" shortcut="Shift+B" />
+        <ViewModeButton field="treeView" icon="🌳" what="Trees" short="Trees" shortcut="Shift+T" />
+        <ViewModeButton field="buildingView" icon="🏠" what="Houses and industries" short="Buildings" shortcut="Shift+B" />
         <VolumeButton />
-        <button className="ghost" title="Controls (?)" onClick={onHelp}>
-          ?
+        <button className="ghost" title="Controls (?)" aria-label="Controls" onClick={onHelp}>
+          ?<span className="mlbl"> Controls</span>
         </button>
         <button
           className="danger"
@@ -228,8 +238,75 @@ function TopBar({ onHelp }: { onHelp: () => void }) {
         >
           {room.isHost ? 'End game' : 'Leave'}
         </button>
-      </div>
+      </HudMenu>
     </div>
+  );
+}
+
+/**
+ * The top bar's buttons: the pinned ones, the problems button, then the rest. Where they don't
+ * all fit, the rest fold into a ☰ menu (labelled, two to a row); on a phone the pinned ones fold
+ * too, and the chat gets a button here.
+ */
+function HudMenu({ pinned, children }: { pinned: ReactNode; children: ReactNode }) {
+  const compact = useMedia(COMPACT);
+  const fold = useMedia(HUD_FOLD);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', away);
+    return () => document.removeEventListener('pointerdown', away);
+  }, [open]);
+  if (!compact && !fold) {
+    return (
+      <div className="panel hud-box">
+        {pinned}
+        <ProblemsButton />
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div className="panel hud-box hud-menu" ref={ref}>
+      {compact ? <ChatButton /> : pinned}
+      <ProblemsButton />
+      <button className={`ghost ${open ? 'active' : ''}`} aria-label="Menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        ☰
+      </button>
+      {open && (
+        <div
+          className="panel hud-dropdown"
+          onClick={(e) => {
+            // Buttons that open something close the menu; toggles leave it open.
+            const b = (e.target as HTMLElement).closest('button');
+            if (b && !b.closest('[data-keep-open]')) setOpen(false);
+          }}
+        >
+          {compact && pinned}
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Opens the chat on a phone, with a count of what was said since it was last open. */
+function ChatButton() {
+  const open = useApp((s) => s.chatOpen);
+  const said = useApp((s) => s.chat.filter((c) => !c.system).length);
+  const [seen, setSeen] = useState(said);
+  useEffect(() => {
+    if (open) setSeen(said);
+  }, [open, said]);
+  const unread = said - seen;
+  return (
+    <button className={`ghost chat-btn ${open ? 'active' : ''}`} aria-label={unread ? `Chat: ${unread} new` : 'Chat'} aria-pressed={open} onClick={() => useApp.setState({ chatOpen: !open })}>
+      💬{unread > 0 && <span className="badge">{unread}</span>}
+    </button>
   );
 }
 
@@ -250,7 +327,7 @@ function HostBanner() {
   );
 }
 
-type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | 'rail' | 'road' | 'air' | 'water' };
+type ToolDef = { id: ToolId; icon: string; label: string; key: string; menu: 'main' | Menu };
 
 const TOOLS: ToolDef[] = [
   { id: 'raise', icon: '⛰', label: 'Raise land (drag for area)', key: '1', menu: 'main' },
@@ -295,35 +372,35 @@ function ToolButton({ t }: { t: ToolDef }) {
   );
 }
 
-type Menu = 'rail' | 'road' | 'air' | 'water';
+type Menu = 'land' | 'rail' | 'road' | 'air' | 'water';
 const MENUS: { id: Menu; icon: string; label: string }[] = [
+  { id: 'land', icon: '⛰', label: 'Landscaping' },
   { id: 'rail', icon: '🚆', label: 'Railways' },
   { id: 'road', icon: '🛣', label: 'Roads' },
   { id: 'air', icon: '✈', label: 'Airports' },
   { id: 'water', icon: '⚓', label: 'Waterways' },
 ];
-const MENU_NAMES: Record<Menu, string> = { rail: 'Rail', road: 'Road', air: 'Air', water: 'Water' };
+const MENU_NAMES: Record<Menu, string> = { land: 'Land', rail: 'Rail', road: 'Road', air: 'Air', water: 'Water' };
 
 function Toolbar() {
   const tool = useApp((s) => s.tool);
   const [chosen, setChosen] = useState<Menu | null>(null);
-  const toolMenu = TOOLS.find((t) => t.id === tool)?.menu;
+  // A phone has no room for the land tools in the main bar: they get a menu of their own.
+  const compact = useMedia(COMPACT);
+  const menuOf = (t: ToolDef): ToolDef['menu'] => (compact && t.menu === 'main' && t.id !== 'bulldoze' ? 'land' : t.menu);
+  const menus = compact ? MENUS : MENUS.filter((m) => m.id !== 'land');
+  const picked = TOOLS.find((t) => t.id === tool);
+  const toolMenu = picked && menuOf(picked);
   const open: Menu | null = toolMenu && toolMenu !== 'main' ? toolMenu : chosen;
+  const main = TOOLS.filter((t) => menuOf(t) === 'main' && t.id !== 'bulldoze');
   return (
     <>
-      {open && (
-        <div className="panel toolbar submenu" role="toolbar" aria-label={`${MENU_NAMES[open]} tools`}>
-          {TOOLS.filter((t) => t.menu === open).map((t) => (
-            <ToolButton key={t.id} t={t} />
-          ))}
-        </div>
-      )}
       <div className="panel toolbar" role="toolbar" aria-label="Build tools">
-        {TOOLS.filter((t) => t.menu === 'main' && t.id !== 'bulldoze').map((t) => (
+        {main.map((t) => (
           <ToolButton key={t.id} t={t} />
         ))}
-        <div className="sep" />
-        {MENUS.map((m) => (
+        {main.length > 0 && <div className="sep" />}
+        {menus.map((m) => (
           <button
             key={m.id}
             className={`tool-btn menu-btn ${open === m.id ? 'active' : ''}`}
@@ -347,6 +424,13 @@ function Toolbar() {
         <div className="sep" />
         <ToolButton t={TOOLS.find((t) => t.id === 'bulldoze')!} />
       </div>
+      {open && (
+        <div className="panel toolbar submenu" role="toolbar" aria-label={`${MENU_NAMES[open]} tools`}>
+          {TOOLS.filter((t) => menuOf(t) === open).map((t) => (
+            <ToolButton key={t.id} t={t} />
+          ))}
+        </div>
+      )}
     </>
   );
 }
@@ -451,11 +535,15 @@ function Chat() {
   const [toCompany, setToCompany] = useState(false);
   const channel = inCompany && toCompany ? 'company' : 'all';
   const [text, setText] = useState('');
-  const [collapsed, setCollapsed] = useState(false);
+  const open = useApp((s) => s.chatOpen);
+  const collapsed = !open;
+  // On a phone the chat opens from the top bar and goes away entirely.
+  const compact = useMedia(COMPACT);
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     logRef.current?.scrollTo(0, logRef.current.scrollHeight);
-  }, [chat]);
+  }, [chat, open]);
+  if (compact && !open) return null;
   return (
     <div className={`panel chat ${collapsed ? 'collapsed' : ''}`}>
       <div className="chat-log" ref={logRef}>
@@ -497,8 +585,8 @@ function Chat() {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === 'Escape' && (e.target as HTMLInputElement).blur()}
         />
-        <button type="button" className="ghost" onClick={() => setCollapsed((v) => !v)} title={collapsed ? 'Show chat' : 'Hide chat'}>
-          {collapsed ? '▴' : '▾'}
+        <button type="button" className="ghost" onClick={() => useApp.setState({ chatOpen: collapsed })} title={collapsed ? 'Show chat' : 'Hide chat'} aria-label={collapsed ? 'Show chat' : 'Hide chat'}>
+          {compact ? '✕' : collapsed ? '▴' : '▾'}
         </button>
       </form>
     </div>
@@ -508,11 +596,14 @@ function Chat() {
 function StatusBar({ fps, chunks }: { fps: number; chunks: number }) {
   const hover = useApp((s) => s.hover);
   const conn = useApp((s) => s.conn);
+  const toolId = useApp((s) => s.tool);
+  const tool = TOOLS.find((t) => t.id === toolId);
+  const touch = useMedia(TOUCH);
   return (
     <div className="statusbar">
       {hover ? (
         <>
-          <span className="mono">
+          <span className="mono coords">
             {hover.x}, {hover.y} · height {hover.height}
           </span>
           {hover.cost !== undefined && <span className="cost mono">Cost {formatMoney(hover.cost)}</span>}
@@ -520,12 +611,18 @@ function StatusBar({ fps, chunks }: { fps: number; chunks: number }) {
           {hover.info && <span className="info">{hover.info}</span>}
         </>
       ) : (
-        <span>Right-drag to pan · middle-drag to rotate · scroll to zoom · press ? for help</span>
+        <span className="hint">
+          {tool && touch
+            ? `${tool.label} · two fingers move the map · tap the tool again to put it away`
+            : touch
+              ? 'Drag to pan · pinch to zoom · twist to turn · two fingers up or down to tilt · tap to open'
+              : 'Right-drag to pan · middle-drag to rotate · scroll to zoom · press ? for help'}
+        </span>
       )}
       <div className="spacer" />
       {conn !== 'open' && <span className="err">Reconnecting…</span>}
-      <span className="mono">{fps} fps</span>
-      <span className="mono">{chunks} chunks</span>
+      <span className="mono perf">{fps} fps</span>
+      <span className="mono perf">{chunks} chunks</span>
     </div>
   );
 }
@@ -534,7 +631,7 @@ function StatusBar({ fps, chunks }: { fps: number; chunks: number }) {
 const VIEW_MODE_NAMES: Record<ViewMode, string> = { normal: 'shown', transparent: 'see-through', hidden: 'hidden' };
 
 /** Cycles trees or buildings between shown, see-through and hidden. */
-function ViewModeButton({ field, icon, what, shortcut }: { field: 'treeView' | 'buildingView'; icon: string; what: string; shortcut: string }) {
+function ViewModeButton({ field, icon, what, short, shortcut }: { field: 'treeView' | 'buildingView'; icon: string; what: string; short: string; shortcut: string }) {
   const mode = useApp((s) => s[field]);
   const next = nextViewMode(mode);
   return (
@@ -543,8 +640,10 @@ function ViewModeButton({ field, icon, what, shortcut }: { field: 'treeView' | '
       title={`${what}: ${VIEW_MODE_NAMES[mode]} (click or ${shortcut}: ${VIEW_MODE_NAMES[next]})`}
       aria-label={`${what}: ${VIEW_MODE_NAMES[mode]}`}
       onClick={() => useApp.setState({ [field]: next })}
+      data-keep-open
     >
       {icon}
+      <span className="mlbl"> {short}</span>
     </button>
   );
 }
@@ -553,7 +652,7 @@ function VolumeButton() {
   const [, rerender] = useState(0);
   useEffect(() => sound.onChange(() => rerender((n) => n + 1)), []);
   return (
-    <span className="volume">
+    <span className="volume" data-keep-open>
       <button className="ghost" title={sound.muted ? 'Sound off (click for on)' : 'Sound on (click for off)'} aria-label={sound.muted ? 'Unmute' : 'Mute'} onClick={() => sound.setMuted(!sound.muted)}>
         {sound.muted || sound.volume === 0 ? '🔇' : '🔊'}
       </button>
@@ -577,6 +676,10 @@ function Help({ onClose }: { onClose: () => void }) {
   return (
     <div className="panel help" onClick={onClose}>
       <b>Controls</b>
+      <div>
+        Touch: drag to pan · pinch to zoom · twist to turn · two fingers up or down to tilt · tap a station, vehicle or town to open it. With a
+        tool picked, one finger builds (slide before lifting to adjust) and two move the map; a second finger cancels the build.
+      </div>
       <div>
         <kbd>Right-drag</kbd> pan · <kbd>Middle-drag</kbd> / <kbd>Alt</kbd>+<kbd>Right-drag</kbd> rotate & tilt
       </div>
@@ -697,9 +800,8 @@ function RailTypeOptions() {
   const timeline = useApp((s) => s.room?.settings.timeline ?? 'era');
   if (!tool || !RAIL_TOOLS.includes(tool)) return null;
   const types = availableRailTypes(date ? ymdFromDays(date).year : 1900, timeline);
-  const upper = tool === 'station' || tool === 'bridge';
   return (
-    <div className={`panel tool-options ${upper ? 'upper' : ''}`} role="radiogroup" aria-label="Track type">
+    <div className="panel tool-options" role="radiogroup" aria-label="Track type">
       <span className="muted">{tool === 'convert' ? 'Convert to' : 'Track'}</span>
       <div className="seg">
         {types.map((i) => (

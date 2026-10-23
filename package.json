@@ -13,6 +13,7 @@
     "loadtest": "bun scripts/loadtest.ts",
     "visual": "bun run build && node --experimental-strip-types --no-warnings scripts/visual.ts",
     "circle": "bun run build && node --experimental-strip-types --no-warnings scripts/clickCircle.ts",
+    "mobile": "bun run build && node --experimental-strip-types --no-warnings scripts/mobile.ts",
     "typecheck": "tsc -p packages/shared && tsc -p apps/server && tsc -p apps/client",
     "lint": "eslint .",
     "format": "prettier --write ."

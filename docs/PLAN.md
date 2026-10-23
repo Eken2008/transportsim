@@ -356,3 +356,4 @@ I commit at sensible checkpoints: once the scaffold works, after each feature wo
   - Reload from the save.
 - **Load test:** a bot-client script that connects 15+ simulated players issuing commands on a large map, and measures tick time and bytes per client per second.
 - **Client smoke test:** Playwright opens the client, creates a lobby and takes a screenshot of the rendered terrain.
+- **Phone test (`bun run mobile`):** on an emulated touch phone, upright and sideways, nothing runs off the screen, the menu, chat and windows open, one finger pans, pinching zooms, twisting turns, two fingers tilt, one finger builds track with a tool and a second finger cancels it.

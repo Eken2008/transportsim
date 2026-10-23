@@ -161,7 +161,19 @@ export class GameRenderer {
         this.hoverDirty = true;
       }),
     );
+    // A second finger makes it a camera gesture: drop the build the first finger started.
+    this.controller.onMultiTouch = () => {
+      this.downAt = null;
+      if (this.toolDown) {
+        this.toolDown = false;
+        this.tool?.cancel();
+      }
+      this.lastPointer = null;
+      this.hoverDirty = true;
+    };
     this.listen(canvas, 'pointermove', ((e: PointerEvent) => {
+      // Fingers only point at something while they are building.
+      if (e.pointerType !== 'mouse' && !this.toolDown) return;
       this.lastPointer = { x: e.clientX, y: e.clientY };
       this.setMods(e);
       this.hoverDirty = true;
@@ -171,17 +183,21 @@ export class GameRenderer {
       this.hoverDirty = true;
     });
     this.listen(canvas, 'pointerdown', ((e: PointerEvent) => {
+      // The camera has already counted this finger.
+      if (e.pointerType !== 'mouse' && this.controller.touchCount > 1) return;
       if (e.button === 0) this.downAt = { x: e.clientX, y: e.clientY };
       if (e.button !== 0 || !this.tool) return;
       const hit = this.pick(e.clientX, e.clientY);
       if (!hit) return;
       canvas.setPointerCapture(e.pointerId);
       this.toolDown = true;
+      this.lastPointer = { x: e.clientX, y: e.clientY };
       this.setMods(e);
       this.tool.onDown(hit, this.mods);
     }) as EventListener);
     this.listen(canvas, 'pointerup', ((e: PointerEvent) => {
-      const click = e.button === 0 && this.downAt && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) < 5;
+      const slop = e.pointerType === 'mouse' ? 5 : 12;
+      const click = e.button === 0 && this.downAt && Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) < slop;
       if (click && !this.tool) this.select(e.clientX, e.clientY);
       if (e.button !== 0 || !this.toolDown) return;
       this.toolDown = false;
@@ -445,6 +461,7 @@ export class GameRenderer {
       default:
         this.tool = new TerraformTool(id, this.cursor);
     }
+    this.controller.oneFingerPan = id === null;
     this.canvas.style.cursor = id ? 'crosshair' : 'default';
     this.hoverDirty = true;
   }

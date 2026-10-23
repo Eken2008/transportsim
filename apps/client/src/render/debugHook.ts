@@ -25,6 +25,11 @@ export function installDebugHook(r: GameRenderer): () => void {
       r.lookAt(x, y);
       if (distance) r.controller.distance = distance;
     },
+    /** Where the camera looks (tile units) and how. */
+    camera() {
+      const c = r.controller;
+      return { x: c.target.x, z: c.target.z, distance: c.distance, yaw: c.yaw, pitch: c.pitch };
+    },
     view(v: ViewParams) {
       const c = r.controller;
       if (v.x !== undefined && v.y !== undefined) r.lookAt(v.x, v.y);

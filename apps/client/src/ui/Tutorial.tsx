@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { client } from '../net/client.ts';
 import { storageGet, storageSet } from '../net/identity.ts';
 import { openWindow, useApp } from '../store.ts';
+import { COMPACT, useMedia } from './media.ts';
 
 const SEEN_KEY = 'ts.tutorialSeen';
 
@@ -22,6 +23,8 @@ export function Tutorial() {
   const playerId = useApp((s) => s.room?.playerId);
   const done = useApp((s) => s.doneCommands);
   useApp((s) => s.trainsRev);
+  // A phone shows just the step at hand.
+  const compact = useMedia(COMPACT);
 
   // Show it the first time a player is in a game without trains of their own.
   useEffect(() => {
@@ -120,13 +123,21 @@ export function Tutorial() {
   return (
     <div className="panel tutorial" role="complementary" aria-label="Getting started">
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <b>Getting started</b>
+        <b>
+          Getting started
+          {compact && current >= 0 && (
+            <span className="muted">
+              {' '}
+              · step {current + 1} of {steps.length}
+            </span>
+          )}
+        </b>
         <button className="ghost" aria-label="Close the guide" onClick={close}>
           ✕
         </button>
       </div>
       <ol className="tutorial-steps">
-        {steps.map((s, i) => (
+        {steps.map((s, i) => (compact && current >= 0 && i !== current ? null : (
           <li key={s.title} className={s.done ? 'done' : i === current ? 'current' : ''}>
             <span className="tick" aria-hidden>
               {s.done ? '✓' : i + 1}
@@ -136,7 +147,7 @@ export function Tutorial() {
               {i === current && <p className="small">{s.how}</p>}
             </div>
           </li>
-        ))}
+        )))}
       </ol>
       {current < 0 && (
         <p className="small" style={{ marginBottom: 0 }}>

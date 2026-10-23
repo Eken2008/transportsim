@@ -55,7 +55,7 @@ export function LobbyScreen() {
         {closedReason && <div className="notice">Game ended: {closedReason}</div>}
 
         <div className="lobby-grid">
-          <div style={{ display: 'grid', gap: 18, alignContent: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 18, alignContent: 'start' }}>
             <section className="panel card">
               <h2>Your name</h2>
               <div className="row">

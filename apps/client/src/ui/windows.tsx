@@ -37,7 +37,7 @@ import {
   type TrainInfo,
   type TrainUnit,
 } from '@transportsim/shared';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { client } from '../net/client.ts';
 import { closeWindow, openWindow, toast, useApp, windowKey, type GameWindow } from '../store.ts';
 import { formatMoney } from './format.ts';
@@ -168,6 +168,8 @@ export function Win({ w, title, label, children, width = 340 }: { w: GameWindow;
         width: size.w ?? width,
         ...(size.h !== null && { height: size.h, maxHeight: 'none' }),
         zIndex: z,
+        // Its width on a big screen: on a phone its tables keep it and scroll sideways.
+        ...({ '--win-w': `${size.w ?? width}px` } as CSSProperties),
       }}
       onPointerDown={() => setZ(++zTop)}
       onAnimationEnd={(e) => e.target === e.currentTarget && e.currentTarget.classList.remove('window-flash')}
