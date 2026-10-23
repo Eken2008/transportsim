@@ -38,6 +38,12 @@ const check = (ok: boolean, what: string) => {
   console.log(`${ok ? '✓' : '✗'} ${what}`);
   if (!ok) failed = true;
 };
+/** A top-bar button, opening the ☰ menu first where the bar is folded. */
+const hudButton = async (page: Page, name: string | RegExp) => {
+  const button = page.getByRole('button', { name });
+  if (!(await button.isVisible())) await page.getByRole('button', { name: 'Menu' }).click();
+  return button;
+};
 /** Poll a condition for a few seconds (the client sees changes a moment after the server makes them). */
 const eventually = async (cond: () => Promise<boolean>, ms = 4000) => {
   const end = Date.now() + ms;
@@ -241,7 +247,7 @@ try {
   await a.waitForTimeout(800);
   await a.waitForTimeout(1500);
   await a.screenshot({ path: `${outDir}/03c-train.png` });
-  await a.getByRole('button', { name: '📰 News' }).click();
+  await (await hudButton(a, '📰 News')).click();
   const newsWin = a.locator('.window', { hasText: 'News' }).last();
   await a.waitForTimeout(300);
   const newsText = await newsWin.innerText();
@@ -249,7 +255,7 @@ try {
   check(newsText.includes('first train arrives'), 'news reports the first train at a station');
   await newsWin.locator('button[aria-label="Close"]').click();
   // Graphs: the payment chart has a line per cargo from the start.
-  await a.getByRole('button', { name: '📈 Graphs' }).click();
+  await (await hudButton(a, '📈 Graphs')).click();
   const stats = a.locator('.window', { hasText: 'Statistics' });
   await stats.getByRole('tab', { name: 'Payment rates' }).click();
   check((await stats.locator('svg polyline').count()) >= 5, 'statistics window draws charts');
@@ -447,11 +453,16 @@ try {
   await a.screenshot({ path: `${outDir}/04d-consist.png` });
   while ((await a.locator('.window').count()) > 0) await a.locator('.window button[aria-label="Close"]').first().click();
   // Export the game as a file
-  const [download] = await Promise.all([a.waitForEvent('download', { timeout: 15_000 }), a.getByRole('button', { name: /Export/ }).click()]);
+  const exportButton = await hudButton(a, /Export/);
+  const [download] = await Promise.all([a.waitForEvent('download', { timeout: 15_000 }), exportButton.click()]);
   check(download.suggestedFilename().endsWith('.tsave'), `exported ${download.suggestedFilename()}`);
 
   // Second player joins by code
-  const code = (await a.getByTitle('Copy game code').innerText()).trim();
+  const codeButton = a.getByTitle('Copy game code');
+  const folded = !(await codeButton.isVisible());
+  if (folded) await a.getByRole('button', { name: 'Menu' }).click();
+  const code = (await codeButton.innerText()).trim();
+  if (folded) await a.getByRole('button', { name: 'Menu' }).click();
   await b.goto(`http://localhost:${PORT}/`);
   await b.getByText('Connected').waitFor({ timeout: 10_000 });
   await b.getByPlaceholder('Player name').fill('Bob');
@@ -518,7 +529,7 @@ try {
   await c.getByPlaceholder('Game code').fill(code);
   await c.getByRole('button', { name: 'Join by code' }).click();
   await c.getByRole('button', { name: /Start or join a company/ }).waitFor({ timeout: 60_000 });
-  await a.getByRole('button', { name: 'Game and players' }).click();
+  await (await hudButton(a, 'Game and players')).click();
   const gameWin = a.locator('.window', { hasText: 'Players' });
   await gameWin.locator('label.field', { hasText: 'Game name' }).locator('input').fill('Renamed railway');
   await gameWin.getByRole('button', { name: 'Save', exact: true }).click();
@@ -527,7 +538,7 @@ try {
   await gameWin.locator('.list-row', { hasText: 'Carl' }).getByRole('button', { name: 'Remove' }).click();
   await c.getByText(/removed you/).waitFor({ timeout: 5000 });
   check(true, 'host removed a player');
-  await b.getByRole('button', { name: 'Game and players' }).click();
+  await (await hudButton(b, 'Game and players')).click();
   await b.waitForTimeout(300);
   check((await b.locator('.window', { hasText: 'Players' }).innerText()).includes('Renamed railway'), 'guest sees the renamed game');
   check(!(await b.locator('.window', { hasText: 'Players' }).innerText()).includes('Carl'), 'removed player is gone from the list');
@@ -538,7 +549,7 @@ try {
   await a.getByTitle('Pause (Space)').click();
   await a.waitForTimeout(800);
   const savedMoney = await a.locator('.money').innerText();
-  await a.getByRole('button', { name: '💾 Save' }).click();
+  await (await hudButton(a, '💾 Save')).click();
   await a.getByText('Game saved to this browser').waitFor({ timeout: 10_000 });
   check(true, 'manual save stored in host browser');
 
