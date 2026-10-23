@@ -649,8 +649,8 @@ export class GameRenderer {
     this.lineOverlay.dispose();
     this.world.onIncome = null;
     if (client.resubscribe) client.resubscribe = null;
+    // No forceContextLoss(): React's strict mode mounts the game screen twice on the same canvas in
+    // development, and a lost context can't be got back. A new canvas (graphics changes) frees the old one's.
     this.renderer.dispose();
-    // Let go of the GPU now rather than when the canvas is collected (graphics changes make new ones).
-    this.renderer.forceContextLoss();
   }
 }
